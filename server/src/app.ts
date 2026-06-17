@@ -43,11 +43,6 @@ app.use('/api/auth', limiter);
 // Static files (uploads) — authenticated access only
 app.use('/uploads', authenticate, express.static(path.join(__dirname, '..', 'uploads')));
 
-// In production, serve the built client app
-if (config.nodeEnv === 'production') {
-  app.use(express.static(path.join(__dirname, '..', '..', 'client', 'dist')));
-}
-
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -83,13 +78,9 @@ app.get('/health', async (_req, res) => {
 // Error handling
 app.use(errorHandler);
 
-// SPA fallback (production) / 404 handler
-app.use((req, res) => {
-  if (config.nodeEnv === 'production' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
-    res.sendFile(path.join(__dirname, '..', '..', 'client', 'dist', 'index.html'));
-  } else {
-    res.status(404).json({ success: false, error: 'Route not found' });
-  }
+// 404 handler (frontend served by Vercel)
+app.use((_req, res) => {
+  res.status(404).json({ success: false, error: 'Route not found' });
 });
 
 export default app;
