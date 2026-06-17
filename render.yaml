@@ -61,7 +61,9 @@ services:
       - key: TWILIO_PHONE_NUMBER
         sync: false
       - key: FRONTEND_URL
-        value: https://lending-app.onrender.com
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "*"
 
 databases:
   - name: lending-db
