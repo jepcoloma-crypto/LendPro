@@ -2,7 +2,7 @@ services:
   - type: web
     name: lending-app
     runtime: node
-    repo: https://github.com/YOUR_USERNAME/YOUR_REPO
+    repo: https://github.com/jepcoloma-crypto/LendPro
     plan: free
     region: oregon
     buildCommand: cd client && npm install && npm run build && cd ../server && npm install
