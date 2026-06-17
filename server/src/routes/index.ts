@@ -176,9 +176,16 @@ router.put('/loan-products/:id/charges', authenticate, authorize('super-admin', 
 router.get('/settings', authenticate, settingsController.getAll.bind(settingsController));
 router.put('/settings', authenticate, authorize('super-admin'), settingsController.update.bind(settingsController));
 
-// Setup route (legacy - auto-seed runs on startup)
+// Setup route (check auto-seed status)
+import { pool } from '../database/connection';
 router.get('/setup', async (_req, res) => {
-  res.json({ success: true, message: 'Auto-seed runs on server start. Login with admin / admin123' });
+  try {
+    const tables = (await pool.query(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'`)).rows.map((r: any) => r.tablename);
+    const userCount = (await pool.query(`SELECT COUNT(*) as c FROM users`)).rows[0]?.c || 0;
+    res.json({ success: true, tables: tables.length, tables_list: tables, users: parseInt(userCount) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Utilities (super-admin only)
