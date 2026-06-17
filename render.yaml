@@ -3,9 +3,10 @@ services:
     name: lending-app
     runtime: node
     repo: https://github.com/jepcoloma-crypto/LendPro
+    rootDir: server
     plan: free
     region: oregon
-    buildCommand: cd client && npm install --include=dev && npm run build && cd ../server && npm install --include=dev && npm run build
+    buildCommand: cd ../client && npm install --include=dev && npm run build && cd ../server && npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /health
     envVars:
