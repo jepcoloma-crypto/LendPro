@@ -184,11 +184,12 @@ import { join } from 'path';
 router.get('/setup', async (_req, res) => {
   try {
     const tables = await pool.query(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'`);
-    if (tables.rows.length > 0) return res.json({ message: 'Database already has tables, skipping' });
-    const schema = readFileSync(join(__dirname, '..', '..', 'src', 'database', 'schema.sql'), 'utf8');
-    await pool.query(schema.replace(/^-- .*\n?/gm, ''));
-    const migration = readFileSync(join(__dirname, '..', '..', 'src', 'database', 'migrations', '003_loan_columns.sql'), 'utf8');
-    await pool.query(migration.replace(/^-- .*\n?/gm, ''));
+    if (tables.rows.length === 0) {
+      const schema = readFileSync(join(__dirname, '..', '..', 'src', 'database', 'schema.sql'), 'utf8');
+      await pool.query(schema.replace(/^-- .*\n?/gm, ''));
+      const migration = readFileSync(join(__dirname, '..', '..', 'src', 'database', 'migrations', '003_loan_columns.sql'), 'utf8');
+      await pool.query(migration.replace(/^-- .*\n?/gm, ''));
+    }
     const roles = [{ name: 'Super Admin', slug: 'super-admin', permissions: ['*'] },
       { name: 'Admin', slug: 'admin', permissions: ['loans.*', 'payments.*', 'collections.*', 'reports.*', 'borrowers.*', 'branches.*', 'loan-products.*', 'charges.*'] },
       { name: 'Branch Manager', slug: 'branch-manager', permissions: ['loans.create', 'loans.view', 'loans.approve', 'payments.*', 'collections.*', 'reports.*', 'borrowers.*'] },
