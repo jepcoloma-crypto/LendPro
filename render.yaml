@@ -30,6 +30,10 @@ services:
         fromDatabase:
           name: lending-db
           property: password
+      - key: DB_USER
+        fromDatabase:
+          name: lending-db
+          property: user
       - key: DB_SSL
         value: "true"
       - key: JWT_SECRET
