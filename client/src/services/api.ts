@@ -2,7 +2,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 const api = axios.create({
   baseURL: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || '/api',
-  timeout: 15000,
+  timeout: 60000,
 });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
