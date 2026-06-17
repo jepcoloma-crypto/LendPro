@@ -1,0 +1,29 @@
+import {
+  LayoutDashboard, Users, Wallet, CreditCard, HandshakeIcon,
+  FileText, Settings, User, Building2, CalendarDays, Bell,
+  ArrowUpRight, ArrowDownRight, DollarSign, Percent, TrendingUp,
+  AlertCircle, CheckCircle, XCircle, Clock, Search, Plus,
+  Eye, Edit, Trash2, Download, Upload, Filter, ChevronDown,
+  ChevronLeft, ChevronRight, Menu, Moon, Sun, LogOut,
+  Home, Phone, Mail, MapPin, BookOpen, Shield, Receipt,
+} from 'lucide-react';
+
+export {
+  LayoutDashboard as DashboardIcon,
+  Users as PeoplesIcon,
+  Wallet as MoneyIcon,
+  CreditCard as CreditCardIcon,
+  HandshakeIcon as CollectionIcon,
+  FileText as FileTextIcon,
+  Settings as SettingsIcon,
+  User as UserIcon,
+  Building2 as BranchIcon,
+  CalendarDays as CalendarIcon,
+  Bell as NoticeIcon,
+  Receipt as ChargeIcon,
+  ArrowUpRight, ArrowDownRight, DollarSign, Percent, TrendingUp,
+  AlertCircle, CheckCircle, XCircle, Clock, Search, Plus,
+  Eye, Edit, Trash2, Download, Upload, Filter, ChevronDown,
+  ChevronLeft, ChevronRight, Menu, Moon, Sun, LogOut,
+  Home, Phone, Mail, MapPin, BookOpen, Shield,
+};

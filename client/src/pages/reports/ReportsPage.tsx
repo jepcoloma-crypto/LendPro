@@ -1,0 +1,1175 @@
+import { useState, useEffect } from 'react';
+import { Panel, Table, Tag, Button, SelectPicker, DatePicker, Message, toaster } from 'rsuite';
+import { reportsApi, borrowersApi, usersApi, branchesApi } from '../../services/api';
+import { Download, Printer } from 'lucide-react';
+import { formatCurrency, exportCSV } from '../../utils/format';
+import { getCompanySettings } from '../../utils/companySettings';
+
+const { Column, HeaderCell, Cell } = Table;
+
+export const ReportsPage = () => {
+  const [activeTab, setActiveTab] = useState('aging');
+  const [activeCategory, setActiveCategory] = useState('collections');
+  const [agingData, setAgingData] = useState<any[]>([]);
+  const [delinquencyData, setDelinquencyData] = useState<any[]>([]);
+  const [interestData, setInterestData] = useState<any[]>([]);
+  const [amortData, setAmortData] = useState<any[]>([]);
+  const [borrowers, setBorrowers] = useState<any[]>([]);
+  const [borrowerFilter, setBorrowerFilter] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const [collectors, setCollectors] = useState<any[]>([]);
+  const [collectorFilter, setCollectorFilter] = useState<string | null>(null);
+  const [collectorStartDate, setCollectorStartDate] = useState<Date | null>(null);
+  const [collectorEndDate, setCollectorEndDate] = useState<Date | null>(null);
+  const [collectorVisits, setCollectorVisits] = useState<any[]>([]);
+  const [collectorPayments, setCollectorPayments] = useState<any[]>([]);
+  const [selectedCollector, setSelectedCollector] = useState<string | null>(null);
+  const [selectedPaymentCollector, setSelectedPaymentCollector] = useState<string | null>(null);
+  const [visitsLoading, setVisitsLoading] = useState(false);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+
+  const [performanceData, setPerformanceData] = useState<any[]>([]);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+
+  const [borrowerPerfData, setBorrowerPerfData] = useState<any[]>([]);
+  const [borrowerPerfLoading, setBorrowerPerfLoading] = useState(false);
+  const [borrowerPerfFilter, setBorrowerPerfFilter] = useState<string | null>(null);
+  const [companyInfo, setCompanyInfo] = useState<Record<string, string>>({});
+
+  const [interestBranchFilter, setInterestBranchFilter] = useState<string | null>(null);
+  const [branches, setBranches] = useState<any[]>([]);
+
+  const [dailyColData, setDailyColData] = useState<any[]>([]);
+  const [dailyColLoading, setDailyColLoading] = useState(false);
+  const [dailyColDate, setDailyColDate] = useState(new Date().toISOString().slice(0, 10));
+
+  const [loansGrantedData, setLoansGrantedData] = useState<any[]>([]);
+  const [loansGrantedLoading, setLoansGrantedLoading] = useState(false);
+  const [loansGrantedStart, setLoansGrantedStart] = useState<string | null>(null);
+  const [loansGrantedEnd, setLoansGrantedEnd] = useState<string | null>(null);
+
+  const [expectedColData, setExpectedColData] = useState<any[]>([]);
+  const [expectedColLoading, setExpectedColLoading] = useState(false);
+  const [expectedColStart, setExpectedColStart] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [expectedColEnd, setExpectedColEnd] = useState<string>(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); });
+
+  const [portfolioData, setPortfolioData] = useState<any[]>([]);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
+
+  const [branchPerfData, setBranchPerfData] = useState<any[]>([]);
+  const [branchPerfLoading, setBranchPerfLoading] = useState(false);
+  const [branchPerfStart, setBranchPerfStart] = useState<string | null>(null);
+  const [branchPerfEnd, setBranchPerfEnd] = useState<string | null>(null);
+
+  const [disbursementData, setDisbursementData] = useState<any[]>([]);
+  const [disbursementLoading, setDisbursementLoading] = useState(false);
+  const [disbursementStart, setDisbursementStart] = useState<string | null>(null);
+  const [disbursementEnd, setDisbursementEnd] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [aging, del, interest, amort, br, us, bra] = await Promise.all([
+          reportsApi.getAging(),
+          reportsApi.getDelinquency(),
+          reportsApi.getInterestIncome(),
+          reportsApi.getAmortization(),
+          borrowersApi.getAll({ limit: 1000 }),
+          usersApi.getAll({ limit: 100 }),
+          branchesApi.getAll(),
+        ]);
+        setAgingData(aging.data.data || []);
+        setDelinquencyData(del.data.data || []);
+        setInterestData(interest.data.data || []);
+        setAmortData(amort.data.data || []);
+        setBorrowers(br.data.data || []);
+        setCollectors((us.data.data || []).filter((u: any) => u.role_name === 'Collector'));
+        setBranches(bra.data.data || []);
+      } catch (err) { console.error(err); }
+      finally { setLoading(false); }
+    };
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    const fetchInterest = async () => {
+      if (activeTab !== 'interest') return;
+      try {
+        const params: any = {};
+        if (interestBranchFilter) params.branchId = interestBranchFilter;
+        const { data } = await reportsApi.getInterestIncome(params);
+        setInterestData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load interest data</Message>, { placement: 'topEnd' }); }
+    };
+    fetchInterest();
+  }, [activeTab, interestBranchFilter]);
+
+  useEffect(() => {
+    const fetchAmort = async () => {
+      try {
+        const params: any = {};
+        if (borrowerFilter) params.borrowerId = borrowerFilter;
+        const { data } = await reportsApi.getAmortization(params);
+        setAmortData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load amortization data</Message>, { placement: 'topEnd' }); }
+    };
+    if (activeTab === 'amort') fetchAmort();
+  }, [borrowerFilter, activeTab]);
+
+  useEffect(() => {
+    const fetchVisits = async () => {
+      if (!selectedCollector) { setCollectorVisits([]); return; }
+      setVisitsLoading(true);
+      try {
+        const params: any = { collectorId: selectedCollector };
+        if (collectorStartDate) params.startDate = collectorStartDate.toISOString().split('T')[0];
+        if (collectorEndDate) params.endDate = collectorEndDate.toISOString().split('T')[0];
+        const { data } = await reportsApi.getCollectorVisits(params);
+        setCollectorVisits(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load collector visits</Message>, { placement: 'topEnd' }); }
+      finally { setVisitsLoading(false); }
+    };
+    fetchVisits();
+  }, [selectedCollector, collectorStartDate, collectorEndDate]);
+
+  useEffect(() => {
+    const fetchPerformance = async () => {
+      if (activeTab !== 'performance') return;
+      setPerformanceLoading(true);
+      try {
+        const params: any = {};
+        if (collectorFilter) params.collectorId = collectorFilter;
+        if (collectorStartDate) params.startDate = collectorStartDate.toISOString().split('T')[0];
+        if (collectorEndDate) params.endDate = collectorEndDate.toISOString().split('T')[0];
+        const { data } = await reportsApi.getCollectorPerformance(params);
+        setPerformanceData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load performance data</Message>, { placement: 'topEnd' }); }
+      finally { setPerformanceLoading(false); }
+    };
+    fetchPerformance();
+  }, [activeTab, collectorFilter, collectorStartDate, collectorEndDate]);
+
+  useEffect(() => {
+    const fetchBorrowerPerf = async () => {
+      if (activeTab !== 'borrower-perf') return;
+      setBorrowerPerfLoading(true);
+      try {
+        const params: any = {};
+        if (borrowerPerfFilter) params.borrowerId = borrowerPerfFilter;
+        if (collectorStartDate) params.startDate = collectorStartDate.toISOString().split('T')[0];
+        if (collectorEndDate) params.endDate = collectorEndDate.toISOString().split('T')[0];
+        const { data } = await reportsApi.getBorrowerPerformance(params);
+        setBorrowerPerfData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load borrower performance data</Message>, { placement: 'topEnd' }); }
+      finally { setBorrowerPerfLoading(false); }
+    };
+    fetchBorrowerPerf();
+  }, [activeTab, borrowerPerfFilter, collectorStartDate, collectorEndDate]);
+
+  useEffect(() => { getCompanySettings().then(setCompanyInfo); }, []);
+
+  useEffect(() => {
+    const fetchPayments = async () => {
+      if (!selectedPaymentCollector) { setCollectorPayments([]); return; }
+      setPaymentsLoading(true);
+      try {
+        const params: any = { collectorId: selectedPaymentCollector };
+        if (collectorStartDate) params.startDate = collectorStartDate.toISOString().split('T')[0];
+        if (collectorEndDate) params.endDate = collectorEndDate.toISOString().split('T')[0];
+        const { data } = await reportsApi.getCollectorPayments(params);
+        setCollectorPayments(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load collector payments</Message>, { placement: 'topEnd' }); }
+      finally { setPaymentsLoading(false); }
+    };
+    fetchPayments();
+  }, [selectedPaymentCollector, collectorStartDate, collectorEndDate]);
+
+  useEffect(() => {
+    const fetchDailyCol = async () => {
+      if (activeTab !== 'daily-collections') return;
+      setDailyColLoading(true);
+      try {
+        const { data } = await reportsApi.getDailyCollections({ date: dailyColDate });
+        setDailyColData(data.data.branches || []);
+      } catch { toaster.push(<Message type="error">Failed to load daily collections</Message>, { placement: 'topEnd' }); }
+      finally { setDailyColLoading(false); }
+    };
+    fetchDailyCol();
+  }, [activeTab, dailyColDate]);
+
+  useEffect(() => {
+    const fetchLoansGranted = async () => {
+      if (activeTab !== 'loans-granted') return;
+      setLoansGrantedLoading(true);
+      try {
+        const params: any = {};
+        if (loansGrantedStart) params.startDate = loansGrantedStart;
+        if (loansGrantedEnd) params.endDate = loansGrantedEnd;
+        const { data } = await reportsApi.getLoansGranted(params);
+        setLoansGrantedData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load loans granted</Message>, { placement: 'topEnd' }); }
+      finally { setLoansGrantedLoading(false); }
+    };
+    fetchLoansGranted();
+  }, [activeTab, loansGrantedStart, loansGrantedEnd]);
+
+  useEffect(() => {
+    if (activeTab !== 'expected-collections') return;
+    const fetch = async () => {
+      setExpectedColLoading(true);
+      try {
+        const { data } = await reportsApi.getExpectedCollections({ startDate: expectedColStart, endDate: expectedColEnd });
+        setExpectedColData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load expected collections</Message>, { placement: 'topEnd' }); }
+      finally { setExpectedColLoading(false); }
+    };
+    fetch();
+  }, [activeTab, expectedColStart, expectedColEnd]);
+
+  useEffect(() => {
+    if (activeTab !== 'portfolio-summary') return;
+    const fetch = async () => {
+      setPortfolioLoading(true);
+      try {
+        const { data } = await reportsApi.getPortfolioSummary();
+        setPortfolioData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load portfolio summary</Message>, { placement: 'topEnd' }); }
+      finally { setPortfolioLoading(false); }
+    };
+    fetch();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'branch-performance') return;
+    const fetch = async () => {
+      setBranchPerfLoading(true);
+      try {
+        const params: any = {};
+        if (branchPerfStart) params.startDate = branchPerfStart;
+        if (branchPerfEnd) params.endDate = branchPerfEnd;
+        const { data } = await reportsApi.getBranchPerformance(params);
+        setBranchPerfData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load branch performance</Message>, { placement: 'topEnd' }); }
+      finally { setBranchPerfLoading(false); }
+    };
+    fetch();
+  }, [activeTab, branchPerfStart, branchPerfEnd]);
+
+  useEffect(() => {
+    if (activeTab !== 'disbursements') return;
+    const fetch = async () => {
+      setDisbursementLoading(true);
+      try {
+        const params: any = {};
+        if (disbursementStart) params.startDate = disbursementStart;
+        if (disbursementEnd) params.endDate = disbursementEnd;
+        const { data } = await reportsApi.getDisbursements(params);
+        setDisbursementData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load disbursements</Message>, { placement: 'topEnd' }); }
+      finally { setDisbursementLoading(false); }
+    };
+    fetch();
+  }, [activeTab, disbursementStart, disbursementEnd]);
+
+  const statusColor = (s: string) => {
+    return s === 'paid' ? 'green' : s === 'partial' ? 'blue' : 'orange';
+  };
+
+  const printReport = (title: string, data: any[], columns: { key: string; label: string; format?: (v: any) => string }[]) => {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    let headerHtml = '';
+    const cn = companyInfo.company_name;
+    if (cn) {
+      headerHtml = `<div class="company-info"><h1>${cn}</h1>`;
+      if (companyInfo.company_address) headerHtml += `<p>${companyInfo.company_address}</p>`;
+      if (companyInfo.company_phone) headerHtml += `<p>Tel: ${companyInfo.company_phone}</p>`;
+      if (companyInfo.company_email) headerHtml += `<p>Email: ${companyInfo.company_email}</p>`;
+      headerHtml += '</div>';
+    }
+    let html = `<!DOCTYPE html><html><head><title>${title}</title>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; font-size: 12px; }
+        h1 { font-size: 20px; margin-bottom: 5px; }
+        .subtitle { color: #666; margin-bottom: 20px; font-size: 13px; }
+        .company-info { text-align: center; margin-bottom: 20px; }
+        .company-info h1 { font-size: 22px; margin-bottom: 2px; }
+        .company-info p { margin: 0; color: #666; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+        th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+        th { background: #f5f5f5; font-weight: 600; }
+        @media print { body { padding: 0; } }
+      </style></head><body>
+      ${headerHtml}
+      <h1>${title}</h1>
+      <div class="subtitle">Generated: ${new Date().toLocaleString()}</div>
+      <table><thead><tr>${columns.map(c => `<th>${c.label}</th>`).join('')}</tr></thead><tbody>`;
+    for (const row of data) {
+      html += `<tr>${columns.map(c => `<td>${c.format ? c.format(row[c.key]) : (row[c.key] ?? '')}</td>`).join('')}</tr>`;
+    }
+    html += `</tbody></table></body></html>`;
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => { w.print(); }, 500);
+  };
+
+  const categories: { key: string; label: string; tabs: { key: string; label: string }[] }[] = [
+      { key: 'collections', label: 'Collections', tabs: [
+        { key: 'daily-collections', label: 'Daily Collections' },
+        { key: 'expected-collections', label: 'Expected Collections' },
+      ]},
+    { key: 'loans', label: 'Loans', tabs: [
+      { key: 'loans-granted', label: 'Loans Granted' },
+      { key: 'disbursements', label: 'Disbursements' },
+      { key: 'portfolio-summary', label: 'Portfolio Summary' },
+      { key: 'amort', label: 'Amortization Schedule' },
+    ]},
+    { key: 'performance', label: 'Performance', tabs: [
+      { key: 'branch-performance', label: 'Branch Performance' },
+      { key: 'performance', label: 'Collector Performance' },
+      { key: 'borrower-perf', label: 'Borrower Performance' },
+    ]},
+    { key: 'risk', label: 'Risk', tabs: [
+      { key: 'aging', label: 'Aging Report' },
+      { key: 'delinquency', label: 'Delinquency' },
+    ]},
+    { key: 'financial', label: 'Financial', tabs: [
+      { key: 'interest', label: 'Interest Income' },
+    ]},
+  ];
+
+  const visibleTabs = categories.find(c => c.key === activeCategory)?.tabs || [];
+  useEffect(() => {
+    const first = visibleTabs[0];
+    if (first && !visibleTabs.some(t => t.key === activeTab)) setActiveTab(first.key);
+  }, [activeCategory]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reports</h1>
+          <p className="text-gray-500 dark:text-gray-400">Generate and view operational reports</p>
+        </div>
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        {categories.map(c => (
+          <Button key={c.key} appearance={activeCategory === c.key ? 'primary' : 'ghost'} onClick={() => setActiveCategory(c.key)}>
+            {c.label}
+          </Button>
+        ))}
+      </div>
+
+      <div className="flex gap-2 flex-wrap border-b border-gray-200 dark:border-gray-700 pb-2">
+        {visibleTabs.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            className={`text-sm px-3 py-1.5 rounded-t font-medium transition-colors ${
+              activeTab === t.key
+                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'aging' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Aging Summary">
+            <div className="h-[300px]">
+              <Table data={agingData} loading={loading} height={300} rowHeight={45}>
+                <Column width={200}><HeaderCell>Bucket</HeaderCell><Cell dataKey="aging_bucket" /></Column>
+                <Column width={100}><HeaderCell>Count</HeaderCell><Cell dataKey="count" /></Column>
+                <Column width={150}><HeaderCell>Total Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_amount)}</Cell></Column>
+              </Table>
+            </div>
+            <div className="flex justify-end gap-2 mt-3">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Aging Report', agingData, [
+                { key: 'aging_bucket', label: 'Bucket' },
+                { key: 'count', label: 'Count' },
+                { key: 'total_amount', label: 'Total Amount', format: (v) => formatCurrency(v) },
+              ])}>Print</Button>
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'delinquency' && (
+        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Delinquency Report">
+          <Table data={delinquencyData} loading={loading} height={500} rowHeight={45}>
+            <Column width={200}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+            <Column width={130}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+            <Column width={150}><HeaderCell>Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
+            <Column width={150}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => formatCurrency(r.outstanding_balance)}</Cell></Column>
+            <Column width={100}><HeaderCell>Days OD</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_overdue}</span>}</Cell></Column>
+            <Column width={110}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color="red">{r.status}</Tag>}</Cell></Column>
+          </Table>
+          <div className="flex justify-end gap-2 mt-3">
+            <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Delinquency Report', delinquencyData, [
+              { key: 'borrower_name', label: 'Borrower' },
+              { key: 'loan_number', label: 'Loan #' },
+              { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
+              { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
+              { key: 'days_overdue', label: 'Days OD' },
+              { key: 'status', label: 'Status' },
+            ])}>Print</Button>
+          </div>
+        </Panel>
+      )}
+
+      {activeTab === 'interest' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <div className="w-52">
+                <SelectPicker
+                  placeholder="All branches"
+                  data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                  value={interestBranchFilter}
+                  onChange={(v) => setInterestBranchFilter(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                />
+              </div>
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Interest Income Report', interestData, [
+                { key: 'month', label: 'Month', format: (v) => new Date(v).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'total_interest', label: 'Interest', format: (v) => formatCurrency(v) },
+                { key: 'total_penalty', label: 'Penalty', format: (v) => formatCurrency(v) },
+                { key: 'transaction_count', label: 'Transactions' },
+              ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+                exportCSV(interestData, 'interest-income', [
+                  { key: 'month', label: 'Month', format: (v) => new Date(v).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) },
+                  { key: 'branch_name', label: 'Branch' },
+                  { key: 'total_interest', label: 'Interest', format: (v) => formatCurrency(v) },
+                  { key: 'total_penalty', label: 'Penalty', format: (v) => formatCurrency(v) },
+                  { key: 'transaction_count', label: 'Transactions' },
+                ]);
+              }}>Export CSV</Button>
+            </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Monthly Interest Income">
+            <Table data={interestData} loading={loading} height={500} rowHeight={45}>
+              <Column width={130}><HeaderCell>Month</HeaderCell><Cell>{(r: any) => new Date(r.month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</Cell></Column>
+              <Column width={130}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={130}><HeaderCell>Interest</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_interest)}</Cell></Column>
+              <Column width={130}><HeaderCell>Penalty</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_penalty)}</Cell></Column>
+              <Column width={100}><HeaderCell>Transactions</HeaderCell><Cell dataKey="transaction_count" /></Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'amort' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-64">
+              <SelectPicker
+                placeholder="Filter by borrower..."
+                data={borrowers.map((b: any) => ({ label: `${b.first_name} ${b.last_name} (${b.borrower_code})`, value: b.id }))}
+                value={borrowerFilter}
+                onChange={(v) => setBorrowerFilter(v)}
+                style={{ width: '100%' }}
+                cleanable
+              />
+            </div>
+            <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
+              const w = window.open('', '_blank');
+              if (!w) return;
+              let headerHtml = '';
+              const cn2 = companyInfo.company_name;
+              if (cn2) {
+                headerHtml = `<div class="company-info"><h1>${cn2}</h1>`;
+                if (companyInfo.company_address) headerHtml += `<p>${companyInfo.company_address}</p>`;
+                if (companyInfo.company_phone) headerHtml += `<p>Tel: ${companyInfo.company_phone}</p>`;
+                if (companyInfo.company_email) headerHtml += `<p>Email: ${companyInfo.company_email}</p>`;
+                headerHtml += '</div>';
+              }
+              let html = `<!DOCTYPE html><html><head><title>Amortization Report</title>
+                <style>
+                  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; font-size: 12px; }
+                  h1 { font-size: 20px; margin-bottom: 5px; }
+                  .subtitle { color: #666; margin-bottom: 20px; font-size: 13px; }
+                  .company-info { text-align: center; margin-bottom: 20px; }
+                  .company-info h1 { font-size: 22px; margin-bottom: 2px; }
+                  .company-info p { margin: 0; color: #666; font-size: 12px; }
+                  table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+                  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+                  th { background: #f5f5f5; font-weight: 600; }
+                  .loan-header td { background: #e8f0fe; font-weight: 600; }
+                  .paid { color: #10b981; font-weight: 600; }
+                  .partial { color: #f59e0b; font-weight: 600; }
+                  .pending { color: #ef4444; font-weight: 600; }
+                  .summary { display: flex; gap: 24px; margin-bottom: 16px; font-size: 13px; }
+                  .summary span { background: #f9f9f9; padding: 6px 12px; border-radius: 4px; }
+                  .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 32px; margin-bottom: 24px; }
+                  .signatures > div { text-align: center; }
+                  .sig-line { border-bottom: 1px solid #9ca3af; margin-bottom: 4px; height: 40px; }
+                  .sig-name { font-weight: 600; margin: 0; font-size: 12px; }
+                  .sig-role { color: #6b7280; font-size: 10px; margin: 0; }
+                  .sig-date { color: #9ca3af; font-size: 10px; margin-top: 4px; }
+                </style>
+              </head><body>
+              ${headerHtml}
+              <h1>Amortization Schedule Report</h1>
+              <div class="subtitle">Generated: ${new Date().toLocaleString()} ${borrowerFilter ? '| Filtered by borrower' : '| All active loans'}</div>`;
+
+              let grandTotalPaid = 0, grandTotalPartial = 0, grandTotalUnpaid = 0;
+              for (const loan of amortData) {
+                grandTotalPaid += loan.paid;
+                grandTotalPartial += loan.partial;
+                grandTotalUnpaid += loan.unpaid;
+                html += `<div class="summary">
+                  <span><strong>${loan.borrower_name}</strong> (${loan.borrower_code})</span>
+                  <span>Loan: ${loan.loan_number}</span>
+                  <span>Balance: ${formatCurrency(loan.outstanding_balance)}</span>
+                  <span>Paid: ${loan.paid} | Partial: ${loan.partial} | Unpaid: ${loan.unpaid}</span>
+                </div>
+                <table>
+                  <thead><tr>
+                    <th>#</th><th>Due Date</th><th>Total Due</th><th>Paid Amount</th><th>Penalty</th><th>Status</th>
+                  </tr></thead><tbody>`;
+                for (const s of loan.schedules) {
+                  const statusClass = s.status === 'paid' ? 'paid' : s.status === 'partial' ? 'partial' : 'pending';
+                  html += `<tr>
+                    <td>${s.installment_no}</td>
+                    <td>${new Date(s.due_date).toLocaleDateString()}</td>
+                    <td>${formatCurrency(s.total_due)}</td>
+                    <td>${formatCurrency(s.paid_amount)}</td>
+                    <td>${formatCurrency(s.penalty_amount)}</td>
+                    <td class="${statusClass}">${s.status.toUpperCase()}</td>
+                  </tr>`;
+                }
+                html += `</tbody></table>`;
+                html += `<div class="signatures">
+                  <div><div class="sig-line"></div><p class="sig-name">${loan.borrower_name || ''}</p><p class="sig-role">Borrower Signature</p><p class="sig-date">Date: _______________</p></div>
+                  <div><div class="sig-line"></div><p class="sig-name">${loan.loan_officer_name || ''}</p><p class="sig-role">Loan Officer Signature</p><p class="sig-date">Date: _______________</p></div>
+                  <div><div class="sig-line"></div><p class="sig-name">Branch Manager</p><p class="sig-role">Branch Manager Signature</p><p class="sig-date">Date: _______________</p></div>
+                </div>`;
+              }
+              html += `<div class="summary">
+                <span><strong>Grand Total</strong></span>
+                <span>Paid: ${grandTotalPaid}</span>
+                <span>Partial: ${grandTotalPartial}</span>
+                <span>Unpaid: ${grandTotalUnpaid}</span>
+              </div>`;
+              html += `</body></html>`;
+              w.document.write(html);
+              w.document.close();
+              setTimeout(() => { w.print(); }, 500);
+            }}>Print Report</Button>
+          </div>
+
+          {amortData.length === 0 ? (
+            <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered>
+              <div className="text-center py-12 text-gray-500">No active loans found</div>
+            </Panel>
+          ) : (
+            amortData.map((loan: any) => (
+              <Panel key={loan.loan_id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-4" bordered
+                header={`${loan.borrower_name} (${loan.borrower_code}) — ${loan.loan_number} — ${formatCurrency(loan.outstanding_balance)}`}>
+                <div className="flex gap-4 mb-3 text-sm">
+                  <span>Paid: <strong className="text-green-600">{loan.paid}</strong></span>
+                  <span>Partial: <strong className="text-blue-600">{loan.partial}</strong></span>
+                  <span>Unpaid: <strong className="text-orange-600">{loan.unpaid}</strong></span>
+                </div>
+                <Table data={loan.schedules} height={Math.min(loan.schedules.length * 46 + 40, 400)} rowHeight={40} virtualized>
+                  <Column width={60}><HeaderCell>#</HeaderCell><Cell dataKey="installment_no" /></Column>
+                  <Column width={110}><HeaderCell>Due Date</HeaderCell><Cell>{(r: any) => new Date(r.due_date).toLocaleDateString()}</Cell></Column>
+                  <Column width={110}><HeaderCell>Total Due</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_due)}</Cell></Column>
+                  <Column width={110}><HeaderCell>Paid Amount</HeaderCell><Cell>{(r: any) => parseFloat(r.paid_amount) > 0 ? formatCurrency(r.paid_amount) : '-'}</Cell></Column>
+                  <Column width={100}><HeaderCell>Penalty</HeaderCell><Cell>{(r: any) => parseFloat(r.penalty_amount) > 0 ? formatCurrency(r.penalty_amount) : '-'}</Cell></Column>
+                  <Column width={100}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={statusColor(r.status)}>{r.status}</Tag>}</Cell></Column>
+                </Table>
+              </Panel>
+            ))
+          )}
+        </div>
+      )}
+
+      {activeTab === 'performance' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <div className="w-52">
+                <SelectPicker
+                  placeholder="All collectors"
+                  data={collectors.map((c: any) => ({ label: `${c.first_name} ${c.last_name}`, value: c.id }))}
+                  value={collectorFilter}
+                  onChange={(v) => { setCollectorFilter(v); setSelectedCollector(null); setCollectorVisits([]); }}
+                  style={{ width: '100%' }}
+                  cleanable
+                />
+              </div>
+              <DatePicker placeholder="Start date" value={collectorStartDate} onChange={(v) => setCollectorStartDate(v)} oneTap />
+              <DatePicker placeholder="End date" value={collectorEndDate} onChange={(v) => setCollectorEndDate(v)} oneTap />
+            </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-4" bordered header="Collector Performance Evaluation">
+            <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Scores weighted: Collection Rate (35%) | Delinquency Rate (25%) | Visit Efficiency (20%) | On-Time Payments (20%)
+            </div>
+            <Table data={performanceData} loading={performanceLoading} height={450} rowHeight={45}>
+              <Column width={160}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
+              <Column width={60} align="center"><HeaderCell>Assigned</HeaderCell><Cell dataKey="total_assigned" /></Column>
+              <Column width={60} align="center"><HeaderCell>Active</HeaderCell><Cell dataKey="active_assigned" /></Column>
+              <Column width={70} align="center"><HeaderCell>Delinq</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.delinquent_assigned}</span>}</Cell></Column>
+              <Column width={80} align="center"><HeaderCell>Closed</HeaderCell><Cell dataKey="closed_assigned" /></Column>
+              <Column width={70} align="center"><HeaderCell>Visits</HeaderCell><Cell dataKey="total_visits" /></Column>
+              <Column width={150}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_outstanding)}</Cell></Column>
+              <Column width={100} align="center"><HeaderCell>Collection %</HeaderCell>
+                <Cell>{(r: any) => {
+                  const v = parseFloat(r.collection_rate || 0);
+                  return <span className={v >= 75 ? 'text-green-600 font-semibold' : v >= 50 ? 'text-yellow-600' : 'text-red-500'}>{v}%</span>;
+                }}</Cell>
+              </Column>
+              <Column width={100} align="center"><HeaderCell>Visit Eff.</HeaderCell>
+                <Cell>{(r: any) => {
+                  const v = parseFloat(r.visit_efficiency || 0);
+                  return <span className={v >= 75 ? 'text-green-600 font-semibold' : v >= 50 ? 'text-yellow-600' : 'text-red-500'}>{v}%</span>;
+                }}</Cell>
+              </Column>
+              <Column width={100} align="center"><HeaderCell>Delinq. %</HeaderCell>
+                <Cell>{(r: any) => {
+                  const v = parseFloat(r.delinquency_rate || 0);
+                  return <span className={v <= 25 ? 'text-green-600 font-semibold' : v <= 50 ? 'text-yellow-600' : 'text-red-500'}>{v}%</span>;
+                }}</Cell>
+              </Column>
+              <Column width={110} align="center"><HeaderCell>On-Time %</HeaderCell>
+                <Cell>{(r: any) => {
+                  const v = parseFloat(r.on_time_rate || 0);
+                  return <span className={v >= 75 ? 'text-green-600 font-semibold' : v >= 50 ? 'text-yellow-600' : 'text-red-500'}>{v}%</span>;
+                }}</Cell>
+              </Column>
+              <Column width={80} align="center"><HeaderCell>Score</HeaderCell>
+                <Cell>{(r: any) => <span className="font-bold">{r.performance_score}</span>}</Cell>
+              </Column>
+              <Column width={70} align="center"><HeaderCell>Grade</HeaderCell>
+                <Cell>{(r: any) => {
+                  const gradeColor = r.grade === 'A' ? 'green' : r.grade === 'B' ? 'blue' : r.grade === 'C' ? 'yellow' : r.grade === 'D' ? 'orange' : r.grade === 'F' ? 'red' : 'gray';
+                  return <Tag color={gradeColor as any}>{r.grade}</Tag>;
+                }}</Cell>
+              </Column>
+              <Column width={70} align="center"><HeaderCell>Visits</HeaderCell>
+                <Cell>{(r: any) => (
+                  <Button size="sm" appearance="link" onClick={() => setSelectedCollector(selectedCollector === r.collector_id ? null : r.collector_id)}>
+                    {selectedCollector === r.collector_id ? 'Hide' : 'View'}
+                  </Button>
+                )}</Cell>
+              </Column>
+              <Column width={80} align="center"><HeaderCell>Payments</HeaderCell>
+                <Cell>{(r: any) => (
+                  <Button size="sm" appearance="link" onClick={() => setSelectedPaymentCollector(selectedPaymentCollector === r.collector_id ? null : r.collector_id)}>
+                    {selectedPaymentCollector === r.collector_id ? 'Hide' : 'View'}
+                  </Button>
+                )}</Cell>
+              </Column>
+            </Table>
+            <div className="flex justify-end">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Collector Performance Evaluation', performanceData, [
+                { key: 'collector_name', label: 'Collector' },
+                { key: 'total_assigned', label: 'Assigned' },
+                { key: 'active_assigned', label: 'Active' },
+                { key: 'delinquent_assigned', label: 'Delinq' },
+                { key: 'closed_assigned', label: 'Closed' },
+                { key: 'total_visits', label: 'Visits' },
+                { key: 'total_outstanding', label: 'Outstanding', format: (v) => formatCurrency(v) },
+                { key: 'collection_rate', label: 'Collection %', format: (v) => `${v}%` },
+                { key: 'visit_efficiency', label: 'Visit Eff. %', format: (v) => `${v}%` },
+                { key: 'delinquency_rate', label: 'Delinq. %', format: (v) => `${v}%` },
+                { key: 'on_time_rate', label: 'On-Time %', format: (v) => `${v}%` },
+                { key: 'performance_score', label: 'Score' },
+                { key: 'grade', label: 'Grade' },
+              ])}>Print</Button>
+            </div>
+          </Panel>
+
+          {selectedCollector && (
+            <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered
+              header={`Visit Details — ${performanceData.find((c: any) => c.collector_id === selectedCollector)?.collector_name || ''}`}>
+              <Table data={collectorVisits} loading={visitsLoading} height={400} rowHeight={45}>
+                <Column width={110}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.visit_date).toLocaleDateString()}</Cell></Column>
+                <Column width={130}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+                <Column width={180}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+                <Column width={100}><HeaderCell>Type</HeaderCell><Cell>{(r: any) => <Tag>{r.visit_type}</Tag>}</Cell></Column>
+                <Column width={100}><HeaderCell>Result</HeaderCell><Cell>{(r: any) => r.result ? <Tag color={r.result === 'collected' ? 'green' : r.result === 'promise' ? 'blue' : r.result === 'refused' ? 'red' : 'orange'}>{r.result}</Tag> : '-'}</Cell></Column>
+                <Column width={200}><HeaderCell>Notes</HeaderCell><Cell>{(r: any) => r.notes || '-'}</Cell></Column>
+              </Table>
+            </Panel>
+          )}
+
+          {selectedPaymentCollector && (
+            <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered
+              header={`Collections Collected — ${performanceData.find((c: any) => c.collector_id === selectedPaymentCollector)?.collector_name || ''}`}>
+              {collectorPayments.length > 0 && (
+                <div className="mb-3 text-sm">
+                  <span className="font-semibold">Total Collected: </span>
+                  <span className="text-green-600 font-bold text-base">
+                    {formatCurrency(collectorPayments.reduce((s: number, p: any) => s + parseFloat(p.amount || 0), 0))}
+                  </span>
+                  <span className="ml-4 text-gray-500">
+                    ({collectorPayments.length} payment{collectorPayments.length !== 1 ? 's' : ''})
+                  </span>
+                </div>
+              )}
+              <Table data={collectorPayments} loading={paymentsLoading} height={400} rowHeight={45}>
+                <Column width={120}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.payment_date).toLocaleDateString()}</Cell></Column>
+                <Column width={130}><HeaderCell>Payment #</HeaderCell><Cell dataKey="payment_number" /></Column>
+                <Column width={130}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+                <Column width={180}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+                <Column width={100}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.amount)}</Cell></Column>
+                <Column width={100}><HeaderCell>Method</HeaderCell><Cell>{(r: any) => <Tag>{r.payment_method}</Tag>}</Cell></Column>
+              </Table>
+            </Panel>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'loans-granted' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <input type="date" value={loansGrantedStart || ''} onChange={(e) => setLoansGrantedStart(e.target.value || null)} className="rs-input w-40" />
+              <input type="date" value={loansGrantedEnd || ''} onChange={(e) => setLoansGrantedEnd(e.target.value || null)} className="rs-input w-40" />
+            </div>
+            <div className="flex gap-2">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Loans Granted', loansGrantedData, [
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'release_date', label: 'Date Granted', format: (v) => v ? new Date(v).toLocaleDateString() : '' },
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'principal_amount', label: 'Loan Amount', format: (v) => formatCurrency(v) },
+                { key: 'total_charges', label: 'Total Charges', format: (v) => formatCurrency(v) },
+                { key: 'net_proceeds', label: 'Net Proceeds', format: (v) => formatCurrency(v) },
+                { key: 'term_months', label: 'Term (mos)' },
+                { key: 'payment_frequency', label: 'Frequency' },
+                { key: 'status', label: 'Status' },
+              ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+              exportCSV(loansGrantedData, 'loans-granted', [
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'release_date', label: 'Date Granted', format: (v) => v ? new Date(v).toLocaleDateString() : '' },
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'present_address', label: 'Address' },
+                { key: 'principal_amount', label: 'Loan Amount', format: (v) => formatCurrency(v) },
+                { key: 'interest_amount', label: 'Interest', format: (v) => formatCurrency(v) },
+                { key: 'paid_interest', label: 'Interest Income', format: (v) => formatCurrency(v) },
+                { key: 'total_charges', label: 'Total Charges', format: (v) => formatCurrency(v) },
+                { key: 'net_proceeds', label: 'Net Proceeds', format: (v) => formatCurrency(v) },
+                { key: 'term_months', label: 'Term (mos)' },
+                { key: 'payment_frequency', label: 'Frequency' },
+                { key: 'status', label: 'Status' },
+              ]);
+            }}>Export CSV</Button>
+          </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Loans Granted">
+            <Table data={loansGrantedData} loading={loansGrantedLoading} height={500} rowHeight={45}>
+              <Column width={130}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+              <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={110}><HeaderCell>Date Granted</HeaderCell><Cell>{(r: any) => r.release_date ? new Date(r.release_date).toLocaleDateString() : '-'}</Cell></Column>
+              <Column width={170}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+              <Column width={180}><HeaderCell>Address</HeaderCell><Cell>{(r: any) => `${r.present_address || ''}, ${r.present_city || ''}`}</Cell></Column>
+              <Column width={120}><HeaderCell>Loan Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
+              <Column width={120}><HeaderCell>Interest Income</HeaderCell><Cell>{(r: any) => formatCurrency(r.paid_interest)}</Cell></Column>
+              <Column width={100}><HeaderCell>Total Charges</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_charges)}</Cell></Column>
+              <Column width={120}><HeaderCell>Net Proceeds</HeaderCell><Cell>{(r: any) => <span className="font-semibold text-green-600">{formatCurrency(r.net_proceeds)}</span>}</Cell></Column>
+              <Column width={80}><HeaderCell>Term</HeaderCell><Cell>{(r: any) => `${r.term_months}mo`}</Cell></Column>
+              <Column width={90}><HeaderCell>Freq</HeaderCell><Cell dataKey="payment_frequency" /></Column>
+              <Column width={80}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.status === 'active' ? 'green' : r.status === 'paid' ? 'blue' : 'orange'}>{r.status}</Tag>}</Cell></Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'expected-collections' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <input type="date" value={expectedColStart} onChange={(e) => setExpectedColStart(e.target.value)} className="rs-input w-40" />
+              <input type="date" value={expectedColEnd} onChange={(e) => setExpectedColEnd(e.target.value)} className="rs-input w-40" />
+            </div>
+            <div className="flex gap-2">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Expected Collections', expectedColData, [
+                { key: 'due_date', label: 'Due Date', format: (v) => new Date(v).toLocaleDateString() },
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'installment_no', label: 'Installment' },
+                { key: 'total_due', label: 'Amount Due', format: (v) => formatCurrency(v) },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'collector_name', label: 'Collector' },
+                { key: 'schedule_status', label: 'Status' },
+              ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+              exportCSV(expectedColData, 'expected-collections', [
+                { key: 'due_date', label: 'Due Date', format: (v) => new Date(v).toLocaleDateString() },
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'installment_no', label: 'Installment' },
+                { key: 'total_due', label: 'Amount Due', format: (v) => formatCurrency(v) },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'collector_name', label: 'Collector' },
+                { key: 'mobile', label: 'Contact' },
+                { key: 'present_address', label: 'Address' },
+                { key: 'schedule_status', label: 'Status' },
+              ]);
+            }}>Export CSV</Button>
+          </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Expected Collections (${new Date(expectedColStart).toLocaleDateString()} — ${new Date(expectedColEnd).toLocaleDateString()})`}>
+            <Table data={expectedColData} loading={expectedColLoading} height={500} rowHeight={45}>
+              <Column width={100}><HeaderCell>Due Date</HeaderCell><Cell>{(r: any) => new Date(r.due_date).toLocaleDateString()}</Cell></Column>
+              <Column width={170}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+              <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+              <Column width={80}><HeaderCell>Installment</HeaderCell><Cell>{(r: any) => `${r.installment_no}`}</Cell></Column>
+              <Column width={120}><HeaderCell>Amount Due</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_due)}</Cell></Column>
+              <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={150}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
+              <Column width={110}><HeaderCell>Contact</HeaderCell><Cell dataKey="mobile" /></Column>
+              <Column width={150}><HeaderCell>Address</HeaderCell><Cell>{(r: any) => r.present_address || ''}</Cell></Column>
+              <Column width={80}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.schedule_status === 'overdue' ? 'red' : 'orange'}>{r.schedule_status}</Tag>}</Cell></Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'portfolio-summary' && (
+        <div>
+          <div className="flex justify-end gap-2 mb-4">
+            <Button appearance="primary" startIcon={<Printer className="w-3.5 h-3.5" />} onClick={() => printReport('Portfolio Summary', portfolioData, [
+              { key: 'branch_name', label: 'Branch' },
+              { key: 'product_name', label: 'Product' },
+              { key: 'loan_count', label: 'Loans' },
+              { key: 'total_principal', label: 'Total Principal', format: (v) => formatCurrency(v) },
+              { key: 'total_outstanding', label: 'Outstanding', format: (v) => formatCurrency(v) },
+              { key: 'delinquent_count', label: 'Delinquent' },
+              { key: 'paid_count', label: 'Paid' },
+              { key: 'delinquency_rate', label: 'Delinq %' },
+            ])}>Print</Button>
+            <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+              exportCSV(portfolioData, 'portfolio-summary', [
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'product_name', label: 'Product' },
+                { key: 'loan_count', label: 'Loans' },
+                { key: 'total_principal', label: 'Total Principal', format: (v) => formatCurrency(v) },
+                { key: 'total_outstanding', label: 'Outstanding', format: (v) => formatCurrency(v) },
+                { key: 'delinquent_count', label: 'Delinquent' },
+                { key: 'paid_count', label: 'Paid' },
+                { key: 'delinquency_rate', label: 'Delinq %' },
+              ]);
+            }}>Export CSV</Button>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Loan Portfolio Summary">
+            <Table data={portfolioData} loading={portfolioLoading} height={500} rowHeight={45}>
+              <Column width={130}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={160}><HeaderCell>Product</HeaderCell><Cell dataKey="product_name" /></Column>
+              <Column width={70} align="center"><HeaderCell>Loans</HeaderCell><Cell dataKey="loan_count" /></Column>
+              <Column width={130}><HeaderCell>Total Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_principal)}</Cell></Column>
+              <Column width={130}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_outstanding)}</Cell></Column>
+              <Column width={80} align="center"><HeaderCell>Delinquent</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.delinquent_count}</span>}</Cell></Column>
+              <Column width={60} align="center"><HeaderCell>Paid</HeaderCell><Cell dataKey="paid_count" /></Column>
+              <Column width={80} align="center"><HeaderCell>Delinq %</HeaderCell><Cell>{(r: any) => `${r.delinquency_rate}%`}</Cell></Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'branch-performance' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <input type="date" value={branchPerfStart || ''} onChange={(e) => setBranchPerfStart(e.target.value || null)} className="rs-input w-40" />
+              <input type="date" value={branchPerfEnd || ''} onChange={(e) => setBranchPerfEnd(e.target.value || null)} className="rs-input w-40" />
+            </div>
+            <div className="flex gap-2">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Branch Performance', branchPerfData, [
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'loans_granted', label: 'Loans Granted' },
+                { key: 'total_principal', label: 'Principal', format: (v) => formatCurrency(v) },
+                { key: 'total_collected', label: 'Collected', format: (v) => formatCurrency(v) },
+                { key: 'payment_count', label: 'Payments' },
+                { key: 'active_loans', label: 'Active' },
+                { key: 'delinquent_count', label: 'Delinquent' },
+                { key: 'delinquency_rate', label: 'Delinq %' },
+                { key: 'collection_rate', label: 'Collection %' },
+              ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+              exportCSV(branchPerfData, 'branch-performance', [
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'loans_granted', label: 'Loans Granted' },
+                { key: 'total_principal', label: 'Principal', format: (v) => formatCurrency(v) },
+                { key: 'total_collected', label: 'Collected', format: (v) => formatCurrency(v) },
+                { key: 'payment_count', label: 'Payments' },
+                { key: 'active_loans', label: 'Active' },
+                { key: 'delinquent_count', label: 'Delinquent' },
+                { key: 'delinquency_rate', label: 'Delinq %' },
+                { key: 'collection_rate', label: 'Collection %' },
+              ]);
+            }}>Export CSV</Button>
+          </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Branch Performance Comparison">
+            <Table data={branchPerfData} loading={branchPerfLoading} height={500} rowHeight={45}>
+              <Column width={140}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={110} align="center"><HeaderCell>Loans Granted</HeaderCell><Cell dataKey="loans_granted" /></Column>
+              <Column width={120}><HeaderCell>Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_principal)}</Cell></Column>
+              <Column width={120}><HeaderCell>Collected</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_collected)}</Cell></Column>
+              <Column width={80} align="center"><HeaderCell>Payments</HeaderCell><Cell dataKey="payment_count" /></Column>
+              <Column width={70} align="center"><HeaderCell>Active</HeaderCell><Cell dataKey="active_loans" /></Column>
+              <Column width={80} align="center"><HeaderCell>Delinquent</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.delinquent_count}</span>}</Cell></Column>
+              <Column width={80} align="center"><HeaderCell>Delinq %</HeaderCell><Cell>{(r: any) => `${r.delinquency_rate}%`}</Cell></Column>
+              <Column width={100} align="center"><HeaderCell>Collection %</HeaderCell>
+                <Cell>{(r: any) => {
+                  const v = parseFloat(r.collection_rate || 0);
+                  return <span className={v >= 75 ? 'text-green-600 font-semibold' : v >= 50 ? 'text-yellow-600' : 'text-red-500'}>{v}%</span>;
+                }}</Cell>
+              </Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'disbursements' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <input type="date" value={disbursementStart || ''} onChange={(e) => setDisbursementStart(e.target.value || null)} className="rs-input w-40" />
+              <input type="date" value={disbursementEnd || ''} onChange={(e) => setDisbursementEnd(e.target.value || null)} className="rs-input w-40" />
+            </div>
+            <div className="flex gap-2">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Disbursement Report', disbursementData, [
+                { key: 'disbursed_at', label: 'Date', format: (v) => new Date(v).toLocaleDateString() },
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'disbursement_method', label: 'Method' },
+                { key: 'disbursed_amount', label: 'Amount', format: (v) => formatCurrency(v) },
+                { key: 'reference_number', label: 'Reference' },
+                { key: 'disbursed_by_name', label: 'Disbursed By' },
+              ])}>Print</Button>
+            <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+              exportCSV(disbursementData, 'disbursements', [
+                { key: 'disbursed_at', label: 'Date', format: (v) => new Date(v).toLocaleDateString() },
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'disbursement_method', label: 'Method' },
+                { key: 'disbursed_amount', label: 'Amount', format: (v) => formatCurrency(v) },
+                { key: 'reference_number', label: 'Reference' },
+                { key: 'disbursed_by_name', label: 'Disbursed By' },
+                { key: 'principal_amount', label: 'Loan Amount', format: (v) => formatCurrency(v) },
+                { key: 'net_proceeds', label: 'Net Proceeds', format: (v) => formatCurrency(v) },
+              ]);
+            }}>Export CSV</Button>
+          </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Disbursement Report">
+            <Table data={disbursementData} loading={disbursementLoading} height={500} rowHeight={45}>
+              <Column width={100}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.disbursed_at).toLocaleDateString()}</Cell></Column>
+              <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+              <Column width={170}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+              <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={110}><HeaderCell>Method</HeaderCell><Cell>{(r: any) => <Tag>{r.disbursement_method}</Tag>}</Cell></Column>
+              <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.disbursed_amount)}</Cell></Column>
+              <Column width={130}><HeaderCell>Reference</HeaderCell><Cell>{(r: any) => r.reference_number || '-'}</Cell></Column>
+              <Column width={150}><HeaderCell>Disbursed By</HeaderCell><Cell dataKey="disbursed_by_name" /></Column>
+              <Column width={120}><HeaderCell>Loan Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
+              <Column width={120}><HeaderCell>Net Proceeds</HeaderCell><Cell>{(r: any) => <span className="font-semibold text-green-600">{formatCurrency(r.net_proceeds)}</span>}</Cell></Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'daily-collections' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <div className="relative">
+                <input type="date" value={dailyColDate} onChange={(e) => setDailyColDate(e.target.value)}
+                  className="rs-input pl-3 w-44" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
+                const w = window.open('', '_blank');
+                if (!w) return;
+                const grandTotal = dailyColData.reduce((s, b) => ({
+                  payment_count: s.payment_count + b.payment_count,
+                  total_principal: s.total_principal + b.total_principal,
+                  total_interest: s.total_interest + b.total_interest,
+                  total_penalty: s.total_penalty + b.total_penalty,
+                  total_collected: s.total_collected + b.total_collected,
+                }), { payment_count: 0, total_principal: 0, total_interest: 0, total_penalty: 0, total_collected: 0 });
+                let dcHeaderHtml = '';
+                const dc = companyInfo.company_name;
+                if (dc) {
+                  dcHeaderHtml = `<div class="company-info"><h1>${dc}</h1>`;
+                  if (companyInfo.company_address) dcHeaderHtml += `<p>${companyInfo.company_address}</p>`;
+                  if (companyInfo.company_phone) dcHeaderHtml += `<p>Tel: ${companyInfo.company_phone}</p>`;
+                  if (companyInfo.company_email) dcHeaderHtml += `<p>Email: ${companyInfo.company_email}</p>`;
+                  dcHeaderHtml += '</div>';
+                }
+                let html = `<!DOCTYPE html><html><head><title>Daily Collections</title>
+                  <style>
+                    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; font-size: 12px; }
+                    h1 { font-size: 20px; margin-bottom: 5px; }
+                    .subtitle { color: #666; margin-bottom: 20px; font-size: 13px; }
+                    .company-info { text-align: center; margin-bottom: 20px; }
+                    .company-info h1 { font-size: 22px; margin-bottom: 2px; }
+                    .company-info p { margin: 0; color: #666; font-size: 12px; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+                    th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+                    th { background: #f5f5f5; font-weight: 600; }
+                    .text-right { text-align: right; }
+                    .grand-total td { font-weight: bold; border-top: 2px solid #000; }
+                    @media print { body { padding: 0; } }
+                  </style></head><body>
+                  ${dcHeaderHtml}
+                  <h1>Daily Collections</h1>
+                  <div class="subtitle">${new Date(dailyColDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                  <table><thead><tr><th>Branch</th><th class="text-right">Payments</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Penalty</th><th class="text-right">Total</th></tr></thead><tbody>`;
+                for (const b of dailyColData) {
+                  html += `<tr><td>${b.branch_name}</td><td class="text-right">${b.payment_count}</td><td class="text-right">${formatCurrency(b.total_principal)}</td><td class="text-right">${formatCurrency(b.total_interest)}</td><td class="text-right">${formatCurrency(b.total_penalty)}</td><td class="text-right">${formatCurrency(b.total_collected)}</td></tr>`;
+                }
+                html += `</tbody><tfoot><tr class="grand-total"><td>Grand Total</td><td class="text-right">${grandTotal.payment_count}</td><td class="text-right">${formatCurrency(grandTotal.total_principal)}</td><td class="text-right">${formatCurrency(grandTotal.total_interest)}</td><td class="text-right">${formatCurrency(grandTotal.total_penalty)}</td><td class="text-right">${formatCurrency(grandTotal.total_collected)}</td></tr></tfoot></table></body></html>`;
+                w.document.write(html);
+                w.document.close();
+                setTimeout(() => { w.print(); }, 500);
+              }}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+                exportCSV(dailyColData, `daily-collections-${dailyColDate}`, [
+                  { key: 'branch_name', label: 'Branch' },
+                  { key: 'payment_count', label: 'Payments' },
+                  { key: 'total_principal', label: 'Principal', format: (v) => formatCurrency(v) },
+                  { key: 'total_interest', label: 'Interest', format: (v) => formatCurrency(v) },
+                  { key: 'total_penalty', label: 'Penalty', format: (v) => formatCurrency(v) },
+                  { key: 'total_collected', label: 'Total Collected', format: (v) => formatCurrency(v) },
+                ]);
+              }}>Export CSV</Button>
+            </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Collections for ${new Date(dailyColDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Payments</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Principal</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Interest</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Penalty</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailyColData.length === 0 ? (
+                  <tr><td colSpan={6} className="text-center py-8 text-gray-400">No collections for this date</td></tr>
+                ) : dailyColData.map((b) => (
+                  <tr key={b.branch_id} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                    <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{b.branch_name}</td>
+                    <td className="py-3 px-4 text-right"><Tag>{b.payment_count}</Tag></td>
+                    <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(b.total_principal)}</td>
+                    <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(b.total_interest)}</td>
+                    <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(b.total_penalty)}</td>
+                    <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{formatCurrency(b.total_collected)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {dailyColData.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-gray-300 dark:border-gray-600">
+                    <td className="py-3 px-4 font-bold text-gray-900 dark:text-white">Grand Total</td>
+                    <td className="py-3 px-4 text-right font-semibold">{dailyColData.reduce((s, b) => s + b.payment_count, 0)}</td>
+                    <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{formatCurrency(dailyColData.reduce((s, b) => s + b.total_principal, 0))}</td>
+                    <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{formatCurrency(dailyColData.reduce((s, b) => s + b.total_interest, 0))}</td>
+                    <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{formatCurrency(dailyColData.reduce((s, b) => s + b.total_penalty, 0))}</td>
+                    <td className="py-3 px-4 text-right font-bold text-lg text-green-600">{formatCurrency(dailyColData.reduce((s, b) => s + b.total_collected, 0))}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'borrower-perf' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <div className="w-64">
+                <SelectPicker
+                  placeholder="Filter by borrower..."
+                  data={borrowers.map((b: any) => ({ label: `${b.first_name} ${b.last_name} (${b.borrower_code})`, value: b.id }))}
+                  value={borrowerPerfFilter}
+                  onChange={(v) => setBorrowerPerfFilter(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                />
+              </div>
+              <DatePicker placeholder="Start date" value={collectorStartDate} onChange={(v) => setCollectorStartDate(v)} oneTap />
+              <DatePicker placeholder="End date" value={collectorEndDate} onChange={(v) => setCollectorEndDate(v)} oneTap />
+            </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-4" bordered header="Borrower Performance Evaluation">
+            <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Scores weighted: On-Time Payment Rate (40%) | Loan Completion Rate (25%) | Low Delinquency (25%) | Days Late Penalty (-0.5/day)
+            </div>
+            <Table data={borrowerPerfData} loading={borrowerPerfLoading} height={500} rowHeight={45}>
+              <Column width={180}><HeaderCell>Borrower</HeaderCell><Cell>{(r: any) => `${r.borrower_name} (${r.borrower_code})`}</Cell></Column>
+              <Column width={140}><HeaderCell>Collector</HeaderCell><Cell>{(r: any) => r.current_collector_name || '-'}</Cell></Column>
+              <Column width={80} align="center"><HeaderCell>Loans</HeaderCell><Cell dataKey="total_loans" /></Column>
+              <Column width={80} align="center"><HeaderCell>Completed</HeaderCell><Cell dataKey="completed_loans" /></Column>
+              <Column width={80} align="center"><HeaderCell>Active</HeaderCell><Cell dataKey="active_loans" /></Column>
+              <Column width={70} align="center"><HeaderCell>Delinq</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.delinquent_loans}</span>}</Cell></Column>
+              <Column width={130}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => formatCurrency(r.outstanding_balance)}</Cell></Column>
+              <Column width={100} align="center"><HeaderCell>On-Time %</HeaderCell>
+                <Cell>{(r: any) => {
+                  const v = parseFloat(r.on_time_rate || 0);
+                  return <span className={v >= 75 ? 'text-green-600 font-semibold' : v >= 50 ? 'text-yellow-600' : 'text-red-500'}>{v}%</span>;
+                }}</Cell>
+              </Column>
+              <Column width={100} align="center"><HeaderCell>Completion %</HeaderCell>
+                <Cell>{(r: any) => {
+                  const v = parseFloat(r.completion_rate || 0);
+                  return <span className={v >= 75 ? 'text-green-600 font-semibold' : v >= 50 ? 'text-yellow-600' : 'text-red-500'}>{v}%</span>;
+                }}</Cell>
+              </Column>
+              <Column width={80} align="center"><HeaderCell>Avg Late</HeaderCell><Cell>{(r: any) => `${parseInt(r.avg_days_late || 0)}d`}</Cell></Column>
+              <Column width={70} align="center"><HeaderCell>Co-makers</HeaderCell><Cell dataKey="co_maker_count" /></Column>
+              <Column width={100}><HeaderCell>Last Payment</HeaderCell><Cell>{(r: any) => r.last_payment_date ? new Date(r.last_payment_date).toLocaleDateString() : '-'}</Cell></Column>
+              <Column width={80} align="center"><HeaderCell>Score</HeaderCell>
+                <Cell>{(r: any) => <span className="font-bold">{r.risk_score}</span>}</Cell>
+              </Column>
+              <Column width={70} align="center"><HeaderCell>Grade</HeaderCell>
+                <Cell>{(r: any) => {
+                  const gradeColor = r.grade === 'A' ? 'green' : r.grade === 'B' ? 'blue' : r.grade === 'C' ? 'yellow' : r.grade === 'D' ? 'orange' : r.grade === 'F' ? 'red' : 'gray';
+                  return <Tag color={gradeColor as any}>{r.grade}</Tag>;
+                }}</Cell>
+              </Column>
+            </Table>
+            <div className="flex justify-end">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Borrower Performance Evaluation', borrowerPerfData, [
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'current_collector_name', label: 'Collector' },
+                { key: 'total_loans', label: 'Loans' },
+                { key: 'completed_loans', label: 'Completed' },
+                { key: 'active_loans', label: 'Active' },
+                { key: 'delinquent_loans', label: 'Delinq' },
+                { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
+                { key: 'on_time_rate', label: 'On-Time %', format: (v) => `${v}%` },
+                { key: 'completion_rate', label: 'Completion %', format: (v) => `${v}%` },
+                { key: 'avg_days_late', label: 'Avg Late', format: (v) => `${parseInt(v || 0)}d` },
+                { key: 'risk_score', label: 'Score' },
+                { key: 'grade', label: 'Grade' },
+              ])}>Print</Button>
+            </div>
+          </Panel>
+        </div>
+      )}
+    </div>
+  );
+};

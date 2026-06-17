@@ -1,0 +1,21 @@
+## LOAN PAYMENTS CSV — one row per payment (optional)
+## Link the payment to a loan using the borrower's identifier OR the loan number if already known.
+## The system will auto-resolve the loan if only borrower info is given (picks the most recent active loan).
+
+Payment Date,Amount,Principal Amount,Interest Amount,Penalty Amount,Payment Method,Reference Number,Notes,Borrower Code,Borrower Mobile,Loan Number
+2026-02-15,8722.22,8000.00,722.22,0,cash,,1st payment,BOR-20260001,,
+2026-03-15,8722.22,8000.00,722.22,0,cash,,2nd payment,BOR-20260001,,
+2026-04-15,8722.22,8000.00,722.22,0,online transfer,TREF-123456,,BOR-20260001,,
+2026-05-15,8722.22,8000.00,722.22,0,cash,,,BOR-20260001,,LN-20260001
+2025-11-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-12-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-01-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-02-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-03-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-04-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-05-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-06-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-07-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-08-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-09-01,2343.75,2250.00,93.75,0,cash,,,BOR-20260002,,
+2025-10-01,2343.75,2250.00,93.75,0,cash,,last payment,BOR-20260002,,

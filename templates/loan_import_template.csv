@@ -1,0 +1,7 @@
+## LOANS CSV — one row per loan
+
+Borrower Code,Borrower Mobile,Borrower First Name,Borrower Last Name,Loan Product Name,Principal Amount,Interest Rate,Term Count,Term Type,Payment Frequency,Installment Count,Release Date,First Payment Date,Status,Processing Fee,Service Charge,Late Payment Fee,Penalty Type,Penalty Value,Penalty Grace Period,Collector,Notes
+BOR-20260001,09171234567,Juan,Dela Cruz,Small Business Loan,50000,12,6,months,monthly,6,2026-01-15,2026-02-15,active,500,200,100,percent,5,3,,Used for inventory
+BOR-20260002,09189876543,Maria,Santos,Personal Loan,25000,15,12,months,monthly,12,2025-10-01,2025-11-01,paid,250,0,50,,,,,
+BOR-20260003,09201239876,Pedro,Reyes,Agri Loan,100000,8,18,months,monthly,18,2026-03-01,2026-04-01,defaulted,1000,500,200,fixed,200,5,,
+BOR-20260004,09091234567,Ana,Gonzales,Emergency Loan,10000,18,3,months,monthly,3,2026-06-01,2026-07-01,active,0,100,50,,,,,-CASHIER

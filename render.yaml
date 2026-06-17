@@ -1,0 +1,63 @@
+services:
+  - type: web
+    name: lending-app
+    runtime: node
+    repo: https://github.com/YOUR_USERNAME/YOUR_REPO
+    plan: free
+    region: oregon
+    buildCommand: cd client && npm install && npm run build && cd ../server && npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: DB_HOST
+        fromDatabase:
+          name: lending-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: lending-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: lending-db
+          property: database
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: lending-db
+          property: password
+      - key: DB_SSL
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 1h
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        value: noreply@lendingapp.com
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      - key: FRONTEND_URL
+        value: https://lending-app.onrender.com
+
+databases:
+  - name: lending-db
+    plan: free
