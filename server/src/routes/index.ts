@@ -10,6 +10,11 @@ import { borrowerController } from '../controllers/borrower.controller';
 import { collectionController } from '../controllers/collection.controller';
 import { reportController } from '../controllers/report.controller';
 import { userController, roleController, branchController, settingsController } from '../controllers/user.controller';
+import { notificationController } from '../controllers/notification.controller';
+import { calendarController } from '../controllers/calendar.controller';
+import { chargesController } from '../controllers/charges.controller';
+import { utilityController } from '../controllers/utility.controller';
+import { auditLogRepo } from '../repositories';
 
 const docStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, path.join(__dirname, '..', 'uploads')),
@@ -137,7 +142,6 @@ router.get('/reports/disbursements', authenticate, reportController.getDisbursem
 router.get('/calendar/events', authenticate, calendarController.getEvents.bind(calendarController));
 
 // Audit Logs
-import { auditLogRepo } from '../repositories';
 router.get('/audit-logs', authenticate, authorize('super-admin', 'admin'), async (req, res, next) => {
   try {
     const { limit, offset, userId, entityType, action } = req.query;
@@ -173,7 +177,6 @@ router.put('/settings', authenticate, authorize('super-admin'), settingsControll
 
 // Utilities (super-admin only)
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
-import { utilityController } from '../controllers/utility.controller';
 router.get('/utilities/health', authenticate, authorize('super-admin'), utilityController.healthCheck.bind(utilityController));
 router.post('/utilities/recalculate-balances', authenticate, authorize('super-admin'), utilityController.recalculateBalances.bind(utilityController));
 router.post('/utilities/apply-penalties', authenticate, authorize('super-admin'), utilityController.applyPenalties.bind(utilityController));
@@ -182,9 +185,6 @@ router.get('/utilities/backup', authenticate, authorize('super-admin'), utilityC
 router.post('/utilities/restore', authenticate, authorize('super-admin'), upload.single('file'), utilityController.restoreDatabase.bind(utilityController));
 
 // Notifications
-import { notificationController } from '../controllers/notification.controller';
-import { calendarController } from '../controllers/calendar.controller';
-import { chargesController } from '../controllers/charges.controller';
 router.get('/notifications', authenticate, notificationController.getAll.bind(notificationController));
 router.post('/notifications/send-email', authenticate, notificationController.sendEmail.bind(notificationController));
 router.post('/notifications/send-sms', authenticate, notificationController.sendSms.bind(notificationController));
