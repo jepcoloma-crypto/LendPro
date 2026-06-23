@@ -15,7 +15,18 @@ const InstallmentInput = memo(({ scheduleId, value, onChange }: { scheduleId: st
     <InputNumber value={localVal}
       onChange={(v: any) => setLocalVal(parseFloat(v) || 0)}
       onBlur={() => onChange(scheduleId, localVal)}
-      min={0} step={0.01} style={{ width: '110px' }} />
+      min={0} step={0.01} style={{ width: '95px' }} />
+  );
+});
+
+const PenaltyInput = memo(({ scheduleId, value, onChange }: { scheduleId: string; value: number; onChange: (id: string, v: number) => void }) => {
+  const [localVal, setLocalVal] = useState(value);
+  useEffect(() => { setLocalVal(value); }, [value]);
+  return (
+    <InputNumber value={localVal}
+      onChange={(v: any) => setLocalVal(parseFloat(v) || 0)}
+      onBlur={() => onChange(scheduleId, localVal)}
+      min={0} step={0.01} style={{ width: '95px' }} />
   );
 });
 
@@ -43,7 +54,7 @@ export const PaymentsPage = () => {
   const [instModalOpen, setInstModalOpen] = useState(false);
   const [payLoan, setPayLoan] = useState<any>(null);
   const [paySchedule, setPaySchedule] = useState<any[]>([]);
-  const [payAllocations, setPayAllocations] = useState<Record<string, { amount: number }>>({});
+  const [payAllocations, setPayAllocations] = useState<Record<string, { amount: number; penalty: number }>>({});
   const [payMethod, setPayMethod] = useState('cash');
   const [payDate, setPayDate] = useState<Date>(new Date());
   const [payReference, setPayReference] = useState('');
@@ -120,9 +131,9 @@ export const PaymentsPage = () => {
       const schedule = (loan.schedule || []).filter((s: any) => s.status !== 'paid');
       setPayLoan(loan);
       setPaySchedule(schedule);
-      const allocs: Record<string, { amount: number }> = {};
+      const allocs: Record<string, { amount: number; penalty: number }> = {};
       for (const s of schedule) {
-        allocs[s.id] = { amount: 0 };
+        allocs[s.id] = { amount: 0, penalty: 0 };
       }
       setPayAllocations(allocs);
       setPayMethod('cash');
@@ -134,11 +145,12 @@ export const PaymentsPage = () => {
 
   const handleInstallmentSubmit = async () => {
     if (!payLoan) return;
+    const penaltyTotal = Object.values(payAllocations).reduce((s, v) => s + (v.penalty || 0), 0);
     const allocations = Object.entries(payAllocations)
-      .filter(([, v]) => v.amount > 0)
-      .map(([scheduleId, v]) => ({ scheduleId, amount: v.amount }));
+      .filter(([, v]) => v.amount > 0 || (v.penalty || 0) > 0)
+      .map(([scheduleId, v]) => ({ scheduleId, amount: v.amount, penalty: v.penalty || 0 }));
 
-    if (allocations.length === 0) {
+    if (allocations.filter(a => a.amount > 0).length === 0 && penaltyTotal <= 0) {
       try { toaster.push(<Message type="warning">Enter at least one payment amount</Message>, { placement: 'topEnd' }); } catch {}
       return;
     }
@@ -148,10 +160,11 @@ export const PaymentsPage = () => {
     try {
       await paymentsApi.create({
         loanId: payLoan.id,
-        amount: totalAmount,
+        amount: totalAmount + penaltyTotal,
         paymentMethod: payMethod,
         paymentDate: toDateString(payDate),
         referenceNumber: payReference || undefined,
+        penaltyAmount: penaltyTotal,
         allocations,
       });
       setInstModalOpen(false);
@@ -391,35 +404,21 @@ export const PaymentsPage = () => {
                 <Column width={90}><HeaderCell>Paid</HeaderCell><Cell>{(r: any) => formatCurrency(r.paid_amount)}</Cell></Column>
                 <Column width={90}><HeaderCell>Balance</HeaderCell><Cell>{(r: any) => formatCurrency(Math.max(0, parseFloat(r.total_due) - parseFloat(r.paid_amount || 0)))}</Cell></Column>
                 <Column width={90}><HeaderCell>Penalty</HeaderCell><Cell>{(r: any) => {
-                  const s = r as any;
-                  const shortage = Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0));
-                  const dueDate = new Date(s.due_date);
-                  const dueNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-                  const payDateNorm = new Date(payDate.getFullYear(), payDate.getMonth(), payDate.getDate());
-                  if (shortage <= 0 || dueNorm >= payDateNorm) return '-';
-                  const pVal = parseFloat(payLoan?.penalty_value) || 0;
-                  const mVal = parseFloat(payLoan?.penalty_matured_value) || 0;
-                  let penalty = 0;
-                  if (payLoan?.maturity_date) {
-                    const matDate = new Date(payLoan.maturity_date);
-                    const matNorm = new Date(matDate.getFullYear(), matDate.getMonth(), matDate.getDate());
-                    if (payDateNorm > matNorm) {
-                      const daysPast = Math.floor((payDateNorm.getTime() - matNorm.getTime()) / (1000 * 60 * 60 * 24));
-                      const monthsPast = daysPast / 30;
-                      penalty = Math.round(shortage * (mVal / 100) * monthsPast * 100) / 100;
-                    } else if (pVal > 0) {
-                      penalty = Math.round(shortage * (pVal / 100) * 100) / 100;
-                    }
-                  } else if (pVal > 0) {
-                    penalty = Math.round(shortage * (pVal / 100) * 100) / 100;
-                  }
-                  return penalty > 0 ? <span className="text-red-500 font-medium">{formatCurrency(penalty)}</span> : '-';
+                  const stored = parseFloat((r as any).penalty_amount) || 0;
+                  return stored > 0 ? <span className="text-red-500 font-medium">{formatCurrency(stored)}</span> : '-';
                 }}</Cell></Column>
-                <Column width={120}><HeaderCell>Amount to Pay</HeaderCell><Cell>{(r: any) => {
+                <Column width={105}><HeaderCell>Penalty Paid</HeaderCell><Cell>{(r: any) => {
+                  const s = r as any;
+                  return (
+                    <PenaltyInput scheduleId={s.id} value={payAllocations[s.id]?.penalty || 0}
+                      onChange={(id, v) => setPayAllocations((prev: any) => ({ ...prev, [id]: { ...prev[id] || { amount: 0 }, penalty: v } }))} />
+                  );
+                }}</Cell></Column>
+                <Column width={105}><HeaderCell>Amount to Pay</HeaderCell><Cell>{(r: any) => {
                   const s = r as any;
                   return (
                     <InstallmentInput scheduleId={s.id} value={payAllocations[s.id]?.amount || 0}
-                      onChange={(id, v) => setPayAllocations((prev: any) => ({ ...prev, [id]: { ...prev[id], amount: v } }))} />
+                      onChange={(id, v) => setPayAllocations((prev: any) => ({ ...prev, [id]: { ...prev[id] || { penalty: 0 }, amount: v } }))} />
                   );
                 }}</Cell></Column>
               </Table>
@@ -448,32 +447,8 @@ export const PaymentsPage = () => {
                 {Object.values(payAllocations).filter(v => v.amount > 0).length} installment(s)
               </div>
               <div className="text-right">
-                <div className="text-sm text-gray-500">
-                  Penalty: <span className="text-red-500 font-medium">{formatCurrency(
-                    paySchedule.reduce((sum: number, s: any) => {
-                      const shortage = Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0));
-                      const dueDate = new Date(s.due_date);
-                      const dueNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-                      const payDateNorm = new Date(payDate.getFullYear(), payDate.getMonth(), payDate.getDate());
-                      if (shortage <= 0 || dueNorm >= payDateNorm) return sum;
-                      const pVal = parseFloat(payLoan?.penalty_value) || 0;
-                      const mVal = parseFloat(payLoan?.penalty_matured_value) || 0;
-                      let penalty = 0;
-                      if (payLoan?.maturity_date) {
-                        const matDate = new Date(payLoan.maturity_date);
-                        const matNorm = new Date(matDate.getFullYear(), matDate.getMonth(), matDate.getDate());
-                        if (payDateNorm > matNorm) {
-                          const daysPast = Math.floor((payDateNorm.getTime() - matNorm.getTime()) / (1000 * 60 * 60 * 24));
-                          const monthsPast = daysPast / 30;
-                          penalty = Math.round(shortage * (mVal / 100) * monthsPast * 100) / 100;
-                        } else if (pVal > 0) penalty = Math.round(shortage * (pVal / 100) * 100) / 100;
-                      } else if (pVal > 0) penalty = Math.round(shortage * (pVal / 100) * 100) / 100;
-                      return sum + penalty;
-                    }, 0)
-                  )}</span>
-                </div>
                 <div className="text-lg font-bold text-gray-900 dark:text-white">
-                  Total Payment: {formatCurrency(Object.values(payAllocations).reduce((s, v) => s + v.amount, 0))}
+                  Total Payment: {formatCurrency(Object.values(payAllocations).reduce((s, v) => s + v.amount + (v.penalty || 0), 0))}
                 </div>
               </div>
             </div>

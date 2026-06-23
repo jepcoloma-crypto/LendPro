@@ -51,25 +51,6 @@ export class PaymentService {
 
     const netForSchedules = Math.max(0, amount - penaltyAmount);
 
-    // Distribute penalty across overdue schedules proportionally
-    if (penaltyAmount > 0 && totalOverdue > 0) {
-      let remainingPenalty = penaltyAmount;
-      for (const s of schedules.rows) {
-        if (remainingPenalty <= 0) break;
-        if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
-        const dueDate = new Date(s.due_date);
-        const dueDateNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-        if (dueDateNorm >= paymentDateNorm) continue;
-        const shortage = parseFloat(s.total_due) - parseFloat(s.paid_amount);
-        const portion = Math.round(penaltyAmount * (shortage / totalOverdue) * 100) / 100;
-        const appliedPenalty = Math.min(portion, remainingPenalty);
-        await amortizationScheduleRepo.update(s.id, {
-          penalty_amount: (parseFloat(s.penalty_amount || '0') + appliedPenalty).toFixed(2),
-        });
-        remainingPenalty -= appliedPenalty;
-      }
-    }
-
     let totalPrincipal = 0;
     let totalInterest = 0;
     let totalAllocated = 0;
@@ -198,14 +179,15 @@ export class PaymentService {
     totalPrincipal = Math.round(totalPrincipal * 100) / 100;
     totalInterest = Math.round(totalInterest * 100) / 100;
 
+    const penaltyAmount = parseFloat(data.penaltyAmount) || 0;
     const payment = await paymentRepo.create({
       payment_number: paymentNumber,
       loan_id: data.loanId,
       borrower_id: loan.borrower_id,
-      amount: totalAllocAmount,
+      amount: totalAllocAmount + penaltyAmount,
       principal_amount: totalPrincipal,
       interest_amount: totalInterest,
-      penalty_amount: 0,
+      penalty_amount: penaltyAmount,
       payment_method: data.paymentMethod || 'cash',
       reference_number: data.referenceNumber || null,
       payment_date: data.paymentDate || new Date(),
@@ -216,8 +198,12 @@ export class PaymentService {
     });
 
     let overflow: { [scheduleId: string]: number } = {};
+    const schedulePenalties: { [scheduleId: string]: number } = {};
     for (const alloc of data.allocations) {
       overflow[alloc.scheduleId] = (overflow[alloc.scheduleId] || 0) + (parseFloat(alloc.amount) || 0);
+      if (parseFloat(alloc.penalty || 0) > 0) {
+        schedulePenalties[alloc.scheduleId] = (schedulePenalties[alloc.scheduleId] || 0) + (parseFloat(alloc.penalty) || 0);
+      }
     }
 
     let remainingOverflow = 0;
@@ -242,10 +228,12 @@ export class PaymentService {
       const newPaid = currentPaid + applied;
       const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
 
+      const schedPenalty = schedulePenalties[schedule.id] || 0;
       await amortizationScheduleRepo.update(schedule.id, {
         paid_amount: newPaid,
         status: newStatus,
         paid_at: newStatus === 'paid' ? new Date() : null,
+        penalty_amount: schedPenalty > 0 ? (parseFloat(schedule.penalty_amount || '0') + schedPenalty).toFixed(2) : undefined,
       });
 
       await paymentAllocationRepo.create({
