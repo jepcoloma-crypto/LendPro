@@ -49,13 +49,14 @@ export class PaymentService {
       }
     }
 
+    const netForSchedules = Math.max(0, amount - penaltyAmount);
     let totalPrincipal = 0;
     let totalInterest = 0;
     let totalAllocated = 0;
 
     // First pass: compute allocations and principal/interest split
     const allocs: { schedule: any; amount: number; principal: number; interest: number }[] = [];
-    let allocRemaining = amount;
+    let allocRemaining = netForSchedules;
     for (const schedule of schedules.rows) {
       if (allocRemaining <= 0) break;
       const currentPaid = parseFloat(schedule.paid_amount);
@@ -84,7 +85,7 @@ export class PaymentService {
       payment_number: paymentNumber,
       loan_id: data.loanId,
       borrower_id: loan.borrower_id,
-      amount: amount + penaltyAmount,
+      amount: netForSchedules + penaltyAmount,
       principal_amount: totalPrincipal,
       interest_amount: totalInterest,
       penalty_amount: penaltyAmount,
