@@ -248,7 +248,6 @@ export class PaymentController {
 
       // Restore each schedule record
       const penaltyAmt = parseFloat(payment.penalty_amount) || 0;
-      const totalAllocAmount = allocations.reduce((s: number, a: any) => s + (parseFloat(a.amount) || 0), 0);
       for (const alloc of allocations) {
         const scheduleId = alloc.schedule_id;
         const allocAmount = parseFloat(alloc.amount) || 0;
@@ -258,17 +257,11 @@ export class PaymentController {
           const newPaid = Math.max(0, oldPaid - allocAmount);
           const totalDue = parseFloat(schedule.total_due) || 0;
           const status = newPaid <= 0 ? 'pending' : (newPaid >= totalDue - 0.005 ? 'paid' : 'partial');
-          const oldPenalty = parseFloat(schedule.penalty_amount) || 0;
-          let newPenalty = oldPenalty;
-          if (penaltyAmt > 0 && totalAllocAmount > 0) {
-            const penaltyPortion = Math.round(penaltyAmt * (allocAmount / totalAllocAmount) * 100) / 100;
-            newPenalty = Math.max(0, oldPenalty - penaltyPortion);
-          }
           await amortizationScheduleRepo.update(scheduleId, {
             paid_amount: newPaid,
             status,
             paid_at: status === 'pending' ? null : schedule.paid_at,
-            penalty_amount: newPenalty !== oldPenalty ? newPenalty.toFixed(2) : undefined,
+            penalty_amount: penaltyAmt > 0 ? '0' : undefined,
           });
         }
       }
