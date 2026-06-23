@@ -465,15 +465,9 @@ export const PaymentsPage = () => {
                 <Column width={90}><HeaderCell>Paid</HeaderCell><Cell>{(r: any) => formatCurrency(r.paid_amount)}</Cell></Column>
                 <Column width={90}><HeaderCell>Balance</HeaderCell><Cell>{(r: any) => formatCurrency(Math.max(0, parseFloat(r.total_due) - parseFloat(r.paid_amount || 0)))}</Cell></Column>
                 <Column width={100}><HeaderCell>Penalty</HeaderCell><Cell>{(r: any) => {
-                  const s = r as any;
-                  const stored = parseFloat(s.penalty_amount) || 0;
-                  const computed = payAllocations[s.id]?.penalty || 0;
-                  const total = stored + computed;
-                  if (total <= 0) return '-';
-                  const parts: string[] = [];
-                  if (stored > 0) parts.push(formatCurrency(stored));
-                  if (computed > 0) parts.push(formatCurrency(computed));
-                  return <span className="text-red-500 font-medium">{parts.join(' + ')}</span>;
+                  const pd = new Date(payDate.getFullYear(), payDate.getMonth(), payDate.getDate());
+                  const c = computePenalty(r as any, payLoan, pd);
+                  return c > 0 ? <span className="text-red-500 font-medium">{formatCurrency(c)}</span> : '-';
                 }}</Cell></Column>
                 <Column width={105}><HeaderCell>Penalty Paid</HeaderCell><Cell>{(r: any) => {
                   const s = r as any;
