@@ -390,6 +390,31 @@ export const PaymentsPage = () => {
                 <Column width={90}><HeaderCell>Total Due</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_due)}</Cell></Column>
                 <Column width={90}><HeaderCell>Paid</HeaderCell><Cell>{(r: any) => formatCurrency(r.paid_amount)}</Cell></Column>
                 <Column width={90}><HeaderCell>Balance</HeaderCell><Cell>{(r: any) => formatCurrency(Math.max(0, parseFloat(r.total_due) - parseFloat(r.paid_amount || 0)))}</Cell></Column>
+                <Column width={90}><HeaderCell>Penalty</HeaderCell><Cell>{(r: any) => {
+                  const s = r as any;
+                  const shortage = Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0));
+                  const dueDate = new Date(s.due_date);
+                  const dueNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+                  const payDateNorm = new Date(payDate.getFullYear(), payDate.getMonth(), payDate.getDate());
+                  if (shortage <= 0 || dueNorm >= payDateNorm) return '-';
+                  const pVal = parseFloat(payLoan?.penalty_value) || 0;
+                  const mVal = parseFloat(payLoan?.penalty_matured_value) || 0;
+                  let penalty = 0;
+                  if (payLoan?.maturity_date) {
+                    const matDate = new Date(payLoan.maturity_date);
+                    const matNorm = new Date(matDate.getFullYear(), matDate.getMonth(), matDate.getDate());
+                    if (payDateNorm > matNorm) {
+                      const daysPast = Math.floor((payDateNorm.getTime() - matNorm.getTime()) / (1000 * 60 * 60 * 24));
+                      const monthsPast = daysPast / 30;
+                      penalty = Math.round(shortage * (mVal / 100) * monthsPast * 100) / 100;
+                    } else if (pVal > 0) {
+                      penalty = Math.round(shortage * (pVal / 100) * 100) / 100;
+                    }
+                  } else if (pVal > 0) {
+                    penalty = Math.round(shortage * (pVal / 100) * 100) / 100;
+                  }
+                  return penalty > 0 ? <span className="text-red-500 font-medium">{formatCurrency(penalty)}</span> : '-';
+                }}</Cell></Column>
                 <Column width={120}><HeaderCell>Amount to Pay</HeaderCell><Cell>{(r: any) => {
                   const s = r as any;
                   return (
@@ -423,8 +448,32 @@ export const PaymentsPage = () => {
                 {Object.values(payAllocations).filter(v => v.amount > 0).length} installment(s)
               </div>
               <div className="text-right">
+                <div className="text-sm text-gray-500">
+                  Penalty: <span className="text-red-500 font-medium">{formatCurrency(
+                    paySchedule.reduce((sum: number, s: any) => {
+                      const shortage = Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0));
+                      const dueDate = new Date(s.due_date);
+                      const dueNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+                      const payDateNorm = new Date(payDate.getFullYear(), payDate.getMonth(), payDate.getDate());
+                      if (shortage <= 0 || dueNorm >= payDateNorm) return sum;
+                      const pVal = parseFloat(payLoan?.penalty_value) || 0;
+                      const mVal = parseFloat(payLoan?.penalty_matured_value) || 0;
+                      let penalty = 0;
+                      if (payLoan?.maturity_date) {
+                        const matDate = new Date(payLoan.maturity_date);
+                        const matNorm = new Date(matDate.getFullYear(), matDate.getMonth(), matDate.getDate());
+                        if (payDateNorm > matNorm) {
+                          const daysPast = Math.floor((payDateNorm.getTime() - matNorm.getTime()) / (1000 * 60 * 60 * 24));
+                          const monthsPast = daysPast / 30;
+                          penalty = Math.round(shortage * (mVal / 100) * monthsPast * 100) / 100;
+                        } else if (pVal > 0) penalty = Math.round(shortage * (pVal / 100) * 100) / 100;
+                      } else if (pVal > 0) penalty = Math.round(shortage * (pVal / 100) * 100) / 100;
+                      return sum + penalty;
+                    }, 0)
+                  )}</span>
+                </div>
                 <div className="text-lg font-bold text-gray-900 dark:text-white">
-                  Total: {formatCurrency(Object.values(payAllocations).reduce((s, v) => s + v.amount, 0))}
+                  Total Payment: {formatCurrency(Object.values(payAllocations).reduce((s, v) => s + v.amount, 0))}
                 </div>
               </div>
             </div>

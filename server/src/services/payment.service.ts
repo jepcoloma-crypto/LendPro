@@ -56,7 +56,7 @@ export class PaymentService {
       loan_id: data.loanId,
       borrower_id: loan.borrower_id,
       amount,
-      principal_amount: applyToPrincipal,
+      principal_amount: 0,
       interest_amount: 0,
       penalty_amount: penaltyAmount,
       payment_method: data.paymentMethod || 'cash',
@@ -68,12 +68,59 @@ export class PaymentService {
       status: 'completed',
     });
 
-    const newBalance = Math.max(0, outstandingBalance - applyToPrincipal);
+    let balanceAfterPenalty = Math.max(0, amount - penaltyAmount);
+    let totalAllocated = 0;
+    for (const schedule of schedules.rows) {
+      if (balanceAfterPenalty <= 0) break;
+      const currentPaid = parseFloat(schedule.paid_amount);
+      const totalDue = parseFloat(schedule.total_due);
+      const shortage = Math.max(0, totalDue - currentPaid);
+      if (shortage <= 0) continue;
+
+      const applied = Math.min(balanceAfterPenalty, shortage);
+      const newPaid = currentPaid + applied;
+      const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
+
+      await amortizationScheduleRepo.update(schedule.id, {
+        paid_amount: newPaid,
+        status: newStatus,
+        paid_at: newStatus === 'paid' ? new Date() : null,
+      });
+
+      await paymentAllocationRepo.create({
+        payment_id: payment.id,
+        schedule_id: schedule.id,
+        amount: applied,
+        allocated_to: 'principal',
+      });
+
+      balanceAfterPenalty -= applied;
+      totalAllocated += applied;
+    }
+
+    const newBalance = Math.max(0, outstandingBalance - totalAllocated);
     await loanRepo.update(data.loanId, { outstanding_balance: newBalance });
 
     if (newBalance <= 0) {
       await loanRepo.update(data.loanId, { status: 'closed', next_payment_date: null });
       await collectionRepo.update(loan.id, { status: 'closed' });
+    }
+
+    // Re-fetch to get updated statuses
+    const updatedSchedules = await amortizationScheduleRepo.findAll({
+      conditions: { loan_id: data.loanId },
+      orderBy: 'installment_no ASC',
+      limit: 1000,
+    });
+    const allPaid = updatedSchedules.rows.every(s => s.status === 'paid');
+    if (allPaid || newBalance <= 0) {
+      await loanRepo.update(data.loanId, { status: 'closed', outstanding_balance: 0, next_payment_date: null });
+      await collectionRepo.update(loan.id, { status: 'closed' });
+    } else {
+      const nextPending = updatedSchedules.rows.find(s => s.status === 'pending' || (s.status === 'partial' && parseFloat(s.paid_amount) < parseFloat(s.total_due) - 0.005));
+      if (nextPending) {
+        await loanRepo.update(data.loanId, { next_payment_date: nextPending.due_date });
+      }
     }
 
     return payment;
