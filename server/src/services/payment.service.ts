@@ -51,6 +51,25 @@ export class PaymentService {
 
     const netForSchedules = Math.max(0, amount - penaltyAmount);
 
+    // Distribute penalty proportionally across overdue schedules
+    if (penaltyAmount > 0 && totalOverdue > 0) {
+      let remainingPenalty = penaltyAmount;
+      for (const s of schedules.rows) {
+        if (remainingPenalty <= 0) break;
+        if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
+        const dueDate = new Date(s.due_date);
+        const dueDateNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+        if (dueDateNorm >= paymentDateNorm) continue;
+        const shortage = parseFloat(s.total_due) - parseFloat(s.paid_amount);
+        const portion = Math.round(penaltyAmount * (shortage / totalOverdue) * 100) / 100;
+        const appliedPenalty = Math.min(portion, remainingPenalty);
+        await amortizationScheduleRepo.update(s.id, {
+          penalty_amount: (parseFloat(s.penalty_amount || '0') + appliedPenalty).toFixed(2),
+        });
+        remainingPenalty -= appliedPenalty;
+      }
+    }
+
     let totalPrincipal = 0;
     let totalInterest = 0;
     let totalAllocated = 0;
@@ -109,7 +128,7 @@ export class PaymentService {
       await amortizationScheduleRepo.update(schedule.id, {
         paid_amount: newPaid,
         status: newStatus,
-        paid_at: newStatus === 'paid' ? new Date() : null,
+        paid_at: newStatus === 'paid' ? paymentDate : null,
       });
 
       await paymentAllocationRepo.create({
@@ -149,6 +168,7 @@ export class PaymentService {
   }
 
   private async receiveWithAllocations(data: any, loan: any, userId: string, paymentNumber: string, receiptNumber: string) {
+    const paymentDate = data.paymentDate ? new Date(data.paymentDate) : new Date();
     const allSchedules = await amortizationScheduleRepo.findAll({
       conditions: { loan_id: data.loanId },
       orderBy: 'installment_no ASC',
@@ -232,7 +252,7 @@ export class PaymentService {
       await amortizationScheduleRepo.update(schedule.id, {
         paid_amount: newPaid,
         status: newStatus,
-        paid_at: newStatus === 'paid' ? new Date() : null,
+        paid_at: newStatus === 'paid' ? paymentDate : null,
         penalty_amount: schedPenalty > 0 ? (parseFloat(schedule.penalty_amount || '0') + schedPenalty).toFixed(2) : undefined,
       });
 
@@ -259,7 +279,7 @@ export class PaymentService {
         await amortizationScheduleRepo.update(schedule.id, {
           paid_amount: newPaid,
           status: newStatus,
-          paid_at: newStatus === 'paid' ? new Date() : null,
+          paid_at: newStatus === 'paid' ? paymentDate : null,
         });
         await paymentAllocationRepo.create({
           payment_id: payment.id,
