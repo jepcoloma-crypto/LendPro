@@ -155,7 +155,7 @@ export const LoansPage = () => {
           { width: 150, header: 'Balance', cell: (row: Loan) => formatCurrency(row.outstanding_balance) },
           { width: 130, header: 'Term', cell: (row: Loan) => `${row.term_months} months` },
           { width: 110, header: 'Status', cell: (row: Loan) => <Tag color={statusColor(row.status)}>{row.status}</Tag> },
-          { width: 130, align: 'center', header: 'Actions', cell: (row: Loan) => (
+          { width: 180, align: 'center', header: 'Actions', cell: (row: Loan) => (
             <div className="flex gap-1 justify-center">
               <Button size="sm" appearance="subtle" disabled={row.status === 'restructured'} onClick={() => viewDetails(row.id)} className="group"><Eye className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">View</span></Button>
               {!isCollector && <Button size="sm" appearance="subtle" color="blue" disabled={row.status === 'restructured'} onClick={() => openEdit(row)} className="group"><Edit3 className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Edit</span></Button>}

@@ -7,7 +7,8 @@ export class AuthController {
   async login(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { email, password } = req.body;
-      const result = await authService.login(email, password, req.ip, req.headers['user-agent']);
+      const identifier = email || req.body.username;
+      const result = await authService.login(identifier, password, req.ip, req.headers['user-agent']);
       res.json({ success: true, data: result });
     } catch (error: any) {
       next(new AppError(401, error.message));

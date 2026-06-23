@@ -55,7 +55,7 @@ export const UsersPage = () => {
 
   const openEdit = (row: User) => {
     setEditTarget(row.id);
-    setFormValue({ firstName: row.first_name, lastName: row.last_name, phone: row.phone || '', roleId: row.role_id, branchId: row.branch_id || null, isActive: row.is_active });
+    setFormValue({ username: row.username, email: row.email, firstName: row.first_name, lastName: row.last_name, phone: row.phone || '', roleId: row.role_id, branchId: row.branch_id || null, isActive: row.is_active });
     setEditOpen(true);
   };
 
@@ -161,6 +161,14 @@ export const UsersPage = () => {
         <Modal.Header><Modal.Title>Edit User</Modal.Title></Modal.Header>
         <Modal.Body>
           <Form fluid formValue={formValue} onChange={(v: any) => setFormValue((prev: any) => ({ ...prev, ...v }))}>
+            <Form.Group>
+              <Form.ControlLabel>Username *</Form.ControlLabel>
+              <input className="rs-input w-full" value={formValue.username || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, username: e.target.value }))} />
+            </Form.Group>
+            <Form.Group>
+              <Form.ControlLabel>Email *</Form.ControlLabel>
+              <input className="rs-input w-full" type="email" value={formValue.email || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, email: e.target.value }))} />
+            </Form.Group>
             <Form.Group>
               <Form.ControlLabel>New Password (leave blank to keep current)</Form.ControlLabel>
               <input className="rs-input w-full" type="password" value={formValue.password || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, password: e.target.value }))} />

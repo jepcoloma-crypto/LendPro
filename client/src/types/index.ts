@@ -76,6 +76,7 @@ export interface Borrower {
   latitude?: number;
   longitude?: number;
   status: string;
+  branch_id?: string;
   branch_name?: string;
   documents?: BorrowerDocument[];
   coMakers?: CoMaker[];
@@ -112,6 +113,7 @@ export interface LoanProduct {
   term_type: string;
   penalty_type?: string;
   penalty_value?: number;
+  penalty_matured_value?: number;
   processing_fee: number;
   service_charge: number;
   late_payment_fee: number;
@@ -144,6 +146,7 @@ export interface LoanApplication {
   mobile?: string;
   created_at: string;
   submitted_at?: string;
+  application_type?: string;
 }
 
 export interface Loan {

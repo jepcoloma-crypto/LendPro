@@ -43,7 +43,7 @@ export const PaymentsPage = () => {
   const [instModalOpen, setInstModalOpen] = useState(false);
   const [payLoan, setPayLoan] = useState<any>(null);
   const [paySchedule, setPaySchedule] = useState<any[]>([]);
-  const [payAllocations, setPayAllocations] = useState<Record<string, { amount: number; penalty: number }>>({});
+  const [payAllocations, setPayAllocations] = useState<Record<string, { amount: number }>>({});
   const [payMethod, setPayMethod] = useState('cash');
   const [payDate, setPayDate] = useState<Date>(new Date());
   const [payReference, setPayReference] = useState('');
@@ -120,23 +120,9 @@ export const PaymentsPage = () => {
       const schedule = (loan.schedule || []).filter((s: any) => s.status !== 'paid');
       setPayLoan(loan);
       setPaySchedule(schedule);
-      const allocs: Record<string, { amount: number; penalty: number }> = {};
-      const now = new Date();
-      const gracePeriod = loan.penalty_grace_period || 0;
-      const pType = loan.penalty_type || '';
-      const pValue = parseFloat(loan.penalty_value) || 0;
+      const allocs: Record<string, { amount: number }> = {};
       for (const s of schedule) {
-        const dueDate = new Date(s.due_date);
-        const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-        const effectiveDays = Math.max(0, daysOverdue - gracePeriod);
-        let penalty = 0;
-        if (effectiveDays > 0 && pType && pValue) {
-          const due = parseFloat(s.total_due) - parseFloat(s.paid_amount);
-          if (pType === 'fixed') penalty = pValue;
-          else if (pType === 'percentage') penalty = due * (pValue / 100);
-          else if (pType === 'daily') penalty = due * (pValue / 100) * effectiveDays;
-        }
-        allocs[s.id] = { amount: 0, penalty: Math.round(penalty * 100) / 100 };
+        allocs[s.id] = { amount: 0 };
       }
       setPayAllocations(allocs);
       setPayMethod('cash');
@@ -150,14 +136,14 @@ export const PaymentsPage = () => {
     if (!payLoan) return;
     const allocations = Object.entries(payAllocations)
       .filter(([, v]) => v.amount > 0)
-      .map(([scheduleId, v]) => ({ scheduleId, amount: v.amount, penalty: v.penalty }));
+      .map(([scheduleId, v]) => ({ scheduleId, amount: v.amount }));
 
     if (allocations.length === 0) {
       try { toaster.push(<Message type="warning">Enter at least one payment amount</Message>, { placement: 'topEnd' }); } catch {}
       return;
     }
 
-    const totalAmount = allocations.reduce((sum, a) => sum + a.amount + a.penalty, 0);
+    const totalAmount = allocations.reduce((sum, a) => sum + a.amount, 0);
     setPaySubmitting(true);
     try {
       await paymentsApi.create({
@@ -404,10 +390,6 @@ export const PaymentsPage = () => {
                 <Column width={90}><HeaderCell>Total Due</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_due)}</Cell></Column>
                 <Column width={90}><HeaderCell>Paid</HeaderCell><Cell>{(r: any) => formatCurrency(r.paid_amount)}</Cell></Column>
                 <Column width={90}><HeaderCell>Balance</HeaderCell><Cell>{(r: any) => formatCurrency(Math.max(0, parseFloat(r.total_due) - parseFloat(r.paid_amount || 0)))}</Cell></Column>
-                <Column width={100}><HeaderCell>Penalty</HeaderCell><Cell>{(r: any) => {
-                  const p = payAllocations[r.id]?.penalty || 0;
-                  return p > 0 ? <span className="text-red-500 font-medium">{formatCurrency(p)}</span> : <span className="text-gray-400">-</span>;
-                }}</Cell></Column>
                 <Column width={120}><HeaderCell>Amount to Pay</HeaderCell><Cell>{(r: any) => {
                   const s = r as any;
                   return (
@@ -441,11 +423,8 @@ export const PaymentsPage = () => {
                 {Object.values(payAllocations).filter(v => v.amount > 0).length} installment(s)
               </div>
               <div className="text-right">
-                <div className="text-sm text-gray-500">
-                  Total Penalty: <span className="text-red-500 font-medium">{formatCurrency(Object.values(payAllocations).reduce((s, v) => s + v.penalty, 0))}</span>
-                </div>
                 <div className="text-lg font-bold text-gray-900 dark:text-white">
-                  Total: {formatCurrency(Object.values(payAllocations).reduce((s, v) => s + v.amount + v.penalty, 0))}
+                  Total: {formatCurrency(Object.values(payAllocations).reduce((s, v) => s + v.amount, 0))}
                 </div>
               </div>
             </div>

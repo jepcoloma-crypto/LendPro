@@ -90,6 +90,7 @@ router.post('/applications/:id/reject', authenticate, loanController.rejectAppli
 router.post('/applications/:id/release', authenticate, loanController.releaseLoan.bind(loanController));
 router.post('/applications/:id/documents', authenticate, loanController.uploadDocuments.bind(loanController));
 router.get('/applications/:id/documents', authenticate, loanController.getDocuments.bind(loanController));
+router.get('/applications/:id/documents/:docId/download', authenticate, loanController.downloadDocument.bind(loanController));
 router.delete('/applications/:id/documents/:docId', authenticate, loanController.deleteDocument.bind(loanController));
 
 // Loans
@@ -132,6 +133,9 @@ router.get('/reports/collector-payments', authenticate, reportController.getColl
 router.get('/reports/collector-performance', authenticate, reportController.getCollectorPerformance.bind(reportController));
 router.get('/reports/collector-remittance', authenticate, reportController.getCollectorRemittance.bind(reportController));
 router.get('/reports/borrower-performance', authenticate, reportController.getBorrowerPerformance.bind(reportController));
+router.get('/reports/processing-charges', authenticate, reportController.getProcessingCharges.bind(reportController));
+router.get('/reports/past-due', authenticate, reportController.getPastDue.bind(reportController));
+router.get('/reports/application-types', authenticate, reportController.getApplicationTypes.bind(reportController));
 router.get('/reports/daily-collections', authenticate, reportController.getDailyCollections.bind(reportController));
 router.get('/reports/loans-granted', authenticate, reportController.getLoansGranted.bind(reportController));
 router.get('/reports/expected-collections', authenticate, reportController.getExpectedCollections.bind(reportController));

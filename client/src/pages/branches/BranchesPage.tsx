@@ -26,7 +26,16 @@ export const BranchesPage = () => {
 
   const handleCreate = async () => {
     try {
-      await branchesApi.create(formValue);
+      await branchesApi.create({
+        name: formValue.name,
+        code: formValue.code,
+        address: formValue.address,
+        city: formValue.city,
+        province: formValue.province,
+        phone: formValue.phone,
+        email: formValue.email,
+        is_active: formValue.isActive,
+      });
       toaster.push(<Message type="success">Branch created</Message>, { placement: 'topEnd' });
       setEditOpen(false);
       setFormValue({});
@@ -45,7 +54,16 @@ export const BranchesPage = () => {
   const handleEdit = async () => {
     if (!editTarget) return;
     try {
-      await branchesApi.update(editTarget, formValue);
+      await branchesApi.update(editTarget, {
+        name: formValue.name,
+        code: formValue.code,
+        address: formValue.address,
+        city: formValue.city,
+        province: formValue.province,
+        phone: formValue.phone,
+        email: formValue.email,
+        is_active: formValue.isActive,
+      });
       toaster.push(<Message type="success">Branch updated</Message>, { placement: 'topEnd' });
       setEditOpen(false);
       setFormValue({});
@@ -59,7 +77,7 @@ export const BranchesPage = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Branches</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Areas</h1>
           <p className="text-gray-500 dark:text-gray-400">Manage company branches and locations</p>
         </div>
         <Button appearance="primary" onClick={() => { setEditTarget(null); setFormValue({}); setEditOpen(true); }} startIcon={<Plus className="w-4 h-4" />}>Add Branch</Button>
@@ -91,11 +109,7 @@ export const BranchesPage = () => {
             </Form.Group>
             <Form.Group>
               <Form.ControlLabel>Code *</Form.ControlLabel>
-              {editTarget ? (
-                <input className="rs-input w-full" value={formValue.code || ''} disabled />
-              ) : (
-                <input className="rs-input w-full" value={formValue.code || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, code: e.target.value }))} />
-              )}
+              <input className="rs-input w-full" value={formValue.code || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, code: e.target.value }))} />
             </Form.Group>
             <Form.Group>
               <Form.ControlLabel>Address</Form.ControlLabel>

@@ -7,12 +7,14 @@ import { generateId } from '../utils/helpers';
 
 export class AuthService {
   async login(email: string, password: string, ip?: string, userAgent?: string) {
-    const loginName = email.includes('@') ? email : `${email}@lending.com`;
     let user;
     try {
-      user = await userRepo.findOne({ email: loginName });
-    } catch {
-      throw new Error('Database connection unavailable. Ensure PostgreSQL is running.');
+      user = email.includes('@')
+        ? await userRepo.findOne({ email })
+        : await userRepo.findOne({ username: email });
+    } catch (err: any) {
+      console.error('Auth login query error:', err?.message || err);
+      throw new Error('Authentication failed. Please try again.');
     }
     if (!user) throw new Error('Invalid email or password');
 

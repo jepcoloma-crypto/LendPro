@@ -12,3 +12,4 @@ lendpro-backup*.sql
 supabase-schema.sql
 server/uploads/
 scripts/
+.vercel

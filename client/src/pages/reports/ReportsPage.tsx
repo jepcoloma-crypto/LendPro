@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Panel, Table, Tag, Button, SelectPicker, DatePicker, Message, toaster } from 'rsuite';
-import { reportsApi, borrowersApi, usersApi, branchesApi } from '../../services/api';
+import { loansApi, reportsApi, borrowersApi, usersApi, branchesApi } from '../../services/api';
 import { Download, Printer } from 'lucide-react';
 import { formatCurrency, exportCSV } from '../../utils/format';
 import { getCompanySettings } from '../../utils/companySettings';
@@ -39,6 +39,19 @@ export const ReportsPage = () => {
 
   const [interestBranchFilter, setInterestBranchFilter] = useState<string | null>(null);
   const [branches, setBranches] = useState<any[]>([]);
+
+  const [processingChargesData, setProcessingChargesData] = useState<any[]>([]);
+  const [processingChargesTotals, setProcessingChargesTotals] = useState<any[]>([]);
+  const [processingChargesGrand, setProcessingChargesGrand] = useState<any>({});
+  const [processingChargesLoading, setProcessingChargesLoading] = useState(false);
+
+  const [pastDueData, setPastDueData] = useState<any[]>([]);
+  const [pastDueLoading, setPastDueLoading] = useState(false);
+  const [pastDueBranchFilter, setPastDueBranchFilter] = useState<string | null>(null);
+
+  const [appTypeData, setAppTypeData] = useState<any[]>([]);
+  const [appTypeTotals, setAppTypeTotals] = useState<any[]>([]);
+  const [appTypeLoading, setAppTypeLoading] = useState(false);
 
   const [dailyColData, setDailyColData] = useState<any[]>([]);
   const [dailyColLoading, setDailyColLoading] = useState(false);
@@ -105,6 +118,50 @@ export const ReportsPage = () => {
     };
     fetchInterest();
   }, [activeTab, interestBranchFilter]);
+
+  useEffect(() => {
+    const fetchProcessingCharges = async () => {
+      if (activeTab !== 'processing-charges') return;
+      setProcessingChargesLoading(true);
+      try {
+        const { data } = await reportsApi.getProcessingCharges();
+        setProcessingChargesData(data.data.details || []);
+        setProcessingChargesTotals(data.data.totals || []);
+        setProcessingChargesGrand(data.data.grandTotal || {});
+      } catch { toaster.push(<Message type="error">Failed to load processing charges</Message>, { placement: 'topEnd' }); }
+      finally { setProcessingChargesLoading(false); }
+    };
+    fetchProcessingCharges();
+  }, [activeTab]);
+
+  useEffect(() => {
+    const fetchPastDue = async () => {
+      if (activeTab !== 'past-due') return;
+      setPastDueLoading(true);
+      try {
+        const params: any = {};
+        if (pastDueBranchFilter) params.branchId = pastDueBranchFilter;
+        const { data } = await reportsApi.getPastDue(params);
+        setPastDueData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load past due report</Message>, { placement: 'topEnd' }); }
+      finally { setPastDueLoading(false); }
+    };
+    fetchPastDue();
+  }, [activeTab, pastDueBranchFilter]);
+
+  useEffect(() => {
+    const fetchAppTypes = async () => {
+      if (activeTab !== 'application-types') return;
+      setAppTypeLoading(true);
+      try {
+        const { data } = await reportsApi.getApplicationTypes();
+        setAppTypeData(data.data.details || []);
+        setAppTypeTotals(data.data.totals || []);
+      } catch { toaster.push(<Message type="error">Failed to load application types</Message>, { placement: 'topEnd' }); }
+      finally { setAppTypeLoading(false); }
+    };
+    fetchAppTypes();
+  }, [activeTab]);
 
   useEffect(() => {
     const fetchAmort = async () => {
@@ -277,6 +334,107 @@ export const ReportsPage = () => {
     return s === 'paid' ? 'green' : s === 'partial' ? 'blue' : 'orange';
   };
 
+  const printSOA = async (loanId: string) => {
+    try {
+      const { data } = await loansApi.getById(loanId);
+      const loan = data.data;
+      if (!loan) return;
+      const w = window.open('', '_blank');
+      if (!w) return;
+      const schedule = loan.schedule || [];
+      const payments = loan.payments || [];
+      const totalPaid = payments.reduce((s: number, p: any) => s + parseFloat(p.amount || 0), 0);
+      const totalPenalty = payments.reduce((s: number, p: any) => s + parseFloat(p.penalty_amount || 0), 0);
+      const cn = companyInfo.company_name || 'PRIME CAPITAL LENDING CORP';
+      let html = `<!DOCTYPE html><html><head><title>Statement of Account - ${loan.loan_number}</title>
+        <style>
+          body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; font-size: 12px; }
+          h1 { font-size: 20px; margin-bottom: 2px; }
+          .company-info { text-align: center; margin-bottom: 20px; }
+          .company-info h1 { font-size: 22px; margin-bottom: 2px; }
+          .company-info p { margin: 0; color: #666; font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+          th, td { border: 1px solid #ddd; padding: 5px 7px; text-align: left; }
+          th { background: #f5f5f5; font-weight: 600; }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .font-medium { font-weight: 500; }
+          .text-green-600 { color: #059669; }
+          .text-red-600 { color: #dc2626; }
+          .text-yellow-600 { color: #ca8a04; }
+          .text-gray-400 { color: #9ca3af; }
+          .text-gray-500 { color: #6b7280; }
+          .text-gray-700 { color: #374151; }
+          .summary-table { width: auto; margin-left: auto; }
+          .summary-table td { border: none; padding: 3px 10px; }
+          .section-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; margin-top: 16px; color: #374151; }
+    </style></head><body>
+    <div class="company-info"><h1>${cn}</h1>${companyInfo.company_address ? `<p>${companyInfo.company_address}</p>` : ''}${companyInfo.company_phone ? `<p>Tel: ${companyInfo.company_phone}</p>` : ''}<p class="section-title" style="margin-top:4px">Statement of Account</p></div>
+    <div style="display:flex; gap: 40px; margin-bottom: 16px;">
+      <div><p style="margin:0 0 4px;font-weight:600;font-size:13px">Borrower Information</p>
+        <table><tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Name:</td><td class="font-medium" style="border:none;padding:2px 0">${loan.borrower_name}</td></tr>
+        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Code:</td><td style="border:none;padding:2px 0">${loan.borrower_code}</td></tr>
+        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Mobile:</td><td style="border:none;padding:2px 0">${loan.mobile || '-'}</td></tr></table></div>
+      <div><p style="margin:0 0 4px;font-weight:600;font-size:13px">Loan Information</p>
+        <table><tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Loan #:</td><td class="font-medium" style="border:none;padding:2px 0">${loan.loan_number}</td></tr>
+        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Product:</td><td style="border:none;padding:2px 0">${loan.product_name}</td></tr>
+        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Principal:</td><td style="border:none;padding:2px 0">${formatCurrency(loan.principal_amount)}</td></tr>
+        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Interest Rate:</td><td style="border:none;padding:2px 0">${loan.interest_rate}% (${loan.interest_type})</td></tr>
+        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Term:</td><td style="border:none;padding:2px 0">${loan.term_months} ${loan.term_type}</td></tr>
+        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Release Date:</td><td style="border:none;padding:2px 0">${loan.release_date ? new Date(loan.release_date).toLocaleDateString() : '-'}</td></tr>
+        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Maturity:</td><td style="border:none;padding:2px 0">${loan.maturity_date ? new Date(loan.maturity_date).toLocaleDateString() : '-'}</td></tr>
+        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Status:</td><td style="border:none;padding:2px 0;font-weight:600">${loan.status}</td></tr></table></div>
+    </div>
+    <p class="section-title">Amortization Schedule</p>
+    <table><thead><tr><th>#</th><th>Due Date</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Total Due</th><th class="text-right">Paid</th><th class="text-right">Balance</th><th class="text-right">Penalty</th><th class="text-center">Status</th></tr></thead><tbody>`;
+      let grandPrincipal = 0, grandInterest = 0, grandTotalDue = 0, grandPaidAmt = 0, grandBalance = 0, grandPenalty = 0;
+      for (const s of schedule) {
+        const balance = Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0));
+        const st = s.status;
+        const color = st === 'paid' ? 'text-green-600' : st === 'partial' ? 'text-yellow-600' : 'text-gray-400';
+        html += `<tr>
+          <td>${s.installment_no}</td><td>${new Date(s.due_date).toLocaleDateString()}</td>
+          <td class="text-right">${formatCurrency(s.principal)}</td>
+          <td class="text-right">${formatCurrency(s.interest)}</td>
+          <td class="text-right">${formatCurrency(s.total_due)}</td>
+          <td class="text-right">${formatCurrency(s.paid_amount)}</td>
+          <td class="text-right">${formatCurrency(balance)}</td>
+          <td class="text-right">${formatCurrency(s.penalty_amount || 0)}</td>
+          <td class="text-center ${color}">${st}</td>
+        </tr>`;
+        grandPrincipal += parseFloat(s.principal || 0);
+        grandInterest += parseFloat(s.interest || 0);
+        grandTotalDue += parseFloat(s.total_due || 0);
+        grandPaidAmt += parseFloat(s.paid_amount || 0);
+        grandBalance += balance;
+        grandPenalty += parseFloat(s.penalty_amount || 0);
+      }
+      html += `</tbody></table>
+    <p class="section-title">Payment History</p>
+    <table><thead><tr><th>Date</th><th>Ref/Payment #</th><th class="text-right">Amount</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Penalty</th><th class="text-center">Method</th></tr></thead><tbody>`;
+      for (const p of payments) {
+        html += `<tr>
+          <td>${new Date(p.payment_date).toLocaleDateString()}</td>
+          <td>${p.payment_number || p.receipt_number || '-'}</td>
+          <td class="text-right">${formatCurrency(p.amount)}</td>
+          <td class="text-right">${formatCurrency(p.principal_amount)}</td>
+          <td class="text-right">${formatCurrency(p.interest_amount)}</td>
+          <td class="text-right">${formatCurrency(p.penalty_amount)}</td>
+          <td class="text-center">${p.payment_method}</td>
+        </tr>`;
+      }
+      html += `</tbody></table>
+    <div style="border-top:1px solid #e5e7eb;padding-top:12px;display:flex;justify-content:flex-end">
+      <table class="summary-table"><tr><td class="text-gray-500" style="padding:2px 20px 2px 0">Total Payments:</td><td class="font-medium text-right">${formatCurrency(totalPaid)}</td></tr>
+      <tr><td class="text-gray-500" style="padding:2px 20px 2px 0">Total Penalties:</td><td class="font-medium text-right text-red-600">${formatCurrency(totalPenalty)}</td></tr>
+      <tr><td class="text-gray-500" style="padding:2px 20px 2px 0">Outstanding Balance:</td><td class="font-medium text-right" style="font-size:16px;font-weight:700">${formatCurrency(loan.outstanding_balance)}</td></tr></table>
+    </div></body></html>`;
+      w.document.write(html);
+      w.document.close();
+      setTimeout(() => { w.print(); }, 500);
+    } catch { toaster.push(<Message type="error">Failed to load SOA data</Message>, { placement: 'topEnd' }); }
+  };
+
   const printReport = (title: string, data: any[], columns: { key: string; label: string; format?: (v: any) => string }[]) => {
     const w = window.open('', '_blank');
     if (!w) return;
@@ -325,6 +483,7 @@ export const ReportsPage = () => {
       { key: 'disbursements', label: 'Disbursements' },
       { key: 'portfolio-summary', label: 'Portfolio Summary' },
       { key: 'amort', label: 'Amortization Schedule' },
+      { key: 'application-types', label: 'Application Types' },
     ]},
     { key: 'performance', label: 'Performance', tabs: [
       { key: 'branch-performance', label: 'Branch Performance' },
@@ -334,9 +493,11 @@ export const ReportsPage = () => {
     { key: 'risk', label: 'Risk', tabs: [
       { key: 'aging', label: 'Aging Report' },
       { key: 'delinquency', label: 'Delinquency' },
+      { key: 'past-due', label: 'Past Due Clients' },
     ]},
     { key: 'financial', label: 'Financial', tabs: [
       { key: 'interest', label: 'Interest Income' },
+      { key: 'processing-charges', label: 'Processing Charges' },
     ]},
   ];
 
@@ -420,6 +581,68 @@ export const ReportsPage = () => {
         </Panel>
       )}
 
+      {activeTab === 'past-due' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <div className="w-52">
+                <SelectPicker
+                  placeholder="All branches"
+                  data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                  value={pastDueBranchFilter}
+                  onChange={(v) => setPastDueBranchFilter(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Past Due Clients', pastDueData, [
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
+                { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
+                { key: 'maturity_date', label: 'Maturity', format: (v) => new Date(v).toLocaleDateString() },
+                { key: 'days_past_due', label: 'Days Past Due' },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'collector_name', label: 'Collector' },
+              ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+                exportCSV(pastDueData, 'past-due-clients', [
+                  { key: 'borrower_name', label: 'Borrower' },
+                  { key: 'loan_number', label: 'Loan #' },
+                  { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
+                  { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
+                  { key: 'maturity_date', label: 'Maturity', format: (v) => new Date(v).toLocaleDateString() },
+                  { key: 'days_past_due', label: 'Days Past Due' },
+                  { key: 'branch_name', label: 'Branch' },
+                  { key: 'collector_name', label: 'Collector' },
+                  { key: 'last_payment_date', label: 'Last Payment', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
+                ]);
+              }}>Export CSV</Button>
+            </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Past Due Clients (${pastDueData.length})`}>
+            <Table data={pastDueData} loading={pastDueLoading} height={500} rowHeight={45}>
+              <Column width={180}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+              <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+              <Column width={120}><HeaderCell>Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
+              <Column width={130}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-semibold">{formatCurrency(r.outstanding_balance)}</span>}</Cell></Column>
+              <Column width={110}><HeaderCell>Maturity</HeaderCell><Cell>{(r: any) => new Date(r.maturity_date).toLocaleDateString()}</Cell></Column>
+              <Column width={100}><HeaderCell>Days Past Due</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_past_due}</span>}</Cell></Column>
+              <Column width={130}><HeaderCell>Last Payment</HeaderCell><Cell>{(r: any) => r.last_payment_date ? new Date(r.last_payment_date).toLocaleDateString() : <span className="text-gray-400">None</span>}</Cell></Column>
+              <Column width={150}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={150}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
+            </Table>
+            {pastDueData.length > 0 && (
+              <div className="flex justify-end px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-sm font-semibold">
+                <span>Total Outstanding: {formatCurrency(pastDueData.reduce((sum: number, r: any) => sum + parseFloat(r.outstanding_balance || 0), 0))} &middot; {pastDueData.length} client{pastDueData.length !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+          </Panel>
+        </div>
+      )}
+
       {activeTab === 'interest' && (
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -459,6 +682,54 @@ export const ReportsPage = () => {
               <Column width={130}><HeaderCell>Interest</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_interest)}</Cell></Column>
               <Column width={130}><HeaderCell>Penalty</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_penalty)}</Cell></Column>
               <Column width={100}><HeaderCell>Transactions</HeaderCell><Cell dataKey="transaction_count" /></Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'processing-charges' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div></div>
+            <div className="flex gap-3">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Processing Charges Report', processingChargesData, [
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'charge_name', label: 'Charge Type' },
+                { key: 'loan_count', label: 'Loans' },
+                { key: 'total_amount', label: 'Amount', format: (v) => formatCurrency(v) },
+              ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+                exportCSV(processingChargesData, 'processing-charges', [
+                  { key: 'branch_name', label: 'Branch' },
+                  { key: 'charge_name', label: 'Charge Type' },
+                  { key: 'loan_count', label: 'Loans' },
+                  { key: 'total_amount', label: 'Amount', format: (v) => formatCurrency(v) },
+                ]);
+              }}>Export CSV</Button>
+            </div>
+          </div>
+
+          {/* Per-branch totals */}
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6" bordered header="Processing Charges by Branch">
+            <Table data={processingChargesTotals} loading={processingChargesLoading} height={250} rowHeight={45}>
+              <Column flexGrow={1}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={100}><HeaderCell>Loans</HeaderCell><Cell dataKey="loan_count" /></Column>
+              <Column width={150}><HeaderCell>Total Charges</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_amount)}</Cell></Column>
+            </Table>
+            {processingChargesGrand && (
+              <div className="flex justify-end px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-sm font-semibold">
+                <span>Grand Total: {formatCurrency(processingChargesGrand.total_amount || 0)} ({processingChargesGrand.loan_count || 0} loans)</span>
+              </div>
+            )}
+          </Panel>
+
+          {/* Detail breakdown */}
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Details by Charge Type">
+            <Table data={processingChargesData} loading={processingChargesLoading} height={400} rowHeight={45}>
+              <Column width={150}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={180}><HeaderCell>Charge Type</HeaderCell><Cell dataKey="charge_name" /></Column>
+              <Column width={100}><HeaderCell>Loans</HeaderCell><Cell dataKey="loan_count" /></Column>
+              <Column width={150}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_amount)}</Cell></Column>
             </Table>
           </Panel>
         </div>
@@ -571,7 +842,7 @@ export const ReportsPage = () => {
           ) : (
             amortData.map((loan: any) => (
               <Panel key={loan.loan_id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-4" bordered
-                header={`${loan.borrower_name} (${loan.borrower_code}) — ${loan.loan_number} — ${formatCurrency(loan.outstanding_balance)}`}>
+                header={<div className="flex items-center justify-between w-full pr-2"><span>{loan.borrower_name} ({loan.borrower_code}) — {loan.loan_number} — {formatCurrency(loan.outstanding_balance)}</span><Button size="sm" appearance="primary" startIcon={<Printer className="w-3.5 h-3.5" />} onClick={() => printSOA(loan.loan_id)}>Print SOA</Button></div>}>
                 <div className="flex gap-4 mb-3 text-sm">
                   <span>Paid: <strong className="text-green-600">{loan.paid}</strong></span>
                   <span>Partial: <strong className="text-blue-600">{loan.partial}</strong></span>
@@ -929,6 +1200,44 @@ export const ReportsPage = () => {
                   return <span className={v >= 75 ? 'text-green-600 font-semibold' : v >= 50 ? 'text-yellow-600' : 'text-red-500'}>{v}%</span>;
                 }}</Cell>
               </Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'application-types' && (
+        <div>
+          <div className="flex justify-end gap-2 mb-4">
+            <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Applications by Type', appTypeData, [
+              { key: 'branch_name', label: 'Branch' },
+              { key: 'application_type', label: 'Type' },
+              { key: 'application_count', label: 'Count' },
+              { key: 'total_principal', label: 'Total Principal', format: (v) => formatCurrency(v) },
+            ])}>Print</Button>
+            <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+              exportCSV(appTypeData, 'application-types', [
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'application_type', label: 'Type' },
+                { key: 'application_count', label: 'Count' },
+                { key: 'total_principal', label: 'Total Principal', format: (v) => formatCurrency(v) },
+              ]);
+            }}>Export CSV</Button>
+          </div>
+
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6" bordered header="Applications per Branch">
+            <Table data={appTypeTotals} loading={appTypeLoading} height={250} rowHeight={45}>
+              <Column flexGrow={1}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={100}><HeaderCell>Applications</HeaderCell><Cell dataKey="application_count" /></Column>
+              <Column width={150}><HeaderCell>Total Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_principal)}</Cell></Column>
+            </Table>
+          </Panel>
+
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Breakdown by Type">
+            <Table data={appTypeData} loading={appTypeLoading} height={400} rowHeight={45}>
+              <Column width={150}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={120}><HeaderCell>Type</HeaderCell><Cell>{(r: any) => <Tag color={r.application_type === 'Renewal' ? 'orange' : 'blue'}>{r.application_type || 'New'}</Tag>}</Cell></Column>
+              <Column width={100}><HeaderCell>Count</HeaderCell><Cell dataKey="application_count" /></Column>
+              <Column width={150}><HeaderCell>Total Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_principal)}</Cell></Column>
             </Table>
           </Panel>
         </div>

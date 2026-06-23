@@ -16,6 +16,15 @@ export class LoanService {
     const product = await loanProductRepo.findById(data.loanProductId);
     if (!product) throw new Error('Loan product not found');
 
+    let applicationType = data.applicationType || 'New';
+    if (!data.applicationType) {
+      const { rows: existingLoans } = await loanRepo.findAll({ conditions: { borrower_id: data.borrowerId }, limit: 1, select: 'id, status' });
+      const hasPreviousLoans = existingLoans.some(
+        (l: any) => ['active', 'closed'].includes(l.status)
+      );
+      if (hasPreviousLoans) applicationType = 'Renewal';
+    }
+
     const application = await loanApplicationRepo.create({
       application_number: generateApplicationNumber(),
       borrower_id: data.borrowerId,
@@ -26,6 +35,7 @@ export class LoanService {
       installment_count: data.installmentCount || null,
       interest_rate: product.interest_rate,
       interest_type: product.interest_type,
+      application_type: applicationType,
       status: 'draft',
       purpose: data.purpose || null,
       payment_frequency: data.paymentFrequency || 'monthly',
@@ -194,6 +204,7 @@ export class LoanService {
     if (data.paymentFrequency !== undefined) fields.payment_frequency = data.paymentFrequency;
     if (data.purpose !== undefined) fields.purpose = data.purpose;
     if (data.collectorId !== undefined) fields.collector_id = data.collectorId;
+    if (data.applicationType !== undefined) fields.application_type = data.applicationType || 'New';
     if (Object.keys(fields).length === 0) throw new Error('No fields to update');
     return loanApplicationRepo.update(id, fields);
   }
@@ -246,6 +257,7 @@ export class LoanService {
       term_months: app.term_months,
       term_type: app.term_type || 'months',
       installment_count: app.installment_count || null,
+      application_type: app.application_type || 'New',
       payment_frequency: app.payment_frequency,
       status: 'active',
       release_date: new Date(),
@@ -255,6 +267,7 @@ export class LoanService {
       penalty_type: product?.penalty_type || null,
       penalty_value: product?.penalty_value || null,
       penalty_grace_period: product?.penalty_grace_period || 0,
+      penalty_matured_value: product?.penalty_matured_value || 0,
       collector_id: app.collector_id || null,
       released_by: userId,
     });
@@ -384,6 +397,7 @@ export class LoanService {
       penalty_type: existing.penalty_type,
       penalty_value: existing.penalty_value,
       penalty_grace_period: existing.penalty_grace_period || 0,
+      penalty_matured_value: existing.penalty_matured_value || 0,
       collector_id: existing.collector_id,
       released_by: userId,
       restructured_from: existingLoanId,
@@ -432,7 +446,7 @@ export class LoanService {
   async getLoanById(id: string) {
     const loans = await loanRepo.query(
       `SELECT l.*, b.first_name || ' ' || b.last_name as borrower_name, b.borrower_code, b.mobile,
-              lp.name as product_name, lp.penalty_type, lp.penalty_value, lp.penalty_grace_period, lp.late_payment_fee,
+              lp.name as product_name, lp.penalty_type, lp.penalty_value, lp.penalty_grace_period, lp.penalty_matured_value, lp.late_payment_fee,
               u.first_name || ' ' || u.last_name as released_by_name
        FROM loans l
        JOIN borrowers b ON l.borrower_id = b.id

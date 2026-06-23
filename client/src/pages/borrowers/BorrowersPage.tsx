@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Table, Button, Input, InputGroup, Panel, Modal, Form, toaster, Message, Pagination, Tag, SelectPicker, DatePicker, Avatar, Whisper, Tooltip, Loader } from 'rsuite';
-import { borrowersApi } from '../../services/api';
+import { borrowersApi, branchesApi } from '../../services/api';
 import { Borrower } from '../../types';
 import { Search, Plus, Edit, Trash2, Camera, MapPin, Copy, Eye, Phone, Mail, MapPinHouse, Briefcase, DollarSign, CreditCard, CalendarDays, User, Globe, Download } from 'lucide-react';
 import { formatCurrency, methodColor, exportCSV } from '../../utils/format';
@@ -54,6 +54,7 @@ const INITIAL_FORM: Record<string, any> = {
   employer_name: '', employer_address: '', employer_phone: '', position: '',
   business_name: '', business_type: '', business_address: '',
   government_id_number: '',
+  branch_id: null,
 };
 
 export const BorrowersPage = () => {
@@ -76,8 +77,23 @@ export const BorrowersPage = () => {
   const [payHistoryOpen, setPayHistoryOpen] = useState(false);
   const [payHistory, setPayHistory] = useState<any[]>([]);
   const [payHistoryLoading, setPayHistoryLoading] = useState(false);
+  const [branches, setBranches] = useState<{ id: string; name: string; code: string }[]>([]);
+  useEffect(() => { if (modalOpen) branchesApi.getAll().then(({ data }) => setBranches(data.data || [])).catch(() => {}); }, [modalOpen]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const limit = 20;
+
+  const estimateTextWidth = (text: string, min: number, max: number) => Math.max(min, Math.min(max, Math.ceil(text.length * 8.5 + 24)));
+
+  const { codeWidth, nameWidth } = useMemo(() => {
+    let maxCode = 0, maxName = 0;
+    for (const b of borrowers) {
+      const cl = (b.borrower_code || '').length;
+      if (cl > maxCode) maxCode = cl;
+      const full = `${b.first_name} ${b.middle_name ? b.middle_name + ' ' : ''}${b.last_name}${b.suffix ? ', ' + b.suffix : ''}`;
+      if (full.length > maxName) maxName = full.length;
+    }
+    return { codeWidth: Math.max(90, Math.min(160, maxCode * 8.5 + 24)), nameWidth: Math.max(140, Math.min(350, maxName * 8.5 + 24)) };
+  }, [borrowers]);
 
   const fetchBorrowers = async () => {
     setLoading(true);
@@ -118,6 +134,10 @@ export const BorrowersPage = () => {
   };
 
   const handleSave = async () => {
+    if (!formValue.branch_id) {
+      toaster.push(<Message type="error">Branch is required</Message>, { placement: 'topEnd' });
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...formValue };
@@ -186,6 +206,7 @@ export const BorrowersPage = () => {
       business_address: borrower.business_address || '',
       government_id_type: borrower.government_id_type || null,
       government_id_number: borrower.government_id_number || '',
+      branch_id: borrower.branch_id || null,
     });
     setPhotoPreview(borrower.photo_url || null);
     setPhotoFile(null);
@@ -280,11 +301,11 @@ export const BorrowersPage = () => {
               </Avatar>
             )}</Cell>
           </Column>
-          <Column width={120} fixed>
+          <Column width={codeWidth} fixed>
             <HeaderCell>Code</HeaderCell>
             <Cell dataKey="borrower_code" />
           </Column>
-          <Column width={200}>
+          <Column width={nameWidth}>
             <HeaderCell>Name</HeaderCell>
             <Cell>{(row: Borrower) => `${row.first_name} ${row.middle_name ? row.middle_name + ' ' : ''}${row.last_name}${row.suffix ? ', ' + row.suffix : ''}`}</Cell>
           </Column>
@@ -543,6 +564,14 @@ export const BorrowersPage = () => {
                 </div>
               </Panel>
             )}
+
+            {/* Branch / Area */}
+            <Panel header={<div className="text-sm font-semibold text-gray-700 dark:text-gray-200">Branch / Area</div>} bordered className="mb-4">
+              <Form.Group>
+                <Form.ControlLabel>Branch</Form.ControlLabel>
+                <Form.Control name="branch_id" accepter={SelectPicker} data={branches.map(b => ({ label: `${b.name} (${b.code})`, value: b.id }))} block placeholder="Select branch..." />
+              </Form.Group>
+            </Panel>
 
             {/* Government ID */}
             <Panel header={<div className="text-sm font-semibold text-gray-700 dark:text-gray-200">Government ID</div>} bordered className="mb-4">

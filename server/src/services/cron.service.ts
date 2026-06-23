@@ -6,7 +6,7 @@ export class CronService {
   private jobs: ScheduledTask[] = [];
 
   start() {
-    this.jobs.push(schedule('0 2 * * *', () => this.applyPenalties()));
+    this.jobs.push(schedule('0 2 * * 6', () => this.applyPenalties()));
     this.jobs.push(schedule('0 8 * * *', () => this.sendPaymentReminders()));
     this.jobs.push(schedule('30 8 * * *', () => this.sendOverdueNotices()));
     console.log('✓ Cron jobs scheduled (penalties 2AM, reminders 8AM, overdue 8:30AM)');

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Table, Button, Panel, Tag, Modal, Form, toaster, Message, Pagination, SelectPicker, Steps, Whisper, Tooltip } from 'rsuite';
-import { applicationsApi, borrowersApi, loanProductsApi, usersApi } from '../../services/api';
+import api, { applicationsApi, borrowersApi, loanProductsApi, usersApi } from '../../services/api';
 import { LoanApplication, Borrower, LoanProduct } from '../../types';
 import { Plus, Eye, CheckCircle, XCircle, Send, DollarSign, Building2, User, Hash, Briefcase, Clock, CircleDollarSign, CalendarDays, ShieldCheck, SearchCheck, ClipboardList, FileText, Trash2, Download, Printer, Pencil } from 'lucide-react';
 import { ReleaseModal } from '../../components/ReleaseModal';
@@ -50,6 +50,28 @@ const [collectors, setCollectors] = useState<any[]>([]);
   const [creditLimitOpen, setCreditLimitOpen] = useState(false);
   const [creditLimitMsg, setCreditLimitMsg] = useState('');
   const limit = 20;
+
+  const openDocumentPreview = async (appId: string, doc: any) => {
+    try {
+      const response = await api.get(`/applications/${appId}/documents/${doc.id}/download`, { responseType: 'blob' });
+      const blobUrl = URL.createObjectURL(response.data);
+      window.open(blobUrl, '_blank');
+    } catch { toaster.push(<Message type="error">Failed to open document</Message>, { placement: 'topEnd' }); }
+  };
+
+  const downloadDocument = async (appId: string, doc: any) => {
+    try {
+      const response = await api.get(`/applications/${appId}/documents/${doc.id}/download`, { responseType: 'blob' });
+      const blobUrl = URL.createObjectURL(response.data);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = doc.file_name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch { toaster.push(<Message type="error">Failed to download document</Message>, { placement: 'topEnd' }); }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -101,8 +123,9 @@ const [collectors, setCollectors] = useState<any[]>([]);
       paymentFrequency: formValue.paymentFrequency || 'monthly',
       purpose: formValue.purpose || '',
       collectorId: formValue.collectorId || null,
+      applicationType: formValue.applicationType || 'New',
     };
-    if (!payload.borrowerId || !payload.loanProductId || !payload.principalAmount || !payload.termMonths || isNaN(payload.principalAmount) || isNaN(payload.termMonths)) {
+    if (!payload.borrowerId || !payload.loanProductId || !payload.principalAmount || !payload.termMonths || !payload.collectorId || isNaN(payload.principalAmount) || isNaN(payload.termMonths)) {
       toaster.push(<Message type="warning">Please fill in all required fields with valid values</Message>, { placement: 'topEnd' });
       return;
     }
@@ -149,6 +172,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
       paymentFrequency: app.payment_frequency || 'monthly',
       purpose: app.purpose || '',
       collectorId: app.collector_id || null,
+      applicationType: app.application_type || 'New',
     });
     setEditSelectedFiles([]);
     try {
@@ -181,7 +205,8 @@ const [collectors, setCollectors] = useState<any[]>([]);
     if (editFormValue.paymentFrequency !== undefined) payload.paymentFrequency = editFormValue.paymentFrequency;
     if (editFormValue.purpose !== undefined) payload.purpose = editFormValue.purpose;
     if (editFormValue.collectorId !== undefined) payload.collectorId = editFormValue.collectorId || null;
-    if (!payload.borrowerId || !payload.loanProductId || !payload.principalAmount || !payload.termMonths || isNaN(payload.principalAmount) || isNaN(payload.termMonths)) {
+    if (editFormValue.applicationType !== undefined) payload.applicationType = editFormValue.applicationType || 'New';
+    if (!payload.borrowerId || !payload.loanProductId || !payload.principalAmount || !payload.termMonths || !payload.collectorId || isNaN(payload.principalAmount) || isNaN(payload.termMonths)) {
       toaster.push(<Message type="warning">Please fill in all required fields with valid values</Message>, { placement: 'topEnd' });
       return;
     }
@@ -512,6 +537,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
           <Column width={130}><HeaderCell>Amount</HeaderCell><Cell>{(r: LoanApplication) => formatCurrency(r.principal_amount)}</Cell></Column>
           <Column width={100}><HeaderCell>Term</HeaderCell><Cell>{(r: LoanApplication) => { const t = r.term_type || 'months'; return `${r.term_months}${t === 'days' ? 'd' : t === 'weeks' ? 'w' : 'm'}`; }}</Cell></Column>
           <Column width={110}><HeaderCell>Frequency</HeaderCell><Cell>{(r: LoanApplication) => <span className="capitalize">{r.payment_frequency}</span>}</Cell></Column>
+          <Column width={100}><HeaderCell>Type</HeaderCell><Cell>{(r: any) => <Tag color={r.application_type === 'Renewal' ? 'orange' : 'blue'}>{r.application_type || 'New'}</Tag>}</Cell></Column>
           <Column width={110}><HeaderCell>Status</HeaderCell><Cell>{(r: LoanApplication) => <Tag color={statusColor(r.status)}>{r.status}</Tag>}</Cell></Column>
           <Column width={200} align="center"><HeaderCell>Actions</HeaderCell>
             <Cell>{(r: LoanApplication) => (
@@ -583,11 +609,27 @@ const [collectors, setCollectors] = useState<any[]>([]);
             <div className="space-y-4">
               <div>
                 <label className="rs-form-control-label">Borrower *</label>
-                <SelectPicker data={borrowers.map(b => ({ label: `${b.first_name} ${b.last_name} (${b.borrower_code})`, value: b.id }))} value={formValue.borrowerId} onChange={(v) => setFormValue((prev: any) => ({ ...prev, borrowerId: v }))} style={{ width: '100%' }} block />
+                <SelectPicker data={borrowers.map(b => ({ label: `${b.first_name} ${b.last_name} (${b.borrower_code})`, value: b.id }))} value={formValue.borrowerId} onChange={async (v) => {
+                  setFormValue((prev: any) => ({ ...prev, borrowerId: v }));
+                  if (v) {
+                    try {
+                      const { data: loansRes } = await api.get('/loans', { params: { borrowerId: v, limit: 1 } });
+                      const hasExisting = (loansRes.data || []).some((l: any) => ['active', 'closed'].includes(l.status));
+                      setFormValue((prev: any) => ({ ...prev, borrowerId: v, applicationType: hasExisting ? 'Renewal' : 'New' }));
+                    } catch {}
+                  }
+                }} style={{ width: '100%' }} block />
               </div>
               <div>
                 <label className="rs-form-control-label">Loan Product *</label>
                 <SelectPicker data={products.filter(p => p.is_active).map(p => ({ label: `${p.name} (${p.interest_rate}% ${p.interest_type})`, value: p.id }))} value={formValue.loanProductId} onChange={(v) => { const p = products.find(x => x.id === v); setFormValue((prev: any) => ({ ...prev, loanProductId: v, termType: p?.term_type || 'months' })); }} style={{ width: '100%' }} block />
+              </div>
+              <div>
+                <label className="rs-form-control-label">Application Type</label>
+                <SelectPicker value={formValue.applicationType || 'New'} onChange={(v) => setFormValue((prev: any) => ({ ...prev, applicationType: v }))} data={[
+                  { label: 'New Application', value: 'New' },
+                  { label: 'Renewal', value: 'Renewal' },
+                ]} style={{ width: '100%' }} block />
               </div>
               <div>
                 <label className="rs-form-control-label">Principal Amount *</label>
@@ -682,6 +724,13 @@ const [collectors, setCollectors] = useState<any[]>([]);
               <SelectPicker data={products.filter(p => p.is_active).map(p => ({ label: `${p.name} (${p.interest_rate}% ${p.interest_type})`, value: p.id }))} value={editFormValue.loanProductId} onChange={(v) => { const p = products.find(x => x.id === v); setEditFormValue((prev: any) => ({ ...prev, loanProductId: v, termType: p?.term_type || 'months' })); }} style={{ width: '100%' }} block />
             </div>
             <div>
+              <label className="rs-form-control-label">Application Type</label>
+              <SelectPicker value={editFormValue.applicationType || 'New'} onChange={(v) => setEditFormValue((prev: any) => ({ ...prev, applicationType: v }))} data={[
+                { label: 'New Application', value: 'New' },
+                { label: 'Renewal', value: 'Renewal' },
+              ]} style={{ width: '100%' }} block />
+            </div>
+            <div>
               <label className="rs-form-control-label">Principal Amount *</label>
               <input type="number" className="rs-input w-full" min={0} step={1000} value={editFormValue.principalAmount || ''} onChange={(e) => setEditFormValue((prev: any) => ({ ...prev, principalAmount: e.target.value }))} placeholder="0.00" />
             </div>
@@ -718,7 +767,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
                   {editDocuments.map((doc: any) => (
                     <div key={doc.id} className="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900 rounded px-3 py-1.5">
                       <span className="text-gray-700 dark:text-gray-300 truncate">{doc.file_name}</span>
-                      <Button size="xs" appearance="subtle" onClick={() => window.open(doc.file_url, '_blank')}><Eye className="w-3 h-3" /></Button>
+                      <Button size="xs" appearance="subtle" onClick={() => openDocumentPreview(editApp?.id, doc)}><Eye className="w-3 h-3" /></Button>
                     </div>
                   ))}
                 </div>
@@ -826,6 +875,11 @@ const [collectors, setCollectors] = useState<any[]>([]);
                 <Panel header={<div className="text-sm font-semibold text-gray-700 dark:text-gray-200">Loan Details</div>} bordered className="bg-white dark:bg-gray-800">
                   <DetailField icon={<DollarSign className="w-4 h-4" />} label="Principal Amount" value={formatCurrency(viewApp.principal_amount)} />
                   {viewApp.net_proceeds != null && <DetailField icon={<DollarSign className="w-4 h-4" />} label="Net Proceeds" value={formatCurrency(viewApp.net_proceeds)} />}
+                  <div className="flex items-center gap-2 py-1.5">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-500 w-24">Application Type</span>
+                    <Tag color={viewApp.application_type === 'Renewal' ? 'orange' : 'blue'}>{viewApp.application_type || 'New'}</Tag>
+                  </div>
                   <DetailField icon={<Building2 className="w-4 h-4" />} label="Loan Product" value={viewApp.product_name} />
                   <DetailField icon={<Hash className="w-4 h-4" />} label="Interest Rate" value={`${viewApp.interest_rate}% (${viewApp.interest_type})`} />
                   <DetailField icon={<Clock className="w-4 h-4" />} label="Term" value={`${viewApp.term_months} ${viewApp.term_type || 'months'}`} />
@@ -860,10 +914,8 @@ const [collectors, setCollectors] = useState<any[]>([]);
                           </div>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          <Button size="xs" appearance="subtle" className="group" onClick={() => window.open(doc.file_url, '_blank')}><Eye className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Preview</span></Button>
-                          <a href={doc.file_url} download>
-                            <Button size="xs" appearance="subtle" className="group"><Download className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Download</span></Button>
-                          </a>
+                          <Button size="xs" appearance="subtle" className="group" onClick={() => openDocumentPreview(viewApp?.id, doc)}><Eye className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Preview</span></Button>
+                          <Button size="xs" appearance="subtle" className="group" onClick={() => downloadDocument(viewApp?.id, doc)}><Download className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Download</span></Button>
                           <Button size="xs" appearance="subtle" color="red" onClick={async () => {
                             try {
                               await applicationsApi.deleteDocument(viewApp.id, doc.id);

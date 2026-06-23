@@ -71,6 +71,8 @@ export class UserController {
   async update(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data: any = {};
+      if (req.body.username) data.username = req.body.username;
+      if (req.body.email) data.email = req.body.email;
       if (req.body.firstName) data.first_name = req.body.firstName;
       if (req.body.lastName) data.last_name = req.body.lastName;
       if (req.body.phone) data.phone = req.body.phone;

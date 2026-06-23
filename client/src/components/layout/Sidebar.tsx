@@ -20,7 +20,7 @@ const menuItems = [
   { label: 'Audit Logs', path: '/audit-logs', icon: NoticeIcon, roles: ['super-admin', 'admin'] },
   { label: 'Remittance Audit', path: '/collector-remittance', icon: CreditCardIcon, roles: ['super-admin', 'admin'] },
   { label: 'Users', path: '/users', icon: UserIcon, roles: ['super-admin'] },
-  { label: 'Branches', path: '/branches', icon: BranchIcon, roles: ['super-admin', 'admin'] },
+  { label: 'Areas', path: '/branches', icon: BranchIcon, roles: ['super-admin', 'admin'] },
   { label: 'Loan Products', path: '/loan-products', icon: MoneyIcon, roles: ['super-admin', 'admin'] },
   { label: 'Charges', path: '/charges', icon: ChargeIcon, roles: ['super-admin', 'admin'] },
   { label: 'Utilities', path: '/utilities', icon: SettingsIcon, roles: ['super-admin'] },

@@ -576,6 +576,19 @@ export class LoanController {
     }
   }
 
+  async downloadDocument(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const docId = paramStr(req.params.docId);
+      const doc = await applicationDocumentRepo.findById(docId);
+      if (!doc) throw new Error('Document not found');
+      const filePath = path.join(__dirname, '..', '..', doc.file_url);
+      if (!fs.existsSync(filePath)) throw new Error('File not found on server');
+      res.sendFile(filePath);
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
   async deleteDocument(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const docId = paramStr(req.params.docId);

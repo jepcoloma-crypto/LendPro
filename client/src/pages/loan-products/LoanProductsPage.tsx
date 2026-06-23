@@ -44,6 +44,7 @@ export const LoanProductsPage = () => {
         term_type: formValue.termType,
         penalty_type: formValue.penaltyType || null,
         penalty_value: formValue.penaltyValue,
+        penalty_matured_value: formValue.penaltyMaturedValue || 0,
         late_payment_fee: formValue.latePaymentFee,
         requires_co_maker: formValue.requiresCoMaker,
         is_active: formValue.isActive,
@@ -59,7 +60,7 @@ export const LoanProductsPage = () => {
 
   const openEdit = (row: LoanProduct) => {
     setEditTarget(row.id);
-    setFormValue({ name: row.name, description: row.description || '', interestType: row.interest_type, interestRate: row.interest_rate, minAmount: row.min_amount, maxAmount: row.max_amount, minTerm: row.min_term, maxTerm: row.max_term, termType: row.term_type, penaltyType: row.penalty_type || '', penaltyValue: row.penalty_value || 0, latePaymentFee: row.late_payment_fee, requiresCoMaker: row.requires_co_maker, isActive: row.is_active });
+    setFormValue({ name: row.name, description: row.description || '', interestType: row.interest_type, interestRate: row.interest_rate, minAmount: row.min_amount, maxAmount: row.max_amount, minTerm: row.min_term, maxTerm: row.max_term, termType: row.term_type, penaltyType: row.penalty_type || '', penaltyValue: row.penalty_value || 0, penaltyMaturedValue: row.penalty_matured_value || 0, latePaymentFee: row.late_payment_fee, requiresCoMaker: row.requires_co_maker, isActive: row.is_active });
     setEditOpen(true);
   };
 
@@ -78,6 +79,7 @@ export const LoanProductsPage = () => {
         term_type: formValue.termType,
         penalty_type: formValue.penaltyType || null,
         penalty_value: formValue.penaltyValue,
+        penalty_matured_value: formValue.penaltyMaturedValue || 0,
         late_payment_fee: formValue.latePaymentFee,
         requires_co_maker: formValue.requiresCoMaker,
         is_active: formValue.isActive,
@@ -194,6 +196,10 @@ export const LoanProductsPage = () => {
                 <option value="fixed">Fixed</option>
                 <option value="percentage">Percentage</option>
               </select>
+            </Form.Group>
+            <Form.Group>
+              <Form.ControlLabel>Matured Penalty (%)</Form.ControlLabel>
+              <InputNumber value={formValue.penaltyMaturedValue} onChange={(v) => setFormValue((prev: any) => ({ ...prev, penaltyMaturedValue: v }))} min={0} step={1} style={{ width: '100%' }} postfix="%/mo" />
             </Form.Group>
             <Form.Group>
               <Form.ControlLabel>Requires Co-Maker</Form.ControlLabel>

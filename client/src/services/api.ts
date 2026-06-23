@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 const api = axios.create({
-  baseURL: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || '/api',
+  baseURL: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ? `${import.meta.env.VITE_API_BASE_URL}/api` : '/api',
   timeout: 60000,
 });
 
@@ -29,7 +29,7 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (!refreshToken) throw new Error('No refresh token');
-        const { data } = await axios.post('/api/auth/refresh', { refreshToken });
+        const { data } = await api.post('/auth/refresh', { refreshToken });
         localStorage.setItem('accessToken', data.data.accessToken);
         localStorage.setItem('refreshToken', data.data.refreshToken);
         originalRequest.headers.Authorization = `Bearer ${data.data.accessToken}`;
@@ -177,6 +177,9 @@ export const reportsApi = {
   getBranchPerformance: (params?: any) => api.get('/reports/branch-performance', { params }),
   getDisbursements: (params?: any) => api.get('/reports/disbursements', { params }),
   getBorrowerPerformance: (params?: any) => api.get('/reports/borrower-performance', { params }),
+  getProcessingCharges: (params?: any) => api.get('/reports/processing-charges', { params }),
+  getPastDue: (params?: any) => api.get('/reports/past-due', { params }),
+  getApplicationTypes: (params?: any) => api.get('/reports/application-types', { params }),
 };
 
 // Charges

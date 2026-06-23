@@ -12,6 +12,9 @@ import routes from './routes';
 
 const app = express();
 
+// Trust proxy (Cloudflare tunnel, reverse proxy)
+app.set('trust proxy', 1);
+
 // Disable ETags to prevent 304 responses (API should always return fresh data)
 app.set('etag', false);
 

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Panel, Button, toaster, Message, Modal, Loader, Tag } from 'rsuite';
-import { utilitiesApi } from '../../services/api';
+import api, { utilitiesApi } from '../../services/api';
 import { RefreshCw, Trash2, HeartPulse, Database, Download, Upload, AlertTriangle } from 'lucide-react';
 
 export const UtilitiesPage = () => {
@@ -40,7 +40,7 @@ export const UtilitiesPage = () => {
     setBackupTable('');
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/utilities/backup', {
+      const response = await fetch(`${api.defaults.baseURL}/utilities/backup`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const reader = response.body!.getReader();
@@ -226,7 +226,7 @@ export const UtilitiesPage = () => {
                 setRestoreNote('');
                 try {
                   const token = localStorage.getItem('accessToken');
-                  const response = await fetch('/api/utilities/restore', {
+                  const response = await fetch(`${api.defaults.baseURL}/utilities/restore`, {
                     method: 'POST',
                     headers: { Authorization: `Bearer ${token}` },
                     body: (() => { const fd = new FormData(); fd.append('file', restoreFile!); return fd; })(),

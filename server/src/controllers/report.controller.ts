@@ -545,24 +545,35 @@ export class ReportController {
                NULLIF(COALESCE(g.total_principal, 0) + COALESCE(c.total_collected, 0), 0) * 100, 1)
              ELSE 0 END as collection_rate
          FROM branches b
-         LEFT JOIN (SELECT u.branch_id, COUNT(l.id) as loans_granted, COALESCE(SUM(l.principal_amount), 0) as total_principal
-           FROM loans l JOIN loan_applications la ON la.id = l.application_id JOIN users u ON u.id = la.collector_id
-           WHERE l.release_date IS NOT NULL
-             AND ($1::date IS NULL OR l.release_date >= $1::date)
-             AND ($2::date IS NULL OR l.release_date <= $2::date)
-           GROUP BY u.branch_id) g ON g.branch_id = b.id
-         LEFT JOIN (SELECT u.branch_id, COUNT(p.id) as payment_count, COALESCE(SUM(p.amount), 0) as total_collected
-           FROM payments p JOIN loans l ON l.id = p.loan_id JOIN users u ON u.id = l.collector_id
-           WHERE p.status = 'completed'
-             AND ($1::date IS NULL OR p.payment_date >= $1::date)
-             AND ($2::date IS NULL OR p.payment_date <= $2::date)
-           GROUP BY u.branch_id) c ON c.branch_id = b.id
-         LEFT JOIN (SELECT u.branch_id, COUNT(*) as active_loans
-           FROM loans l JOIN loan_applications la ON la.id = l.application_id JOIN users u ON u.id = la.collector_id
-           WHERE l.status = 'active' GROUP BY u.branch_id) a ON a.branch_id = b.id
-         LEFT JOIN (SELECT u.branch_id, COUNT(*) as delinquent_count
-           FROM loans l JOIN loan_applications la ON la.id = l.application_id JOIN users u ON u.id = la.collector_id
-           WHERE l.status = 'delinquent' GROUP BY u.branch_id) d ON d.branch_id = b.id
+          LEFT JOIN (SELECT br.branch_id, COUNT(l.id) as loans_granted, COALESCE(SUM(l.principal_amount), 0) as total_principal
+            FROM loans l
+            JOIN borrowers br ON br.id = l.borrower_id
+            WHERE l.release_date IS NOT NULL
+              AND br.branch_id IS NOT NULL
+              AND ($1::date IS NULL OR l.release_date >= $1::date)
+              AND ($2::date IS NULL OR l.release_date <= $2::date)
+            GROUP BY br.branch_id) g ON g.branch_id = b.id
+          LEFT JOIN (SELECT br.branch_id, COUNT(p.id) as payment_count, COALESCE(SUM(p.amount), 0) as total_collected
+            FROM payments p
+            JOIN loans l ON l.id = p.loan_id
+            JOIN borrowers br ON br.id = l.borrower_id
+            WHERE p.status = 'completed'
+              AND br.branch_id IS NOT NULL
+              AND ($1::date IS NULL OR p.payment_date >= $1::date)
+              AND ($2::date IS NULL OR p.payment_date <= $2::date)
+            GROUP BY br.branch_id) c ON c.branch_id = b.id
+          LEFT JOIN (SELECT br.branch_id, COUNT(*) as active_loans
+            FROM loans l
+            JOIN borrowers br ON br.id = l.borrower_id
+            WHERE l.status = 'active'
+              AND br.branch_id IS NOT NULL
+            GROUP BY br.branch_id) a ON a.branch_id = b.id
+          LEFT JOIN (SELECT br.branch_id, COUNT(*) as delinquent_count
+            FROM loans l
+            JOIN borrowers br ON br.id = l.borrower_id
+            WHERE l.status = 'delinquent'
+              AND br.branch_id IS NOT NULL
+            GROUP BY br.branch_id) d ON d.branch_id = b.id
          WHERE b.is_active = true
          ORDER BY b.name`,
         [startDate || null, endDate || null]
@@ -603,13 +614,73 @@ export class ReportController {
     }
   }
 
+  async getProcessingCharges(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { startDate, endDate } = req.query;
+      const rows = await paymentRepo.query(
+        `SELECT
+           COALESCE(b.name, 'Unassigned') as branch_name,
+           lc.charge_name,
+           COUNT(DISTINCT l.id) as loan_count,
+           SUM(lc.amount) as total_amount
+         FROM loan_charges lc
+         JOIN loans l ON l.id = lc.loan_id
+         LEFT JOIN users u ON u.id = l.collector_id
+         LEFT JOIN branches b ON b.id = u.branch_id
+         WHERE l.status IN ('active', 'closed')
+           AND ($1::date IS NULL OR l.release_date >= $1::date)
+           AND ($2::date IS NULL OR l.release_date <= $2::date)
+         GROUP BY b.name, lc.charge_name
+         ORDER BY branch_name, lc.charge_name`,
+        [startDate || null, endDate || null]
+      );
+
+      const totals = await paymentRepo.query(
+        `SELECT
+           COALESCE(b.name, 'Unassigned') as branch_name,
+           COUNT(DISTINCT l.id) as loan_count,
+           SUM(lc.amount) as total_amount
+         FROM loan_charges lc
+         JOIN loans l ON l.id = lc.loan_id
+         LEFT JOIN users u ON u.id = l.collector_id
+         LEFT JOIN branches b ON b.id = u.branch_id
+         WHERE l.status IN ('active', 'closed')
+           AND ($1::date IS NULL OR l.release_date >= $1::date)
+           AND ($2::date IS NULL OR l.release_date <= $2::date)
+         GROUP BY b.name
+         ORDER BY branch_name`,
+        [startDate || null, endDate || null]
+      );
+
+      const grand = await paymentRepo.query(
+        `SELECT
+           COUNT(DISTINCT l.id) as loan_count,
+           SUM(lc.amount) as total_amount
+         FROM loan_charges lc
+         JOIN loans l ON l.id = lc.loan_id
+         WHERE l.status IN ('active', 'closed')
+           AND ($1::date IS NULL OR l.release_date >= $1::date)
+           AND ($2::date IS NULL OR l.release_date <= $2::date)`,
+        [startDate || null, endDate || null]
+      );
+
+      res.json({
+        success: true,
+        data: { details: rows, totals, grandTotal: grand[0] || { loan_count: 0, total_amount: 0 } }
+      });
+    } catch (error: any) {
+      next(new AppError(500, error.message));
+    }
+  }
+
   async getDailyCollections(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { date, branchId } = req.query;
       const targetDate = date || new Date().toISOString().slice(0, 10);
       const rows = await paymentRepo.query(
         `SELECT
-           b.id as branch_id, b.name as branch_name,
+           COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
+           COALESCE(b.name, 'Unassigned') as branch_name,
            COUNT(p.id) as payment_count,
            COALESCE(SUM(p.amount), 0) as total_collected,
            COALESCE(SUM(p.principal_amount), 0) as total_principal,
@@ -617,16 +688,99 @@ export class ReportController {
            COALESCE(SUM(p.penalty_amount), 0) as total_penalty
          FROM payments p
          JOIN loans l ON l.id = p.loan_id
-         JOIN users u ON u.id = l.collector_id
-         JOIN branches b ON b.id = u.branch_id
+         LEFT JOIN users u ON u.id = l.collector_id
+         LEFT JOIN branches b ON b.id = u.branch_id
          WHERE p.status = 'completed'
            AND p.payment_date::date = $1::date
-           AND ($2::uuid IS NULL OR b.id = $2::uuid)
+           AND ($2::uuid IS NULL OR b.id = $2::uuid OR (b.id IS NULL AND $2::uuid = '00000000-0000-0000-0000-000000000000'))
          GROUP BY b.id, b.name
-         ORDER BY b.name`,
+         ORDER BY branch_name`,
         [targetDate, branchId || null]
       );
       res.json({ success: true, data: { date: targetDate, branches: rows } });
+    } catch (error: any) {
+      next(new AppError(500, error.message));
+    }
+  }
+
+  async getPastDue(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { branchId } = req.query;
+      const rows = await paymentRepo.query(
+        `SELECT
+           l.id as loan_id,
+           l.loan_number,
+           l.principal_amount,
+           l.maturity_date,
+           l.outstanding_balance,
+           l.status,
+           l.release_date,
+           l.next_payment_date,
+           EXTRACT(DAY FROM (NOW() - l.maturity_date))::int as days_past_due,
+           br.id as borrower_id,
+           br.first_name || ' ' || br.last_name as borrower_name,
+           br.first_name,
+           br.last_name,
+           COALESCE(br.branch_id, u.branch_id) as branch_id,
+           COALESCE(b.name, 'Unassigned') as branch_name,
+           u.first_name || ' ' || u.last_name as collector_name,
+           (SELECT MAX(payment_date) FROM payments WHERE loan_id = l.id AND status = 'completed') as last_payment_date
+         FROM loans l
+         JOIN borrowers br ON br.id = l.borrower_id
+         LEFT JOIN users u ON u.id = l.collector_id
+         LEFT JOIN branches b ON b.id = COALESCE(br.branch_id, u.branch_id)
+         WHERE l.status NOT IN ('closed', 'written-off', 'cancelled')
+           AND l.maturity_date <= NOW()
+           AND l.outstanding_balance > 0
+           AND ($1::uuid IS NULL OR COALESCE(br.branch_id, u.branch_id) = $1::uuid)
+         ORDER BY l.maturity_date, borrower_name`,
+        [branchId || null]
+      );
+      res.json({ success: true, data: rows });
+    } catch (error: any) {
+      next(new AppError(500, error.message));
+    }
+  }
+
+  async getApplicationTypes(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { startDate, endDate } = req.query;
+      const rows = await paymentRepo.query(
+        `SELECT
+           COALESCE(b.name, 'Unassigned') as branch_name,
+           a.application_type,
+           COUNT(a.id) as application_count,
+           COALESCE(SUM(a.principal_amount), 0) as total_principal
+         FROM loan_applications a
+         JOIN borrowers br ON br.id = a.borrower_id
+         LEFT JOIN users u ON u.id = a.assigned_officer_id
+         LEFT JOIN branches b ON b.id = COALESCE(br.branch_id, u.branch_id)
+         WHERE a.status != 'draft'
+           AND ($1::date IS NULL OR a.created_at >= $1::date)
+           AND ($2::date IS NULL OR a.created_at <= $2::date + interval '1 day')
+         GROUP BY b.name, a.application_type
+         ORDER BY branch_name, a.application_type`,
+        [startDate || null, endDate || null]
+      );
+
+      const totals = await paymentRepo.query(
+        `SELECT
+           COALESCE(b.name, 'Unassigned') as branch_name,
+           COUNT(a.id) as application_count,
+           COALESCE(SUM(a.principal_amount), 0) as total_principal
+         FROM loan_applications a
+         JOIN borrowers br ON br.id = a.borrower_id
+         LEFT JOIN users u ON u.id = a.assigned_officer_id
+         LEFT JOIN branches b ON b.id = COALESCE(br.branch_id, u.branch_id)
+         WHERE a.status != 'draft'
+           AND ($1::date IS NULL OR a.created_at >= $1::date)
+           AND ($2::date IS NULL OR a.created_at <= $2::date + interval '1 day')
+         GROUP BY b.name
+         ORDER BY branch_name`,
+        [startDate || null, endDate || null]
+      );
+
+      res.json({ success: true, data: { details: rows, totals } });
     } catch (error: any) {
       next(new AppError(500, error.message));
     }

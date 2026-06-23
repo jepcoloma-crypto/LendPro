@@ -24,7 +24,7 @@ export class BorrowerController {
         ...req.body,
         borrower_code: code,
         created_by: req.user!.userId,
-        branch_id: req.user!.branchId,
+        branch_id: req.body.branch_id || req.user!.branchId,
       });
       res.status(201).json({ success: true, data: borrower });
     } catch (error: any) {

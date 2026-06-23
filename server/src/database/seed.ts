@@ -74,11 +74,11 @@ const seed = async () => {
         officerRole.rows[0].id, investigatorRole.rows[0].id, branchQc.rows[0].id,
         cashierRole.rows[0].id, collectorRole.rows[0].id]);
 
-    await client.query(`INSERT INTO loan_products (name, description, interest_type, interest_rate, min_amount, max_amount, min_term, max_term, processing_fee, service_charge, late_payment_fee, penalty_type, penalty_value, penalty_grace_period) VALUES
-      ('Personal Loan', 'Flexible personal loan for employees', 'flat-rate', 12.00, 10000, 500000, 1, 24, 500, 100, 200, 'percentage', 5.00, 3),
-      ('Salary Loan', 'Loan for employed individuals', 'diminishing-balance', 1.50, 5000, 200000, 1, 12, 300, 50, 150, 'daily', 1.00, 3),
-      ('Business Loan', 'Capital for small businesses', 'add-on-interest', 18.00, 50000, 2000000, 3, 36, 2000, 500, 500, 'fixed', 500, 5),
-      ('Emergency Loan', 'Quick cash for emergencies', 'monthly-interest', 3.00, 2000, 50000, 1, 6, 100, 0, 100, 'percentage', 3.00, 2)
+    await client.query(`INSERT INTO loan_products (name, description, interest_type, interest_rate, min_amount, max_amount, min_term, max_term, processing_fee, service_charge, late_payment_fee, penalty_type, penalty_value, penalty_grace_period, penalty_matured_value) VALUES
+      ('Personal Loan', 'Flexible personal loan for employees', 'flat-rate', 12.00, 10000, 500000, 1, 24, 500, 100, 200, 'percentage', 5.00, 3, 5.00),
+      ('Salary Loan', 'Loan for employed individuals', 'diminishing-balance', 1.50, 5000, 200000, 1, 12, 300, 50, 150, 'daily', 1.00, 3, 5.00),
+      ('Business Loan', 'Capital for small businesses', 'add-on-interest', 18.00, 50000, 2000000, 3, 36, 2000, 500, 500, 'fixed', 500, 5, 5.00),
+      ('Emergency Loan', 'Quick cash for emergencies', 'monthly-interest', 3.00, 2000, 50000, 1, 6, 100, 0, 100, 'percentage', 3.00, 2, 5.00)
     `);
 
     await client.query(`INSERT INTO borrowers (borrower_code, first_name, last_name, mobile, email, present_address, present_city, employment_status, monthly_income, status, branch_id) VALUES

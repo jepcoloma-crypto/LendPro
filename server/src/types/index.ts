@@ -90,6 +90,7 @@ export interface LoanProduct {
   penalty_type: string | null;
   penalty_value: number | null;
   penalty_grace_period: number | null;
+  penalty_matured_value: number | null;
   processing_fee: number;
   service_charge: number;
   late_payment_fee: number;
@@ -145,6 +146,7 @@ export interface Loan {
   penalty_type: string | null;
   penalty_value: number | null;
   penalty_grace_period: number | null;
+  penalty_matured_value: number | null;
   approved_by: string | null;
   released_by: string | null;
   created_at: Date;
