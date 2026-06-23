@@ -89,7 +89,7 @@ export class ReportController {
       const rows = await loanRepo.query(
         `SELECT l.id as loan_id, l.loan_number, l.principal_amount, l.total_amount, l.outstanding_balance, l.status as loan_status,
                 b.first_name || ' ' || b.last_name as borrower_name, b.borrower_code,
-                a.id as schedule_id, a.installment_no, a.due_date, a.total_due, a.paid_amount, a.status as schedule_status, a.penalty_amount,
+                a.id as schedule_id, a.installment_no, a.due_date, a.total_due, a.paid_amount, a.status as schedule_status, a.penalty_amount, a.paid_at,
                 u.first_name || ' ' || u.last_name as loan_officer_name
          FROM loans l
          JOIN borrowers b ON l.borrower_id = b.id
@@ -127,6 +127,7 @@ export class ReportController {
           paid_amount: row.paid_amount,
           status: row.schedule_status,
           penalty_amount: row.penalty_amount,
+          paid_at: row.paid_at,
         });
         if (row.schedule_status === 'paid') current.paid++;
         else if (row.schedule_status === 'partial') current.partial++;

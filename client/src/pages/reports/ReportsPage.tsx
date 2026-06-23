@@ -802,7 +802,7 @@ export const ReportsPage = () => {
                 </div>
                 <table>
                   <thead><tr>
-                    <th>#</th><th>Due Date</th><th>Total Due</th><th>Paid Amount</th><th>Penalty</th><th>Status</th>
+                    <th>#</th><th>Due Date</th><th>Total Due</th><th>Paid Amount</th><th>Penalty</th><th>Payment Date</th><th>Status</th>
                   </tr></thead><tbody>`;
                 for (const s of loan.schedules) {
                   const statusClass = s.status === 'paid' ? 'paid' : s.status === 'partial' ? 'partial' : 'pending';
@@ -812,6 +812,7 @@ export const ReportsPage = () => {
                     <td>${formatCurrency(s.total_due)}</td>
                     <td>${formatCurrency(s.paid_amount)}</td>
                     <td>${formatCurrency(s.penalty_amount)}</td>
+                    <td>${s.paid_at ? new Date(s.paid_at).toLocaleDateString() : '-'}</td>
                     <td class="${statusClass}">${s.status.toUpperCase()}</td>
                   </tr>`;
                 }
@@ -850,11 +851,12 @@ export const ReportsPage = () => {
                 </div>
                 <Table data={loan.schedules} height={Math.min(loan.schedules.length * 46 + 40, 400)} rowHeight={40} virtualized>
                   <Column width={60}><HeaderCell>#</HeaderCell><Cell dataKey="installment_no" /></Column>
-                  <Column width={110}><HeaderCell>Due Date</HeaderCell><Cell>{(r: any) => new Date(r.due_date).toLocaleDateString()}</Cell></Column>
-                  <Column width={110}><HeaderCell>Total Due</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_due)}</Cell></Column>
-                  <Column width={110}><HeaderCell>Paid Amount</HeaderCell><Cell>{(r: any) => parseFloat(r.paid_amount) > 0 ? formatCurrency(r.paid_amount) : '-'}</Cell></Column>
-                  <Column width={100}><HeaderCell>Penalty</HeaderCell><Cell>{(r: any) => parseFloat(r.penalty_amount) > 0 ? formatCurrency(r.penalty_amount) : '-'}</Cell></Column>
-                  <Column width={100}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={statusColor(r.status)}>{r.status}</Tag>}</Cell></Column>
+                  <Column width={105}><HeaderCell>Due Date</HeaderCell><Cell>{(r: any) => new Date(r.due_date).toLocaleDateString()}</Cell></Column>
+                  <Column width={105}><HeaderCell>Total Due</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_due)}</Cell></Column>
+                  <Column width={105}><HeaderCell>Paid Amount</HeaderCell><Cell>{(r: any) => parseFloat(r.paid_amount) > 0 ? formatCurrency(r.paid_amount) : '-'}</Cell></Column>
+                  <Column width={90}><HeaderCell>Penalty</HeaderCell><Cell>{(r: any) => parseFloat(r.penalty_amount) > 0 ? <span className="text-red-500 font-medium">{formatCurrency(r.penalty_amount)}</span> : '-'}</Cell></Column>
+                  <Column width={105}><HeaderCell>Payment Date</HeaderCell><Cell>{(r: any) => r.paid_at ? new Date(r.paid_at).toLocaleDateString() : '-'}</Cell></Column>
+                  <Column width={90}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={statusColor(r.status)}>{r.status}</Tag>}</Cell></Column>
                 </Table>
               </Panel>
             ))

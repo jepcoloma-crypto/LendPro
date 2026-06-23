@@ -50,6 +50,26 @@ export class PaymentService {
     }
 
     const netForSchedules = Math.max(0, amount - penaltyAmount);
+
+    // Distribute penalty across overdue schedules proportionally
+    if (penaltyAmount > 0 && totalOverdue > 0) {
+      let remainingPenalty = penaltyAmount;
+      for (const s of schedules.rows) {
+        if (remainingPenalty <= 0) break;
+        if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
+        const dueDate = new Date(s.due_date);
+        const dueDateNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+        if (dueDateNorm >= paymentDateNorm) continue;
+        const shortage = parseFloat(s.total_due) - parseFloat(s.paid_amount);
+        const portion = Math.round(penaltyAmount * (shortage / totalOverdue) * 100) / 100;
+        const appliedPenalty = Math.min(portion, remainingPenalty);
+        await amortizationScheduleRepo.update(s.id, {
+          penalty_amount: (parseFloat(s.penalty_amount || '0') + appliedPenalty).toFixed(2),
+        });
+        remainingPenalty -= appliedPenalty;
+      }
+    }
+
     let totalPrincipal = 0;
     let totalInterest = 0;
     let totalAllocated = 0;
