@@ -104,6 +104,44 @@ export const PaymentsPage = () => {
 
   const toDateString = (d: Date) => { const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; };
 
+  const computePenalty = (schedule: any, loan: any, payDateNorm: Date): number => {
+    const shortage = Math.max(0, parseFloat(schedule.total_due) - parseFloat(schedule.paid_amount || 0));
+    if (shortage <= 0) return 0;
+    const dueDate = new Date(schedule.due_date);
+    const dueNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+    if (dueNorm >= payDateNorm) return 0;
+    const pVal = parseFloat(loan?.penalty_value) || 0;
+    const mVal = parseFloat(loan?.penalty_matured_value) || 0;
+    if (loan?.maturity_date) {
+      const matDate = new Date(loan.maturity_date);
+      const matNorm = new Date(matDate.getFullYear(), matDate.getMonth(), matDate.getDate());
+      if (payDateNorm > matNorm) {
+        const daysPast = Math.floor((payDateNorm.getTime() - matNorm.getTime()) / (1000 * 60 * 60 * 24));
+        const monthsPast = daysPast / 30;
+        return Math.round(shortage * (mVal / 100) * monthsPast * 100) / 100;
+      } else if (pVal > 0) {
+        return Math.round(shortage * (pVal / 100) * 100) / 100;
+      }
+    } else if (pVal > 0) {
+      return Math.round(shortage * (pVal / 100) * 100) / 100;
+    }
+    return 0;
+  };
+
+  useEffect(() => {
+    if (!payLoan || !paySchedule.length) return;
+    const payDateNorm = new Date(payDate.getFullYear(), payDate.getMonth(), payDate.getDate());
+    setPayAllocations((prev: any) => {
+      const next = { ...prev };
+      for (const s of paySchedule) {
+        if (next[s.id]) {
+          next[s.id] = { ...next[s.id], penalty: computePenalty(s, payLoan, payDateNorm) };
+        }
+      }
+      return next;
+    });
+  }, [payDate]);
+
   const handleReceivePayment = async () => {
     try {
       await paymentsApi.create({ ...formValue, paymentDate: formValue.paymentDate ? toDateString(new Date(formValue.paymentDate)) : undefined });
@@ -131,9 +169,32 @@ export const PaymentsPage = () => {
       const schedule = (loan.schedule || []).filter((s: any) => s.status !== 'paid');
       setPayLoan(loan);
       setPaySchedule(schedule);
+      const payDateNorm = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
       const allocs: Record<string, { amount: number; penalty: number }> = {};
+      const pVal = parseFloat(loan.penalty_value) || 0;
+      const mVal = parseFloat(loan.penalty_matured_value) || 0;
       for (const s of schedule) {
-        allocs[s.id] = { amount: 0, penalty: 0 };
+        const shortage = Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0));
+        let computedPenalty = 0;
+        if (shortage > 0) {
+          const dueDate = new Date(s.due_date);
+          const dueNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+          if (dueNorm < payDateNorm) {
+            if (loan.maturity_date) {
+              const matDate = new Date(loan.maturity_date);
+              const matNorm = new Date(matDate.getFullYear(), matDate.getMonth(), matDate.getDate());
+              if (payDateNorm > matNorm) {
+                const daysPast = Math.floor((payDateNorm.getTime() - matNorm.getTime()) / (1000 * 60 * 60 * 24));
+                computedPenalty = Math.round(shortage * (mVal / 100) * (daysPast / 30) * 100) / 100;
+              } else if (pVal > 0) {
+                computedPenalty = Math.round(shortage * (pVal / 100) * 100) / 100;
+              }
+            } else if (pVal > 0) {
+              computedPenalty = Math.round(shortage * (pVal / 100) * 100) / 100;
+            }
+          }
+        }
+        allocs[s.id] = { amount: 0, penalty: computedPenalty };
       }
       setPayAllocations(allocs);
       setPayMethod('cash');
