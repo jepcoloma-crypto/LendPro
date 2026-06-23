@@ -49,15 +49,44 @@ export class PaymentService {
       }
     }
 
-    const applyToPrincipal = Math.min(Math.max(0, amount - penaltyAmount), outstandingBalance);
+    let totalPrincipal = 0;
+    let totalInterest = 0;
+    let totalAllocated = 0;
+
+    // First pass: compute allocations and principal/interest split
+    const allocs: { schedule: any; amount: number; principal: number; interest: number }[] = [];
+    let allocRemaining = amount;
+    for (const schedule of schedules.rows) {
+      if (allocRemaining <= 0) break;
+      const currentPaid = parseFloat(schedule.paid_amount);
+      const totalDue = parseFloat(schedule.total_due);
+      const shortage = Math.max(0, totalDue - currentPaid);
+      if (shortage <= 0) continue;
+
+      const applied = Math.min(allocRemaining, shortage);
+      const schedPrincipal = parseFloat(schedule.principal);
+      const schedInterest = parseFloat(schedule.interest);
+      const schedTotal = schedPrincipal + schedInterest;
+      const interestPortion = schedTotal > 0 ? Math.round(applied * schedInterest / schedTotal * 100) / 100 : 0;
+      const principalPortion = applied - interestPortion;
+
+      allocs.push({ schedule, amount: applied, principal: principalPortion, interest: interestPortion });
+      totalPrincipal += principalPortion;
+      totalInterest += interestPortion;
+      totalAllocated += applied;
+      allocRemaining -= applied;
+    }
+
+    totalPrincipal = Math.round(totalPrincipal * 100) / 100;
+    totalInterest = Math.round(totalInterest * 100) / 100;
 
     const payment = await paymentRepo.create({
       payment_number: paymentNumber,
       loan_id: data.loanId,
       borrower_id: loan.borrower_id,
-      amount,
-      principal_amount: 0,
-      interest_amount: 0,
+      amount: amount + penaltyAmount,
+      principal_amount: totalPrincipal,
+      interest_amount: totalInterest,
       penalty_amount: penaltyAmount,
       payment_method: data.paymentMethod || 'cash',
       reference_number: data.referenceNumber || null,
@@ -68,17 +97,11 @@ export class PaymentService {
       status: 'completed',
     });
 
-    let balanceAfterPenalty = Math.max(0, amount - penaltyAmount);
-    let totalAllocated = 0;
-    for (const schedule of schedules.rows) {
-      if (balanceAfterPenalty <= 0) break;
-      const currentPaid = parseFloat(schedule.paid_amount);
+    // Second pass: update schedules and record allocations
+    for (const alloc of allocs) {
+      const schedule = alloc.schedule;
+      const newPaid = parseFloat(schedule.paid_amount) + alloc.amount;
       const totalDue = parseFloat(schedule.total_due);
-      const shortage = Math.max(0, totalDue - currentPaid);
-      if (shortage <= 0) continue;
-
-      const applied = Math.min(balanceAfterPenalty, shortage);
-      const newPaid = currentPaid + applied;
       const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
 
       await amortizationScheduleRepo.update(schedule.id, {
@@ -90,12 +113,9 @@ export class PaymentService {
       await paymentAllocationRepo.create({
         payment_id: payment.id,
         schedule_id: schedule.id,
-        amount: applied,
+        amount: alloc.amount,
         allocated_to: 'principal',
       });
-
-      balanceAfterPenalty -= applied;
-      totalAllocated += applied;
     }
 
     const newBalance = Math.max(0, outstandingBalance - totalAllocated);
