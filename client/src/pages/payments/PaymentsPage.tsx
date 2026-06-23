@@ -508,6 +508,9 @@ export const PaymentsPage = () => {
                 {Object.values(payAllocations).filter(v => v.amount > 0).length} installment(s)
               </div>
               <div className="text-right">
+                <div className="text-base text-gray-900 dark:text-white">
+                  Penalty: <span className="font-semibold text-red-500">{formatCurrency(Object.values(payAllocations).reduce((s, v) => s + (v.penalty || 0), 0))}</span>
+                </div>
                 <div className="text-lg font-bold text-gray-900 dark:text-white">
                   Total Payment: {formatCurrency(Object.values(payAllocations).reduce((s, v) => s + v.amount + (v.penalty || 0), 0))}
                 </div>
