@@ -2,6 +2,8 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { authenticate, authorize } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema } from '../validators/auth';
 import { auditLog } from '../middleware/audit';
 import { authController } from '../controllers/auth.controller';
 import { loanController } from '../controllers/loan.controller';
@@ -33,13 +35,13 @@ const uploadCsv = multer({ storage: multer.memoryStorage(), limits: { fileSize: 
 const router = Router();
 
 // Auth routes
-router.post('/auth/login', authController.login.bind(authController));
+router.post('/auth/login', validate(loginSchema), authController.login.bind(authController));
 router.post('/auth/refresh', authController.refreshToken.bind(authController));
-router.post('/auth/forgot-password', authController.forgotPassword.bind(authController));
-router.post('/auth/reset-password', authController.resetPassword.bind(authController));
+router.post('/auth/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword.bind(authController));
+router.post('/auth/reset-password', validate(resetPasswordSchema), authController.resetPassword.bind(authController));
 router.get('/auth/profile', authenticate, authController.getProfile.bind(authController));
 router.put('/auth/profile', authenticate, authController.updateProfile.bind(authController));
-router.post('/auth/change-password', authenticate, authController.changePassword.bind(authController));
+router.post('/auth/change-password', authenticate, validate(changePasswordSchema), authController.changePassword.bind(authController));
 router.post('/auth/logout', authenticate, authController.logout.bind(authController));
 
 // Users (super-admin only)
@@ -58,14 +60,14 @@ router.post('/branches', authenticate, authorize('super-admin', 'admin'), branch
 router.put('/branches/:id', authenticate, authorize('super-admin', 'admin'), branchController.update.bind(branchController));
 
 // Borrowers
-router.get('/borrowers', authenticate, borrowerController.getAll.bind(borrowerController));
-router.post('/borrowers', authenticate, borrowerController.create.bind(borrowerController));
+router.get('/borrowers', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer', 'credit-investigator'), borrowerController.getAll.bind(borrowerController));
+router.post('/borrowers', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), borrowerController.create.bind(borrowerController));
 router.get('/borrowers/:id', authenticate, borrowerController.getById.bind(borrowerController));
-router.put('/borrowers/:id', authenticate, borrowerController.update.bind(borrowerController));
+router.put('/borrowers/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), borrowerController.update.bind(borrowerController));
 router.delete('/borrowers/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager'), borrowerController.delete.bind(borrowerController));
-router.post('/borrowers/:id/photo', authenticate, borrowerController.uploadPhotoHandler.bind(borrowerController));
-router.post('/borrowers/:id/documents', authenticate, uploadDoc, borrowerController.uploadDocument.bind(borrowerController));
-router.post('/borrowers/:id/co-makers', authenticate, borrowerController.addCoMaker.bind(borrowerController));
+router.post('/borrowers/:id/photo', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), borrowerController.uploadPhotoHandler.bind(borrowerController));
+router.post('/borrowers/:id/documents', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), uploadDoc, borrowerController.uploadDocument.bind(borrowerController));
+router.post('/borrowers/:id/co-makers', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), borrowerController.addCoMaker.bind(borrowerController));
 router.get('/borrowers/:id/payments', authenticate, borrowerController.getPayments.bind(borrowerController));
 
 // Loan Products
@@ -180,9 +182,9 @@ router.put('/loan-products/:id/charges', authenticate, authorize('super-admin', 
 router.get('/settings', authenticate, settingsController.getAll.bind(settingsController));
 router.put('/settings', authenticate, authorize('super-admin'), settingsController.update.bind(settingsController));
 
-// Setup route (check auto-seed status)
+// Setup route (check auto-seed status) — super-admin only
 import { pool } from '../database/connection';
-router.get('/setup', async (_req, res) => {
+router.get('/setup', authenticate, authorize('super-admin'), async (_req, res) => {
   try {
     const tables = (await pool.query(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'`)).rows.map((r: any) => r.tablename);
     const userCount = (await pool.query(`SELECT COUNT(*) as c FROM users`)).rows[0]?.c || 0;

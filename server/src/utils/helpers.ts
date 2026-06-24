@@ -28,7 +28,9 @@ export const parsePagination = (query: any) => {
   const page = Math.max(1, parseInt(query.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(query.limit) || 10));
   const offset = (page - 1) * limit;
-  const sortBy = query.sortBy || 'created_at';
+  const rawSortBy = query.sortBy || 'created_at';
+  // Allowlist: only word chars and dots (e.g. "users.created_at")
+  const sortBy = /^[\w.]+$/.test(rawSortBy) ? rawSortBy : 'created_at';
   const sortOrder = (query.sortOrder || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
   return { page, limit, offset, sortBy, sortOrder };
 };

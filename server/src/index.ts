@@ -9,6 +9,8 @@ import { hash } from 'bcryptjs';
 import { v4 } from 'uuid';
 
 const seedRolesAndAdmin = async () => {
+  // Only auto-seed in development mode
+  if (config.nodeEnv !== 'development') return;
   try {
     const tables = await pool.query(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'`);
     if (tables.rows.length === 0) {

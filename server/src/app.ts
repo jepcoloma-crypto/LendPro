@@ -23,7 +23,10 @@ app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (config.allowedOrigins.includes(origin) || config.allowedOrigins.includes('*')) {
+    // Reject wildcard origins — must be explicit
+    if (config.allowedOrigins.some((o: string) => o !== '*' && (origin === o || (o.startsWith('*.') && origin.endsWith(o.slice(1)))))) {
+      callback(null, origin);
+    } else if (config.allowedOrigins.includes(origin)) {
       callback(null, origin);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -43,6 +46,20 @@ const limiter = rateLimit({
   message: { success: false, error: 'Too many requests, please try again later.' },
 });
 app.use('/api/auth', limiter);
+
+// Stricter rate limit for sensitive operations
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: config.nodeEnv === 'production' ? 20 : 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests, please try again later.' },
+});
+app.use('/api/auth/login', strictLimiter);
+app.use('/api/auth/forgot-password', strictLimiter);
+app.use('/api/utilities/backup', strictLimiter);
+app.use('/api/utilities/restore', strictLimiter);
+app.use('/api/payments/import', strictLimiter);
 
 // Static files (uploads) — authenticated access only
 app.use('/uploads', authenticate, express.static(path.join(__dirname, '..', 'uploads')));

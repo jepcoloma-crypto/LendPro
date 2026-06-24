@@ -67,24 +67,43 @@ export class CollectionController {
 
   async getDueToday(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const collectorFilter = req.user?.roleSlug === 'collector' ? `AND c.collector_id = '${req.user!.userId}'` : '';
-      const result = await collectionRepo.query(
-        `SELECT c.id, c.loan_id, c.borrower_id, c.collector_id,
-          c.status, c.promise_to_pay_date, c.promise_to_pay_amount,
-          c.last_visit_date, c.last_visit_notes, c.next_visit_date,
-          c.created_at, c.updated_at,
-          l.loan_number, l.outstanding_balance as total_due,
-          b.first_name || ' ' || b.last_name as borrower_name, b.mobile
-         FROM collections c
-         JOIN loans l ON c.loan_id = l.id
-         JOIN borrowers b ON c.borrower_id = b.id
-         WHERE EXISTS (
-           SELECT 1 FROM amortization_schedules a
-           WHERE a.loan_id = l.id
-           AND a.due_date = CURRENT_DATE
-           AND COALESCE(a.paid_amount, 0) < a.total_due
-         ) ${collectorFilter}`
-      );
+      const collectorFilter = req.user?.roleSlug === 'collector';
+      const result = collectorFilter
+        ? await collectionRepo.query(
+            `SELECT c.id, c.loan_id, c.borrower_id, c.collector_id,
+              c.status, c.promise_to_pay_date, c.promise_to_pay_amount,
+              c.last_visit_date, c.last_visit_notes, c.next_visit_date,
+              c.created_at, c.updated_at,
+              l.loan_number, l.outstanding_balance as total_due,
+              b.first_name || ' ' || b.last_name as borrower_name, b.mobile
+             FROM collections c
+             JOIN loans l ON c.loan_id = l.id
+             JOIN borrowers b ON c.borrower_id = b.id
+             WHERE EXISTS (
+               SELECT 1 FROM amortization_schedules a
+               WHERE a.loan_id = l.id
+               AND a.due_date = CURRENT_DATE
+               AND COALESCE(a.paid_amount, 0) < a.total_due
+             ) AND c.collector_id = $1`,
+            [req.user!.userId]
+          )
+        : await collectionRepo.query(
+            `SELECT c.id, c.loan_id, c.borrower_id, c.collector_id,
+              c.status, c.promise_to_pay_date, c.promise_to_pay_amount,
+              c.last_visit_date, c.last_visit_notes, c.next_visit_date,
+              c.created_at, c.updated_at,
+              l.loan_number, l.outstanding_balance as total_due,
+              b.first_name || ' ' || b.last_name as borrower_name, b.mobile
+             FROM collections c
+             JOIN loans l ON c.loan_id = l.id
+             JOIN borrowers b ON c.borrower_id = b.id
+             WHERE EXISTS (
+               SELECT 1 FROM amortization_schedules a
+               WHERE a.loan_id = l.id
+               AND a.due_date = CURRENT_DATE
+               AND COALESCE(a.paid_amount, 0) < a.total_due
+             )`
+          );
       res.json({ success: true, data: result });
     } catch (error: any) {
       next(new AppError(500, error.message));
