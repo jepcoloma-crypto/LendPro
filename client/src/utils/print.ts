@@ -44,6 +44,12 @@ export const printStyles = `
   .summary-card .label { font-size: 8px; color: #6b7280; margin: 0; }
   .summary-card .value { font-size: 11px; font-weight: 700; margin: 1px 0 0; }
   .footer-note { text-align: center; font-size: 8px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 6px; margin-top: 8px; }
+  .signatures { display: flex; justify-content: space-around; gap: 24px; margin-top: 20px; margin-bottom: 12px; }
+  .signatures > div { text-align: center; flex: 1; }
+  .sig-line { border-bottom: 1px solid #9ca3af; margin-bottom: 3px; height: 30px; }
+  .sig-name { font-weight: 600; margin: 0; font-size: 9px; }
+  .sig-role { color: #6b7280; font-size: 8px; margin: 0; }
+  .sig-date { color: #9ca3af; font-size: 8px; margin-top: 1px; }
 `;
 
 export const companyHeaderHtml = (companyInfo: Record<string, string>): string => {

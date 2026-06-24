@@ -410,6 +410,11 @@ export const ReportsPage = () => {
         <div class="summary-card"><p class="label">Total Penalties</p><p class="value" style="color:#dc2626">${formatCurrency(totalPenalty)}</p></div>
         <div class="summary-card"><p class="label">Outstanding Balance</p><p class="value" style="color:#059669">${formatCurrency(loan.outstanding_balance)}</p></div>
       </div>
+      <div class="signatures">
+        <div><div class="sig-line"></div><p class="sig-name">Borrower</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+        <div><div class="sig-line"></div><p class="sig-name">${loan.loan_officer_name || 'Loan Officer'}</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+        <div><div class="sig-line"></div><p class="sig-name">Branch Manager</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+      </div>
       <div class="footer-note">This is a computer-generated Statement of Account. Generated on ${new Date().toLocaleString()}.</div>
     </body></html>`;
       printWindow(html);
@@ -427,6 +432,11 @@ export const ReportsPage = () => {
       html += `<tr>${columns.map(c => `<td>${c.format ? c.format(row[c.key]) : (row[c.key] ?? '')}</td>`).join('')}</tr>`;
     }
     html += `</tbody></table>
+      <div class="signatures">
+        <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+        <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+        <div><div class="sig-line"></div><p class="sig-name">Approved By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+      </div>
       <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
     </body></html>`;
     printWindow(html);
@@ -748,6 +758,11 @@ export const ReportsPage = () => {
     <div class="summary-card"><p class="label">Total Paid</p><p class="value">${grandTotalPaid}</p></div>
     <div class="summary-card"><p class="label">Total Partial</p><p class="value text-yellow">${grandTotalPartial}</p></div>
     <div class="summary-card"><p class="label">Total Unpaid</p><p class="value text-red">${grandTotalUnpaid}</p></div>
+  </div>
+  <div class="signatures">
+    <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+    <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+    <div><div class="sig-line"></div><p class="sig-name">Approved By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
   </div>
   <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
   </body></html>`;
@@ -1243,6 +1258,11 @@ export const ReportsPage = () => {
                   html += `<tr><td>${b.branch_name}</td><td class="text-right">${b.payment_count}</td><td class="text-right">${formatCurrency(b.total_principal)}</td><td class="text-right">${formatCurrency(b.total_interest)}</td><td class="text-right">${formatCurrency(b.total_penalty)}</td><td class="text-right">${formatCurrency(b.total_collected)}</td></tr>`;
                 }
                 html += `</tbody><tfoot><tr class="grand-total"><td>Grand Total</td><td class="text-right">${grandTotal.payment_count}</td><td class="text-right">${formatCurrency(grandTotal.total_principal)}</td><td class="text-right">${formatCurrency(grandTotal.total_interest)}</td><td class="text-right">${formatCurrency(grandTotal.total_penalty)}</td><td class="text-right">${formatCurrency(grandTotal.total_collected)}</td></tr></tfoot></table>
+                  <div class="signatures">
+                    <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+                    <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+                    <div><div class="sig-line"></div><p class="sig-name">Approved By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+                  </div>
                   <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
                 </body></html>`;
                 printWindow(html);
