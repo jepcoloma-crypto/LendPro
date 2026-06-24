@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
+import { config } from '../config';
 
 export class AppError extends Error {
   constructor(
@@ -12,6 +13,25 @@ export class AppError extends Error {
   }
 }
 
+// In production, strip internal details that shouldn't leak to clients
+const sanitizeMessage = (msg: string): string => {
+  if (config.nodeEnv !== 'production') return msg;
+  // Common patterns that expose internals
+  const patterns = [
+    /relation "[^"]+" does not exist/gi,
+    /column "[^"]+" does not exist/gi,
+    /syntax error at or near/gi,
+    /duplicate key value violates/gi,
+    /violates foreign key constraint/gi,
+    /violates not-null constraint/gi,
+  ];
+  let safe = msg;
+  for (const p of patterns) {
+    if (p.test(safe)) return 'A database error occurred. Please contact support.';
+  }
+  return msg;
+};
+
 export const errorHandler = (
   err: Error,
   _req: Request,
@@ -21,7 +41,7 @@ export const errorHandler = (
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       success: false,
-      error: err.message,
+      error: sanitizeMessage(err.message),
     });
     return;
   }

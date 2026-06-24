@@ -19,7 +19,15 @@ app.set('trust proxy', 1);
 app.set('etag', false);
 
 // Security
-app.use(helmet());
+app.use(helmet({
+  hsts: {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true,
+  },
+  contentSecurityPolicy: false, // Disabled for API (frontend handles its own CSP)
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);

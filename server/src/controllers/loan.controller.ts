@@ -4,6 +4,7 @@ import { loanService } from '../services/loan.service';
 import { loanRepo, loanApplicationRepo, loanProductRepo, amortizationScheduleRepo, applicationDocumentRepo, coMakerRepo } from '../repositories';
 import { AppError } from '../middleware/errorHandler';
 import { parsePagination, paramStr, calculateAmortization, calculateInterest } from '../utils/helpers';
+import { validateUploadedFile } from '../utils/fileValidation';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -476,6 +477,12 @@ export class LoanController {
       const id = paramStr(req.params.id);
       const files = req.files as Express.Multer.File[] | undefined;
       if (!files || files.length === 0) return next(new AppError(400, 'No documents uploaded'));
+      // Validate magic bytes for each file
+      for (const file of files) {
+        if (!validateUploadedFile(file.path, file.mimetype)) {
+          return next(new AppError(400, `Invalid file content: ${file.originalname} does not match expected format`));
+        }
+      }
       const docs = [];
       for (const file of files) {
         const doc = await applicationDocumentRepo.create({

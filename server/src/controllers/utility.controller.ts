@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { config } from '../config';
 import { pool } from '../database/connection';
 import multer from 'multer';
 
@@ -280,10 +281,10 @@ export class UtilityController {
         try { await pool.query(`ALTER TABLE "${tn}" ENABLE TRIGGER ALL`); } catch {}
       }
 
-      // Check if essential tables are empty and auto-seed
+      // Check if essential tables are empty and auto-seed (dev only)
       const userCount = await pool.query(`SELECT COUNT(*) as c FROM users`);
       const roleCount = await pool.query(`SELECT COUNT(*) as c FROM roles`);
-      if (parseInt(userCount.rows[0].c) === 0 || parseInt(roleCount.rows[0].c) === 0) {
+      if (config.nodeEnv === 'development' && (parseInt(userCount.rows[0].c) === 0 || parseInt(roleCount.rows[0].c) === 0)) {
         res.write(JSON.stringify({ type: 'progress_note', message: 'Essential tables empty. Running seed...' }) + '\n');
         const bcrypt = require('bcryptjs');
         const hash = await bcrypt.hash('admin123', 12);

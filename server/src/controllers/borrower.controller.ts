@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { borrowerRepo, coMakerRepo, borrowerDocumentRepo, paymentRepo } from '../repositories';
 import { AppError } from '../middleware/errorHandler';
 import { parsePagination, generateBorrowerCode, paramStr } from '../utils/helpers';
+import { validateUploadedFile } from '../utils/fileValidation';
 import multer from 'multer';
 import path from 'path';
 
@@ -99,6 +100,9 @@ export class BorrowerController {
     uploadPhoto(req, res, async (err) => {
       if (err) return next(new AppError(400, err.message));
       if (!req.file) return next(new AppError(400, 'No photo uploaded'));
+      if (!validateUploadedFile(req.file.path, req.file.mimetype)) {
+        return next(new AppError(400, 'Invalid photo file content'));
+      }
       const id = paramStr(req.params.id);
       const photoUrl = `/uploads/borrowers/${req.file.filename}`;
       const borrower = await borrowerRepo.update(id, { photo_url: photoUrl });
@@ -123,6 +127,9 @@ export class BorrowerController {
       const { borrowerId, documentType } = req.body;
       const file = (req as any).file;
       if (!file) throw new Error('No file uploaded');
+      if (!validateUploadedFile(file.path, file.mimetype)) {
+        return next(new AppError(400, 'Invalid document file content'));
+      }
       const doc = await borrowerDocumentRepo.create({
         borrower_id: borrowerId,
         document_type: documentType,
