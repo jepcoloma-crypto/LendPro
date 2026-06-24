@@ -720,15 +720,15 @@ export const ReportsPage = () => {
     grandTotalPaid += loan.paid;
     grandTotalPartial += loan.partial;
     grandTotalUnpaid += loan.unpaid;
-    html += `<div class="no-break" style="margin-bottom:16px">
-      <div class="summary-cards" style="margin-bottom:8px">
+    html += `<div style="margin-bottom:8px">
+      <div class="summary-cards" style="margin-bottom:4px">
         <div class="summary-card"><p class="label">Borrower</p><p class="value">${loan.borrower_name} (${loan.borrower_code})</p></div>
-        <div class="summary-card"><p class="label">Loan #</p><p class="value">${loan.loan_number}</p></div>
+        <div class="summary-card"><p class="label">Loan</p><p class="value">${loan.loan_number}</p></div>
         <div class="summary-card"><p class="label">Balance</p><p class="value">${formatCurrency(loan.outstanding_balance)}</p></div>
       </div>
     <table>
       <thead><tr>
-        <th>#</th><th>Due Date</th><th class="text-right">Total Due</th><th class="text-right">Paid Amount</th><th class="text-right">Penalty</th><th>Payment Date</th><th class="text-center">Status</th>
+        <th>#</th><th>Due Date</th><th class="text-right">Due</th><th class="text-right">Paid</th><th class="text-right">Penalty</th><th>Pay Date</th><th class="text-center">Status</th>
       </tr></thead><tbody>`;
       for (const s of loan.schedules) {
         const statusClass = s.status === 'paid' ? 'text-green font-bold' : s.status === 'partial' ? 'text-yellow font-medium' : 'text-muted';
@@ -737,17 +737,12 @@ export const ReportsPage = () => {
           <td>${new Date(s.due_date).toLocaleDateString()}</td>
           <td class="text-right">${formatCurrency(s.total_due)}</td>
           <td class="text-right">${formatCurrency(s.paid_amount)}</td>
-          <td class="text-right">${parseFloat(s.penalty_amount) > 0 ? `<span class="text-red">${formatCurrency(s.penalty_amount)}</span>` : formatCurrency(0)}</td>
+          <td class="text-right">${parseFloat(s.penalty_amount) > 0 ? `<span class="text-red">${formatCurrency(s.penalty_amount)}</span>` : '-'}</td>
           <td>${s.paid_at ? new Date(s.paid_at).toLocaleDateString() : '-'}</td>
           <td class="text-center ${statusClass}">${s.status.toUpperCase()}</td>
         </tr>`;
       }
-      html += `</tbody></table>`;
-      html += `<div class="signatures">
-        <div><div class="sig-line"></div><p class="sig-name">${loan.borrower_name || ''}</p><p class="sig-role">Borrower Signature</p><p class="sig-date">Date: _______________</p></div>
-        <div><div class="sig-line"></div><p class="sig-name">${loan.loan_officer_name || ''}</p><p class="sig-role">Loan Officer Signature</p><p class="sig-date">Date: _______________</p></div>
-        <div><div class="sig-line"></div><p class="sig-name">Branch Manager</p><p class="sig-role">Branch Manager Signature</p><p class="sig-date">Date: _______________</p></div>
-      </div></div>`;
+      html += `</tbody></table></div>`;
   }
   html += `<div class="summary-cards">
     <div class="summary-card"><p class="label">Total Paid</p><p class="value">${grandTotalPaid}</p></div>
