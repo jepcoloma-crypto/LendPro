@@ -369,7 +369,8 @@ export const ReportsPage = () => {
           .summary-table td { border: none; padding: 3px 10px; }
           .section-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; margin-top: 16px; color: #374151; }
     </style></head><body>
-    <div class="company-info"><h1>${cn}</h1>${companyInfo.company_address ? `<p>${companyInfo.company_address}</p>` : ''}${companyInfo.company_phone ? `<p>Tel: ${companyInfo.company_phone}</p>` : ''}<p class="section-title" style="margin-top:4px">Statement of Account</p></div>
+    <div class="company-info"><h1>${cn}</h1>${companyInfo.company_address ? `<p>${companyInfo.company_address}</p>` : ''}${companyInfo.company_phone ? `<p>Tel: ${companyInfo.company_phone}</p>` : ''}</div>
+    <h2 style="text-align:center;font-size:18px;font-weight:700;margin:0 0 16px;text-decoration:underline;text-transform:uppercase">Statement of Account</h2>
     <div style="display:flex; gap: 40px; margin-bottom: 16px;">
       <div><p style="margin:0 0 4px;font-weight:600;font-size:13px">Borrower Information</p>
         <table><tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Name:</td><td class="font-medium" style="border:none;padding:2px 0">${loan.borrower_name}</td></tr>
