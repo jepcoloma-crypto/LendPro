@@ -287,55 +287,66 @@ export const PaymentsPage = () => {
       ).join('') : '';
       w.document.write(`<!DOCTYPE html><html><head><title>Official Receipt - ${r.receipt_number}</title>
         <style>
-          body { font-family: 'Courier New', monospace; margin: 0; padding: 20px; font-size: 13px; }
-          .receipt { max-width: 380px; margin: 0 auto; }
-          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
-          .header h1 { font-size: 18px; margin: 0; text-transform: uppercase; }
-          .header p { margin: 2px 0; font-size: 11px; }
-          .title { text-align: center; font-size: 16px; font-weight: bold; margin: 8px 0; text-decoration: underline; }
-          .row { display: flex; justify-content: space-between; padding: 2px 0; }
-          .label { font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
-          th, td { border: 1px solid #000; padding: 4px 6px; text-align: left; }
-          th { background: #eee; }
-          .amount { text-align: right; }
-          .total-row td { font-weight: bold; border-top: 2px solid #000; }
-          .footer { text-align: center; margin-top: 16px; font-size: 10px; border-top: 1px dashed #000; padding-top: 8px; }
+          @page { margin: 8mm; }
           @media print { body { padding: 0; } .no-print { display: none; } }
+          body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 16px; font-size: 12px; color: #1a1a1a; }
+          .receipt { max-width: 380px; margin: 0 auto; }
+          .header { text-align: center; border-bottom: 2px solid #1a1a1a; padding-bottom: 10px; margin-bottom: 10px; }
+          .header h1 { font-size: 17px; margin: 0; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; }
+          .header p { margin: 1px 0; font-size: 10px; color: #555; }
+          .title { text-align: center; font-size: 14px; font-weight: 700; margin: 8px 0; text-transform: uppercase; letter-spacing: 2px; }
+          .info-table { width: 100%; margin: 6px 0; }
+          .info-table td { padding: 1px 0; font-size: 11px; border: none; }
+          .info-table td:first-child { color: #6b7280; width: 1px; white-space: nowrap; padding-right: 12px; }
+          .info-table td:last-child { font-weight: 500; }
+          .amount-box { border-top: 1px solid #1a1a1a; border-bottom: 1px solid #1a1a1a; padding: 6px 0; margin: 8px 0; display: flex; justify-content: space-between; align-items: center; }
+          .amount-box .label { font-weight: 700; font-size: 13px; }
+          .amount-box .value { font-size: 18px; font-weight: 800; }
+          .amount-words { font-size: 10px; font-style: italic; text-align: center; margin: 4px 0; text-transform: uppercase; color: #555; }
+          table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 11px; }
+          th, td { border: 1px solid #d1d5db; padding: 4px 6px; text-align: left; }
+          th { background: #f3f4f6; font-weight: 600; font-size: 10px; text-transform: uppercase; }
+          .amount { text-align: right; }
+          .row { display: flex; justify-content: space-between; padding: 1px 0; font-size: 11px; }
+          .row .label { color: #6b7280; }
+          .footer { text-align: center; margin-top: 12px; font-size: 9px; border-top: 1px dashed #d1d5db; padding-top: 8px; color: #9ca3af; }
+          .signature-area { display: flex; justify-content: space-between; margin-top: 14px; padding-top: 8px; border-top: 1px solid #d1d5db; }
+          .signature-area > div { text-align: center; width: 45%; }
+          .sig-line { border-bottom: 1px solid #9ca3af; margin-bottom: 2px; height: 24px; }
+          .sig-label { font-size: 9px; color: #6b7280; }
         </style></head><body>
         <div class="receipt">
           <div class="header">
             <h1>${companyInfo.company_name || 'LENDING APP'}</h1>
             ${companyInfo.company_address ? `<p>${companyInfo.company_address}</p>` : ''}
-            ${companyInfo.company_phone ? `<p>Tel: ${companyInfo.company_phone}</p>` : ''}
-            ${companyInfo.company_email ? `<p>Email: ${companyInfo.company_email}</p>` : ''}
+            ${companyInfo.company_phone || companyInfo.company_email ? `<p>${[companyInfo.company_phone, companyInfo.company_email].filter(Boolean).join(' | ')}</p>` : ''}
           </div>
-          <div class="title">OFFICIAL RECEIPT</div>
-          <div class="row"><span class="label">Receipt #:</span><span>${r.receipt_number || r.payment_number}</span></div>
-          <div class="row"><span class="label">Payment #:</span><span>${r.payment_number}</span></div>
-          <div class="row"><span class="label">Date:</span><span>${new Date(r.payment_date).toLocaleDateString()}</span></div>
-          <div class="row"><span class="label">Received From:</span><span>${r.borrower_name}</span></div>
-          <div class="row"><span class="label">Address:</span><span>${r.present_address || ''}, ${r.present_city || ''}</span></div>
-          <div class="row"><span class="label">Loan #:</span><span>${r.loan_number}</span></div>
-          <div class="row"><span class="label">Payment Method:</span><span>${r.payment_method}</span></div>
-          ${r.reference_number ? `<div class="row"><span class="label">Reference:</span><span>${r.reference_number}</span></div>` : ''}
-          <div class="row" style="border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0; margin: 6px 0;">
-            <span class="label">AMOUNT PAID:</span>
-            <span style="font-size: 16px; font-weight: bold;">${formatCurrency(r.amount)}</span>
+          <div class="title">Official Receipt</div>
+          <table class="info-table">
+            <tr><td>Receipt #:</td><td>${r.receipt_number || r.payment_number}</td></tr>
+            <tr><td>Date:</td><td>${new Date(r.payment_date).toLocaleDateString()}</td></tr>
+            <tr><td>Received From:</td><td>${r.borrower_name}</td></tr>
+            ${r.present_address ? `<tr><td>Address:</td><td>${r.present_address}${r.present_city ? `, ${r.present_city}` : ''}</td></tr>` : ''}
+            <tr><td>Loan #:</td><td>${r.loan_number}</td></tr>
+            <tr><td>Payment Method:</td><td>${r.payment_method}${r.reference_number ? ` (Ref: ${r.reference_number})` : ''}</td></tr>
+          </table>
+          <div class="amount-box">
+            <span class="label">AMOUNT PAID</span>
+            <span class="value">${formatCurrency(r.amount)}</span>
           </div>
-          <div style="font-size: 11px; font-style: italic; text-align: center; margin: 4px 0; text-transform: uppercase;">
-            ${numberToWords(Number(r.amount))}
-          </div>
+          <div class="amount-words">${numberToWords(Number(r.amount))}</div>
           ${allocRows ? `<table><thead><tr><th>#</th><th>Due Date</th><th>Applied To</th><th class="amount">Amount</th></tr></thead><tbody>${allocRows}</tbody></table>` : ''}
-          <div class="row"><span class="label">Principal:</span><span class="amount">${formatCurrency(r.principal_amount)}</span></div>
-          <div class="row"><span class="label">Interest:</span><span class="amount">${formatCurrency(r.interest_amount)}</span></div>
-          <div class="row"><span class="label">Penalty:</span><span class="amount">${formatCurrency(r.penalty_amount)}</span></div>
+          <div class="row"><span class="label">Principal:</span><span>${formatCurrency(r.principal_amount)}</span></div>
+          <div class="row"><span class="label">Interest:</span><span>${formatCurrency(r.interest_amount)}</span></div>
+          <div class="row"><span class="label">Penalty:</span><span>${formatCurrency(r.penalty_amount)}</span></div>
           ${r.notes ? `<div class="row"><span class="label">Notes:</span><span>${r.notes}</span></div>` : ''}
-          <div class="row" style="margin-top: 10px;"><span class="label">Received By:</span><span>${r.received_by_name || ''}</span></div>
+          <div class="signature-area">
+            <div><div class="sig-line"></div><div class="sig-label">Received By</div></div>
+            <div><div class="sig-line"></div><div class="sig-label">Borrower Signature</div></div>
+          </div>
           <div class="footer">
-            <p>This is a computer-generated receipt.</p>
-            <p>Thank you for your payment!</p>
-            <button class="no-print" onclick="window.print()" style="margin-top:8px;padding:6px 20px;cursor:pointer;">Print</button>
+            <p>This is a computer-generated receipt. Thank you for your payment!</p>
+            <button class="no-print" onclick="window.print()" style="margin-top:6px;padding:6px 20px;cursor:pointer;border:1px solid #d1d5db;background:#f9fafb;border-radius:4px;font-size:11px;">Print</button>
           </div>
         </div></body></html>`);
       w.document.close();

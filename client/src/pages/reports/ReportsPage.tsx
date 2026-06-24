@@ -3,6 +3,7 @@ import { Panel, Table, Tag, Button, SelectPicker, DatePicker, Message, toaster }
 import { loansApi, reportsApi, borrowersApi, usersApi, branchesApi } from '../../services/api';
 import { Download, Printer } from 'lucide-react';
 import { formatCurrency, exportCSV } from '../../utils/format';
+import { printStyles, companyHeaderHtml, printWindow } from '../../utils/print';
 import { getCompanySettings } from '../../utils/companySettings';
 
 const { Column, HeaderCell, Cell } = Table;
@@ -339,60 +340,39 @@ export const ReportsPage = () => {
       const { data } = await loansApi.getById(loanId);
       const loan = data.data;
       if (!loan) return;
-      const w = window.open('', '_blank');
-      if (!w) return;
       const schedule = loan.schedule || [];
       const payments = loan.payments || [];
       const totalPaid = payments.reduce((s: number, p: any) => s + parseFloat(p.amount || 0), 0);
       const totalPenalty = payments.reduce((s: number, p: any) => s + parseFloat(p.penalty_amount || 0), 0);
-      const cn = companyInfo.company_name || 'PRIME CAPITAL LENDING CORP';
       let html = `<!DOCTYPE html><html><head><title>Statement of Account - ${loan.loan_number}</title>
-        <style>
-          body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; font-size: 12px; }
-          h1 { font-size: 20px; margin-bottom: 2px; }
-          .company-info { text-align: center; margin-bottom: 20px; }
-          .company-info h1 { font-size: 22px; margin-bottom: 2px; }
-          .company-info p { margin: 0; color: #666; font-size: 12px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-          th, td { border: 1px solid #ddd; padding: 5px 7px; text-align: left; }
-          th { background: #f5f5f5; font-weight: 600; }
-          .text-right { text-align: right; }
-          .text-center { text-align: center; }
-          .font-medium { font-weight: 500; }
-          .text-green-600 { color: #059669; }
-          .text-red-600 { color: #dc2626; }
-          .text-yellow-600 { color: #ca8a04; }
-          .text-gray-400 { color: #9ca3af; }
-          .text-gray-500 { color: #6b7280; }
-          .text-gray-700 { color: #374151; }
-          .summary-table { width: auto; margin-left: auto; }
-          .summary-table td { border: none; padding: 3px 10px; }
-          .section-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; margin-top: 16px; color: #374151; }
-    </style></head><body>
-    <div class="company-info"><h1>${cn}</h1>${companyInfo.company_address ? `<p>${companyInfo.company_address}</p>` : ''}${companyInfo.company_phone ? `<p>Tel: ${companyInfo.company_phone}</p>` : ''}</div>
-    <h2 style="text-align:center;font-size:18px;font-weight:700;margin:0 0 16px;text-decoration:underline;text-transform:uppercase">Statement of Account</h2>
-    <div style="display:flex; gap: 40px; margin-bottom: 16px;">
-      <div><p style="margin:0 0 4px;font-weight:600;font-size:13px">Borrower Information</p>
-        <table><tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Name:</td><td class="font-medium" style="border:none;padding:2px 0">${loan.borrower_name}</td></tr>
-        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Code:</td><td style="border:none;padding:2px 0">${loan.borrower_code}</td></tr>
-        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Mobile:</td><td style="border:none;padding:2px 0">${loan.mobile || '-'}</td></tr></table></div>
-      <div><p style="margin:0 0 4px;font-weight:600;font-size:13px">Loan Information</p>
-        <table><tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Loan #:</td><td class="font-medium" style="border:none;padding:2px 0">${loan.loan_number}</td></tr>
-        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Product:</td><td style="border:none;padding:2px 0">${loan.product_name}</td></tr>
-        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Principal:</td><td style="border:none;padding:2px 0">${formatCurrency(loan.principal_amount)}</td></tr>
-        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Interest Rate:</td><td style="border:none;padding:2px 0">${loan.interest_rate}% (${loan.interest_type})</td></tr>
-        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Term:</td><td style="border:none;padding:2px 0">${loan.term_months} ${loan.term_type}</td></tr>
-        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Release Date:</td><td style="border:none;padding:2px 0">${loan.release_date ? new Date(loan.release_date).toLocaleDateString() : '-'}</td></tr>
-        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Maturity:</td><td style="border:none;padding:2px 0">${loan.maturity_date ? new Date(loan.maturity_date).toLocaleDateString() : '-'}</td></tr>
-        <tr><td class="text-gray-500" style="border:none;padding:2px 8px 2px 0">Status:</td><td style="border:none;padding:2px 0;font-weight:600">${loan.status}</td></tr></table></div>
-    </div>
-    <p class="section-title">Amortization Schedule</p>
-    <table><thead><tr><th>#</th><th>Due Date</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Total Due</th><th class="text-right">Paid</th><th class="text-right">Balance</th><th class="text-right">Penalty</th><th class="text-center">Status</th></tr></thead><tbody>`;
+        <style>${printStyles}</style></head><body>
+        ${companyHeaderHtml(companyInfo)}
+        <div class="report-title">Statement of Account</div>
+        <div class="report-subtitle">${loan.loan_number} &middot; Generated ${new Date().toLocaleDateString()}</div>
+        <div class="info-grid">
+          <div><table>
+            <tr><td>Name:</td><td>${loan.borrower_name}</td></tr>
+            <tr><td>Code:</td><td>${loan.borrower_code}</td></tr>
+            <tr><td>Mobile:</td><td>${loan.mobile || '-'}</td></tr>
+          </table></div>
+          <div><table>
+            <tr><td>Loan #:</td><td>${loan.loan_number}</td></tr>
+            <tr><td>Product:</td><td>${loan.product_name}</td></tr>
+            <tr><td>Principal:</td><td>${formatCurrency(loan.principal_amount)}</td></tr>
+            <tr><td>Interest Rate:</td><td>${loan.interest_rate}% (${loan.interest_type})</td></tr>
+            <tr><td>Term:</td><td>${loan.term_months} ${loan.term_type}</td></tr>
+            <tr><td>Release:</td><td>${loan.release_date ? new Date(loan.release_date).toLocaleDateString() : '-'}</td></tr>
+            <tr><td>Maturity:</td><td>${loan.maturity_date ? new Date(loan.maturity_date).toLocaleDateString() : '-'}</td></tr>
+            <tr><td>Status:</td><td>${loan.status}</td></tr>
+          </table></div>
+        </div>
+        <div class="section-title">Amortization Schedule</div>
+        <table><thead><tr><th>#</th><th>Due Date</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Total Due</th><th class="text-right">Paid</th><th class="text-right">Balance</th><th class="text-right">Penalty</th><th class="text-center">Status</th></tr></thead><tbody>`;
       let grandPrincipal = 0, grandInterest = 0, grandTotalDue = 0, grandPaidAmt = 0, grandBalance = 0, grandPenalty = 0;
       for (const s of schedule) {
         const balance = Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0));
         const st = s.status;
-        const color = st === 'paid' ? 'text-green-600' : st === 'partial' ? 'text-yellow-600' : 'text-gray-400';
+        const color = st === 'paid' ? 'text-green' : st === 'partial' ? 'text-yellow' : 'text-muted';
         html += `<tr>
           <td>${s.installment_no}</td><td>${new Date(s.due_date).toLocaleDateString()}</td>
           <td class="text-right">${formatCurrency(s.principal)}</td>
@@ -400,7 +380,7 @@ export const ReportsPage = () => {
           <td class="text-right">${formatCurrency(s.total_due)}</td>
           <td class="text-right">${formatCurrency(s.paid_amount)}</td>
           <td class="text-right">${formatCurrency(balance)}</td>
-          <td class="text-right">${formatCurrency(s.penalty_amount || 0)}</td>
+          <td class="text-right">${parseFloat(s.penalty_amount || 0) > 0 ? `<span class="text-red">${formatCurrency(s.penalty_amount)}</span>` : formatCurrency(0)}</td>
           <td class="text-center ${color}">${st}</td>
         </tr>`;
         grandPrincipal += parseFloat(s.principal || 0);
@@ -411,8 +391,8 @@ export const ReportsPage = () => {
         grandPenalty += parseFloat(s.penalty_amount || 0);
       }
       html += `</tbody></table>
-    <p class="section-title">Payment History</p>
-    <table><thead><tr><th>Date</th><th>Ref/Payment #</th><th class="text-right">Amount</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Penalty</th><th class="text-center">Method</th></tr></thead><tbody>`;
+      <div class="section-title">Payment History</div>
+      <table><thead><tr><th>Date</th><th>Ref/Payment #</th><th class="text-right">Amount</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Penalty</th><th class="text-center">Method</th></tr></thead><tbody>`;
       for (const p of payments) {
         html += `<tr>
           <td>${new Date(p.payment_date).toLocaleDateString()}</td>
@@ -420,58 +400,36 @@ export const ReportsPage = () => {
           <td class="text-right">${formatCurrency(p.amount)}</td>
           <td class="text-right">${formatCurrency(p.principal_amount)}</td>
           <td class="text-right">${formatCurrency(p.interest_amount)}</td>
-          <td class="text-right">${formatCurrency(p.penalty_amount)}</td>
+          <td class="text-right">${parseFloat(p.penalty_amount) > 0 ? `<span class="text-red">${formatCurrency(p.penalty_amount)}</span>` : formatCurrency(0)}</td>
           <td class="text-center">${p.payment_method}</td>
         </tr>`;
       }
       html += `</tbody></table>
-    <div style="border-top:1px solid #e5e7eb;padding-top:12px;display:flex;justify-content:flex-end">
-      <table class="summary-table"><tr><td class="text-gray-500" style="padding:2px 20px 2px 0">Total Payments:</td><td class="font-medium text-right">${formatCurrency(totalPaid)}</td></tr>
-      <tr><td class="text-gray-500" style="padding:2px 20px 2px 0">Total Penalties:</td><td class="font-medium text-right text-red-600">${formatCurrency(totalPenalty)}</td></tr>
-      <tr><td class="text-gray-500" style="padding:2px 20px 2px 0">Outstanding Balance:</td><td class="font-medium text-right" style="font-size:16px;font-weight:700">${formatCurrency(loan.outstanding_balance)}</td></tr></table>
-    </div></body></html>`;
-      w.document.write(html);
-      w.document.close();
-      setTimeout(() => { w.print(); }, 500);
+      <div class="summary-cards">
+        <div class="summary-card"><p class="label">Total Payments</p><p class="value">${formatCurrency(totalPaid)}</p></div>
+        <div class="summary-card"><p class="label">Total Penalties</p><p class="value" style="color:#dc2626">${formatCurrency(totalPenalty)}</p></div>
+        <div class="summary-card"><p class="label">Outstanding Balance</p><p class="value" style="color:#059669">${formatCurrency(loan.outstanding_balance)}</p></div>
+      </div>
+      <div class="footer-note">This is a computer-generated Statement of Account. Generated on ${new Date().toLocaleString()}.</div>
+    </body></html>`;
+      printWindow(html);
     } catch { toaster.push(<Message type="error">Failed to load SOA data</Message>, { placement: 'topEnd' }); }
   };
 
   const printReport = (title: string, data: any[], columns: { key: string; label: string; format?: (v: any) => string }[]) => {
-    const w = window.open('', '_blank');
-    if (!w) return;
-    let headerHtml = '';
-    const cn = companyInfo.company_name;
-    if (cn) {
-      headerHtml = `<div class="company-info"><h1>${cn}</h1>`;
-      if (companyInfo.company_address) headerHtml += `<p>${companyInfo.company_address}</p>`;
-      if (companyInfo.company_phone) headerHtml += `<p>Tel: ${companyInfo.company_phone}</p>`;
-      if (companyInfo.company_email) headerHtml += `<p>Email: ${companyInfo.company_email}</p>`;
-      headerHtml += '</div>';
-    }
     let html = `<!DOCTYPE html><html><head><title>${title}</title>
-      <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; font-size: 12px; }
-        h1 { font-size: 20px; margin-bottom: 5px; }
-        .subtitle { color: #666; margin-bottom: 20px; font-size: 13px; }
-        .company-info { text-align: center; margin-bottom: 20px; }
-        .company-info h1 { font-size: 22px; margin-bottom: 2px; }
-        .company-info p { margin: 0; color: #666; font-size: 12px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-        th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-        th { background: #f5f5f5; font-weight: 600; }
-        @media print { body { padding: 0; } }
-      </style></head><body>
-      ${headerHtml}
-      <h1>${title}</h1>
-      <div class="subtitle">Generated: ${new Date().toLocaleString()}</div>
+      <style>${printStyles}</style></head><body>
+      ${companyHeaderHtml(companyInfo)}
+      <div class="report-title">${title}</div>
+      <div class="report-subtitle">Generated: ${new Date().toLocaleString()} &middot; ${data.length} record${data.length !== 1 ? 's' : ''}</div>
       <table><thead><tr>${columns.map(c => `<th>${c.label}</th>`).join('')}</tr></thead><tbody>`;
     for (const row of data) {
       html += `<tr>${columns.map(c => `<td>${c.format ? c.format(row[c.key]) : (row[c.key] ?? '')}</td>`).join('')}</tr>`;
     }
-    html += `</tbody></table></body></html>`;
-    w.document.write(html);
-    w.document.close();
-    setTimeout(() => { w.print(); }, 500);
+    html += `</tbody></table>
+      <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
+    </body></html>`;
+    printWindow(html);
   };
 
   const categories: { key: string; label: string; tabs: { key: string; label: string }[] }[] = [
@@ -749,92 +707,57 @@ export const ReportsPage = () => {
                 cleanable
               />
             </div>
-            <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
-              const w = window.open('', '_blank');
-              if (!w) return;
-              let headerHtml = '';
-              const cn2 = companyInfo.company_name;
-              if (cn2) {
-                headerHtml = `<div class="company-info"><h1>${cn2}</h1>`;
-                if (companyInfo.company_address) headerHtml += `<p>${companyInfo.company_address}</p>`;
-                if (companyInfo.company_phone) headerHtml += `<p>Tel: ${companyInfo.company_phone}</p>`;
-                if (companyInfo.company_email) headerHtml += `<p>Email: ${companyInfo.company_email}</p>`;
-                headerHtml += '</div>';
-              }
-              let html = `<!DOCTYPE html><html><head><title>Amortization Report</title>
-                <style>
-                  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; font-size: 12px; }
-                  h1 { font-size: 20px; margin-bottom: 5px; }
-                  .subtitle { color: #666; margin-bottom: 20px; font-size: 13px; }
-                  .company-info { text-align: center; margin-bottom: 20px; }
-                  .company-info h1 { font-size: 22px; margin-bottom: 2px; }
-                  .company-info p { margin: 0; color: #666; font-size: 12px; }
-                  table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-                  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-                  th { background: #f5f5f5; font-weight: 600; }
-                  .loan-header td { background: #e8f0fe; font-weight: 600; }
-                  .paid { color: #10b981; font-weight: 600; }
-                  .partial { color: #f59e0b; font-weight: 600; }
-                  .pending { color: #ef4444; font-weight: 600; }
-                  .summary { display: flex; gap: 24px; margin-bottom: 16px; font-size: 13px; }
-                  .summary span { background: #f9f9f9; padding: 6px 12px; border-radius: 4px; }
-                  .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 32px; margin-bottom: 24px; }
-                  .signatures > div { text-align: center; }
-                  .sig-line { border-bottom: 1px solid #9ca3af; margin-bottom: 4px; height: 40px; }
-                  .sig-name { font-weight: 600; margin: 0; font-size: 12px; }
-                  .sig-role { color: #6b7280; font-size: 10px; margin: 0; }
-                  .sig-date { color: #9ca3af; font-size: 10px; margin-top: 4px; }
-                </style>
-              </head><body>
-              ${headerHtml}
-              <h1>Amortization Schedule Report</h1>
-              <div class="subtitle">Generated: ${new Date().toLocaleString()} ${borrowerFilter ? '| Filtered by borrower' : '| All active loans'}</div>`;
+<Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
+  let html = `<!DOCTYPE html><html><head><title>Amortization Report</title>
+    <style>${printStyles}</style>
+  </head><body>
+  ${companyHeaderHtml(companyInfo)}
+  <div class="report-title">Amortization Schedule Report</div>
+  <div class="report-subtitle">Generated: ${new Date().toLocaleString()} ${borrowerFilter ? '&middot; Filtered by borrower' : '&middot; All active loans'}</div>`;
 
-              let grandTotalPaid = 0, grandTotalPartial = 0, grandTotalUnpaid = 0;
-              for (const loan of amortData) {
-                grandTotalPaid += loan.paid;
-                grandTotalPartial += loan.partial;
-                grandTotalUnpaid += loan.unpaid;
-                html += `<div class="summary">
-                  <span><strong>${loan.borrower_name}</strong> (${loan.borrower_code})</span>
-                  <span>Loan: ${loan.loan_number}</span>
-                  <span>Balance: ${formatCurrency(loan.outstanding_balance)}</span>
-                  <span>Paid: ${loan.paid} | Partial: ${loan.partial} | Unpaid: ${loan.unpaid}</span>
-                </div>
-                <table>
-                  <thead><tr>
-                    <th>#</th><th>Due Date</th><th>Total Due</th><th>Paid Amount</th><th>Penalty</th><th>Payment Date</th><th>Status</th>
-                  </tr></thead><tbody>`;
-                for (const s of loan.schedules) {
-                  const statusClass = s.status === 'paid' ? 'paid' : s.status === 'partial' ? 'partial' : 'pending';
-                  html += `<tr>
-                    <td>${s.installment_no}</td>
-                    <td>${new Date(s.due_date).toLocaleDateString()}</td>
-                    <td>${formatCurrency(s.total_due)}</td>
-                    <td>${formatCurrency(s.paid_amount)}</td>
-                    <td>${formatCurrency(s.penalty_amount)}</td>
-                    <td>${s.paid_at ? new Date(s.paid_at).toLocaleDateString() : '-'}</td>
-                    <td class="${statusClass}">${s.status.toUpperCase()}</td>
-                  </tr>`;
-                }
-                html += `</tbody></table>`;
-                html += `<div class="signatures">
-                  <div><div class="sig-line"></div><p class="sig-name">${loan.borrower_name || ''}</p><p class="sig-role">Borrower Signature</p><p class="sig-date">Date: _______________</p></div>
-                  <div><div class="sig-line"></div><p class="sig-name">${loan.loan_officer_name || ''}</p><p class="sig-role">Loan Officer Signature</p><p class="sig-date">Date: _______________</p></div>
-                  <div><div class="sig-line"></div><p class="sig-name">Branch Manager</p><p class="sig-role">Branch Manager Signature</p><p class="sig-date">Date: _______________</p></div>
-                </div>`;
-              }
-              html += `<div class="summary">
-                <span><strong>Grand Total</strong></span>
-                <span>Paid: ${grandTotalPaid}</span>
-                <span>Partial: ${grandTotalPartial}</span>
-                <span>Unpaid: ${grandTotalUnpaid}</span>
-              </div>`;
-              html += `</body></html>`;
-              w.document.write(html);
-              w.document.close();
-              setTimeout(() => { w.print(); }, 500);
-            }}>Print Report</Button>
+  let grandTotalPaid = 0, grandTotalPartial = 0, grandTotalUnpaid = 0;
+  for (const loan of amortData) {
+    grandTotalPaid += loan.paid;
+    grandTotalPartial += loan.partial;
+    grandTotalUnpaid += loan.unpaid;
+    html += `<div class="no-break" style="margin-bottom:16px">
+      <div class="summary-cards" style="margin-bottom:8px">
+        <div class="summary-card"><p class="label">Borrower</p><p class="value">${loan.borrower_name} (${loan.borrower_code})</p></div>
+        <div class="summary-card"><p class="label">Loan #</p><p class="value">${loan.loan_number}</p></div>
+        <div class="summary-card"><p class="label">Balance</p><p class="value">${formatCurrency(loan.outstanding_balance)}</p></div>
+      </div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Due Date</th><th class="text-right">Total Due</th><th class="text-right">Paid Amount</th><th class="text-right">Penalty</th><th>Payment Date</th><th class="text-center">Status</th>
+      </tr></thead><tbody>`;
+      for (const s of loan.schedules) {
+        const statusClass = s.status === 'paid' ? 'text-green font-bold' : s.status === 'partial' ? 'text-yellow font-medium' : 'text-muted';
+        html += `<tr>
+          <td>${s.installment_no}</td>
+          <td>${new Date(s.due_date).toLocaleDateString()}</td>
+          <td class="text-right">${formatCurrency(s.total_due)}</td>
+          <td class="text-right">${formatCurrency(s.paid_amount)}</td>
+          <td class="text-right">${parseFloat(s.penalty_amount) > 0 ? `<span class="text-red">${formatCurrency(s.penalty_amount)}</span>` : formatCurrency(0)}</td>
+          <td>${s.paid_at ? new Date(s.paid_at).toLocaleDateString() : '-'}</td>
+          <td class="text-center ${statusClass}">${s.status.toUpperCase()}</td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+      html += `<div class="signatures">
+        <div><div class="sig-line"></div><p class="sig-name">${loan.borrower_name || ''}</p><p class="sig-role">Borrower Signature</p><p class="sig-date">Date: _______________</p></div>
+        <div><div class="sig-line"></div><p class="sig-name">${loan.loan_officer_name || ''}</p><p class="sig-role">Loan Officer Signature</p><p class="sig-date">Date: _______________</p></div>
+        <div><div class="sig-line"></div><p class="sig-name">Branch Manager</p><p class="sig-role">Branch Manager Signature</p><p class="sig-date">Date: _______________</p></div>
+      </div></div>`;
+  }
+  html += `<div class="summary-cards">
+    <div class="summary-card"><p class="label">Total Paid</p><p class="value">${grandTotalPaid}</p></div>
+    <div class="summary-card"><p class="label">Total Partial</p><p class="value text-yellow">${grandTotalPartial}</p></div>
+    <div class="summary-card"><p class="label">Total Unpaid</p><p class="value text-red">${grandTotalUnpaid}</p></div>
+  </div>
+  <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
+  </body></html>`;
+  printWindow(html);
+}}>Print Report</Button>
           </div>
 
           {amortData.length === 0 ? (
@@ -1308,8 +1231,6 @@ export const ReportsPage = () => {
             </div>
             <div className="flex gap-2">
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
-                const w = window.open('', '_blank');
-                if (!w) return;
                 const grandTotal = dailyColData.reduce((s, b) => ({
                   payment_count: s.payment_count + b.payment_count,
                   total_principal: s.total_principal + b.total_principal,
@@ -1317,41 +1238,19 @@ export const ReportsPage = () => {
                   total_penalty: s.total_penalty + b.total_penalty,
                   total_collected: s.total_collected + b.total_collected,
                 }), { payment_count: 0, total_principal: 0, total_interest: 0, total_penalty: 0, total_collected: 0 });
-                let dcHeaderHtml = '';
-                const dc = companyInfo.company_name;
-                if (dc) {
-                  dcHeaderHtml = `<div class="company-info"><h1>${dc}</h1>`;
-                  if (companyInfo.company_address) dcHeaderHtml += `<p>${companyInfo.company_address}</p>`;
-                  if (companyInfo.company_phone) dcHeaderHtml += `<p>Tel: ${companyInfo.company_phone}</p>`;
-                  if (companyInfo.company_email) dcHeaderHtml += `<p>Email: ${companyInfo.company_email}</p>`;
-                  dcHeaderHtml += '</div>';
-                }
                 let html = `<!DOCTYPE html><html><head><title>Daily Collections</title>
-                  <style>
-                    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; font-size: 12px; }
-                    h1 { font-size: 20px; margin-bottom: 5px; }
-                    .subtitle { color: #666; margin-bottom: 20px; font-size: 13px; }
-                    .company-info { text-align: center; margin-bottom: 20px; }
-                    .company-info h1 { font-size: 22px; margin-bottom: 2px; }
-                    .company-info p { margin: 0; color: #666; font-size: 12px; }
-                    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-                    th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-                    th { background: #f5f5f5; font-weight: 600; }
-                    .text-right { text-align: right; }
-                    .grand-total td { font-weight: bold; border-top: 2px solid #000; }
-                    @media print { body { padding: 0; } }
-                  </style></head><body>
-                  ${dcHeaderHtml}
-                  <h1>Daily Collections</h1>
-                  <div class="subtitle">${new Date(dailyColDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
-                  <table><thead><tr><th>Branch</th><th class="text-right">Payments</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Penalty</th><th class="text-right">Total</th></tr></thead><tbody>`;
+                  <style>${printStyles}</style></head><body>
+                  ${companyHeaderHtml(companyInfo)}
+                  <div class="report-title">Daily Collections Report</div>
+                  <div class="report-subtitle">${new Date(dailyColDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                  <table><thead><tr><th>Branch/Area</th><th class="text-right">Payments</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Penalty</th><th class="text-right">Total</th></tr></thead><tbody>`;
                 for (const b of dailyColData) {
                   html += `<tr><td>${b.branch_name}</td><td class="text-right">${b.payment_count}</td><td class="text-right">${formatCurrency(b.total_principal)}</td><td class="text-right">${formatCurrency(b.total_interest)}</td><td class="text-right">${formatCurrency(b.total_penalty)}</td><td class="text-right">${formatCurrency(b.total_collected)}</td></tr>`;
                 }
-                html += `</tbody><tfoot><tr class="grand-total"><td>Grand Total</td><td class="text-right">${grandTotal.payment_count}</td><td class="text-right">${formatCurrency(grandTotal.total_principal)}</td><td class="text-right">${formatCurrency(grandTotal.total_interest)}</td><td class="text-right">${formatCurrency(grandTotal.total_penalty)}</td><td class="text-right">${formatCurrency(grandTotal.total_collected)}</td></tr></tfoot></table></body></html>`;
-                w.document.write(html);
-                w.document.close();
-                setTimeout(() => { w.print(); }, 500);
+                html += `</tbody><tfoot><tr class="grand-total"><td>Grand Total</td><td class="text-right">${grandTotal.payment_count}</td><td class="text-right">${formatCurrency(grandTotal.total_principal)}</td><td class="text-right">${formatCurrency(grandTotal.total_interest)}</td><td class="text-right">${formatCurrency(grandTotal.total_penalty)}</td><td class="text-right">${formatCurrency(grandTotal.total_collected)}</td></tr></tfoot></table>
+                  <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
+                </body></html>`;
+                printWindow(html);
               }}>Print</Button>
               <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
                 exportCSV(dailyColData, `daily-collections-${dailyColDate}`, [

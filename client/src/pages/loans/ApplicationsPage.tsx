@@ -296,8 +296,9 @@ const [collectors, setCollectors] = useState<any[]>([]);
       <title>Loan Document - ${d.application.number}</title>
       <style>
         @page { margin: 10mm 15mm; }
-        body { font-family: system-ui, -apple-system, sans-serif; padding: 20px 40px; color: #111; font-size: 12px; line-height: 1.5; }
-        .letterhead { text-align: center; border-bottom: 2px solid #111; padding-bottom: 16px; margin-bottom: 24px; }
+        @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } thead { display: table-header-group; } tr { page-break-inside: avoid; } }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; padding: 20px 40px; color: #111; font-size: 12px; line-height: 1.5; }
+        .letterhead { text-align: center; border-bottom: 3px double #111; padding-bottom: 16px; margin-bottom: 24px; }
         .letterhead h1 { font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 4px; }
         .letterhead p { margin: 0; color: #6b7280; font-size: 12px; }
         section { margin-bottom: 20px; page-break-inside: avoid; }
@@ -310,9 +311,10 @@ const [collectors, setCollectors] = useState<any[]>([]);
         .summary-grid p:first-child { font-size: 10px; color: #6b7280; margin: 0 0 2px; }
         .summary-grid p:last-child { font-size: 13px; font-weight: 600; margin: 0; }
         table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        th { background: #1f2937; color: white; padding: 6px 8px; text-align: left; border: 1px solid #374151; font-size: 10px; }
+        th { background: #1f2937; color: white; padding: 6px 8px; text-align: left; border: 1px solid #374151; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; }
         td { padding: 4px 8px; border: 1px solid #d1d5db; font-size: 10px; }
-        tfoot td { background: #f3f4f6; font-weight: 700; border-top: 2px solid #374151; }
+        tr:nth-child(even) td { background: #f9fafb; }
+        tfoot td { background: #f3f4f6 !important; font-weight: 700; border-top: 2px solid #374151; }
         .signatures { display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px; margin-top: 40px; }
         .signatures > div { text-align: center; }
         .signatures .line { border-bottom: 1px solid #9ca3af; margin-bottom: 4px; height: 40px; }

@@ -30,6 +30,19 @@ export const StatementOfAccountPage = () => {
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4">
+      <style>{`
+        @media print {
+          @page { margin: 12mm 15mm; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 11px; }
+          thead { display: table-header-group; }
+          tr { page-break-inside: avoid; }
+          .no-print { display: none !important; }
+          h1 { font-size: 18px; }
+          table { font-size: 10px; }
+          th { background: #1f2937 !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .border-b { border-bottom-color: #d1d5db !important; }
+        }
+      `}</style>
       <div className="no-print flex items-center justify-between mb-4">
         <Button appearance="subtle" onClick={() => navigate(-1)} startIcon={<ArrowLeft className="w-4 h-4" />}>Back</Button>
         <Button appearance="primary" onClick={handlePrint} startIcon={<Printer className="w-4 h-4" />}>Print</Button>
