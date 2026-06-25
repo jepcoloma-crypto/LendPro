@@ -2,8 +2,10 @@ import { useState, useRef } from 'react';
 import { Panel, Button, toaster, Message, Modal, Loader, Tag } from 'rsuite';
 import api, { utilitiesApi } from '../../services/api';
 import { RefreshCw, Trash2, HeartPulse, Database, Download, Upload, AlertTriangle } from 'lucide-react';
+import { AuditLogsPage } from '../audit-logs/AuditLogsPage';
+import { SettingsPage } from '../settings/SettingsPage';
 
-export const UtilitiesPage = () => {
+const SystemToolsTab = () => {
   const [health, setHealth] = useState<any>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [recalcLoading, setRecalcLoading] = useState(false);
@@ -103,14 +105,9 @@ export const UtilitiesPage = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Utilities</h1>
-        <p className="text-gray-500 dark:text-gray-400">System maintenance and management tools</p>
-      </div>
-
+    <div className="space-y-4">
       {/* Health Check */}
-       <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-sm font-semibold flex items-center gap-2"><HeartPulse className="w-4 h-4 text-green-500" /> System Health</div>}>
+      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-sm font-semibold flex items-center gap-2"><HeartPulse className="w-4 h-4 text-green-500" /> System Health</div>}>
         <p className="text-sm text-gray-500 mb-3">Check database connection and table record counts.</p>
         <Button appearance="primary" onClick={checkHealth} loading={healthLoading} startIcon={<RefreshCw className="w-4 h-4" />}>Run Health Check</Button>
         {health && (
@@ -133,7 +130,7 @@ export const UtilitiesPage = () => {
 
       {/* Database Backup */}
       <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-sm font-semibold flex items-center gap-2"><Download className="w-4 h-4 text-purple-500" /> Database Backup</div>}>
-        <p className="text-sm text-gray-500 mb-3">Download a complete SQL dump of the database — schema + all data. Use with <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">psql</code> to restore.</p>
+        <p className="text-sm text-gray-500 mb-3">Download a complete SQL dump of the database — schema + all data.</p>
         {backupLoading && backupTotal > 0 && (
           <div className="mb-3">
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
@@ -149,21 +146,21 @@ export const UtilitiesPage = () => {
 
       {/* Database Restore */}
       <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-amber-200 dark:border-amber-800" bordered header={<div className="text-sm font-semibold flex items-center gap-2 text-amber-600"><Upload className="w-4 h-4" /> Database Restore</div>}>
-        <p className="text-sm text-gray-500 mb-3">Upload a previously downloaded <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">.sql</code> backup file to restore the database. This will <strong className="text-red-500">overwrite existing data</strong>.</p>
+        <p className="text-sm text-gray-500 mb-3">Upload a <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">.sql</code> backup to restore. <strong className="text-red-500">Overwrites existing data.</strong></p>
         <input type="file" accept=".sql" ref={fileInputRef} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setRestoreFile(f); setRestoreOpen(true); } }} />
         <Button appearance="primary" color="orange" onClick={() => fileInputRef.current?.click()} startIcon={<Upload className="w-4 h-4" />}>Upload & Restore</Button>
       </Panel>
 
       {/* Recalculate Balances */}
       <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-sm font-semibold flex items-center gap-2"><Database className="w-4 h-4 text-blue-500" /> Recalculate Loan Balances</div>}>
-        <p className="text-sm text-gray-500 mb-3">Recompute outstanding balances for all active loans based on paid principal in amortization schedules. Fixes any balance discrepancies.</p>
+        <p className="text-sm text-gray-500 mb-3">Recompute outstanding balances for all active loans.</p>
         <Button appearance="primary" color="blue" onClick={recalculate} loading={recalcLoading} startIcon={<RefreshCw className="w-4 h-4" />}>Recalculate Now</Button>
         {recalcResult && <p className="text-sm text-green-600 mt-2">{recalcResult}</p>}
       </Panel>
 
       {/* Apply Penalties */}
       <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-sm font-semibold flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-orange-500" /> Apply Overdue Penalties</div>}>
-        <p className="text-sm text-gray-500 mb-3">Scan all overdue amortization schedules and apply late fees/penalties based on each loan's penalty configuration. Idempotent — skips schedules that already have a penalty recorded.</p>
+        <p className="text-sm text-gray-500 mb-3">Scan overdue schedules and apply late fees/penalties.</p>
         <Button appearance="primary" color="orange" onClick={async () => {
           setPenaltyLoading(true); setPenaltyResult(null);
           try {
@@ -178,7 +175,7 @@ export const UtilitiesPage = () => {
 
       {/* Clear Operational Data */}
       <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-red-200 dark:border-red-800" bordered header={<div className="text-sm font-semibold flex items-center gap-2 text-red-600"><Trash2 className="w-4 h-4" /> Clear Operational Data</div>}>
-        <p className="text-sm text-gray-500 mb-3">Remove all borrowers, applications, loans, payments, and collection data. Preserves users, roles, loan products, charges, and settings.</p>
+        <p className="text-sm text-gray-500 mb-3">Remove all operational data while preserving users, roles, loan products, charges, and settings.</p>
         <Button appearance="primary" color="red" onClick={() => setClearOpen(true)} startIcon={<Trash2 className="w-4 h-4" />}>Clear All Data</Button>
       </Panel>
 
@@ -204,9 +201,7 @@ export const UtilitiesPage = () => {
                 {restoreNote && <p className="text-xs text-amber-600 mt-1">{restoreNote}</p>}
               </div>
             )}
-            {!restoreLoading && !restoreFile && (
-              <p className="text-sm text-green-600 font-medium">Restore complete!</p>
-            )}
+            {!restoreLoading && !restoreFile && <p className="text-sm text-green-600 font-medium">Restore complete!</p>}
             {!restoreLoading && restoreFile && (
               <>
                 <p className="text-sm text-red-500 font-medium">This will overwrite all existing data with the backup contents.</p>
@@ -294,6 +289,34 @@ export const UtilitiesPage = () => {
           <Button onClick={() => setClearOpen(false)} appearance="subtle">Cancel</Button>
         </Modal.Footer>
       </Modal>
+    </div>
+  );
+};
+
+export const UtilitiesPage = () => {
+  const [tab, setTab] = useState('tools');
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Utilities</h1>
+        <p className="text-gray-500 dark:text-gray-400">System maintenance, monitoring, and configuration</p>
+      </div>
+      <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+        {[
+          { key: 'tools', label: 'System Tools' },
+          { key: 'audit', label: 'Audit Logs' },
+          { key: 'settings', label: 'Settings' },
+        ].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`text-sm px-3 py-1.5 rounded-t font-medium transition-colors ${tab === t.key ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'tools' && <SystemToolsTab />}
+      {tab === 'audit' && <AuditLogsPage />}
+      {tab === 'settings' && <SettingsPage />}
     </div>
   );
 };

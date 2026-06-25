@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Panel, Table, Tag, Button, SelectPicker, DatePicker, Message, toaster } from 'rsuite';
 import { loansApi, reportsApi, borrowersApi, usersApi, branchesApi } from '../../services/api';
-import { Download, Printer } from 'lucide-react';
+import { Download, Printer, ExternalLink } from 'lucide-react';
 import { formatCurrency, exportCSV } from '../../utils/format';
 import { printStyles, companyHeaderHtml, printWindow } from '../../utils/print';
 import { getCompanySettings } from '../../utils/companySettings';
+import { CollectorRemittancePage } from '../audit/CollectorRemittancePage';
+import { ExpensesPage } from '../expenses/ExpensesPage';
 
 const { Column, HeaderCell, Cell } = Table;
 
@@ -46,6 +48,26 @@ export const ReportsPage = () => {
   const [processingChargesGrand, setProcessingChargesGrand] = useState<any>({});
   const [processingChargesLoading, setProcessingChargesLoading] = useState(false);
 
+  const [cashFlowData, setCashFlowData] = useState<any>({ collections: [], otherIncome: [], disbursements: [], expenses: [] });
+  const [cashFlowLoading, setCashFlowLoading] = useState(false);
+  const [cashFlowStartDate, setCashFlowStartDate] = useState<Date | null>(null);
+  const [cashFlowEndDate, setCashFlowEndDate] = useState<Date | null>(null);
+
+  const [expenseReportData, setExpenseReportData] = useState<any>({ details: [], totals: [], grandTotal: 0 });
+  const [expenseReportLoading, setExpenseReportLoading] = useState(false);
+  const [expenseReportStartDate, setExpenseReportStartDate] = useState<Date | null>(null);
+  const [expenseReportEndDate, setExpenseReportEndDate] = useState<Date | null>(null);
+
+  const [incomeReportData, setIncomeReportData] = useState<any>({ details: [], grandTotal: 0 });
+  const [incomeReportLoading, setIncomeReportLoading] = useState(false);
+  const [incomeReportStartDate, setIncomeReportStartDate] = useState<Date | null>(null);
+  const [incomeReportEndDate, setIncomeReportEndDate] = useState<Date | null>(null);
+
+  const [branchPLData, setBranchPLData] = useState<any[]>([]);
+  const [branchPLLoading, setBranchPLLoading] = useState(false);
+  const [branchPLStartDate, setBranchPLStartDate] = useState<Date | null>(null);
+  const [branchPLEndDate, setBranchPLEndDate] = useState<Date | null>(null);
+
   const [pastDueData, setPastDueData] = useState<any[]>([]);
   const [pastDueLoading, setPastDueLoading] = useState(false);
   const [pastDueBranchFilter, setPastDueBranchFilter] = useState<string | null>(null);
@@ -56,7 +78,8 @@ export const ReportsPage = () => {
 
   const [dailyColData, setDailyColData] = useState<any[]>([]);
   const [dailyColLoading, setDailyColLoading] = useState(false);
-  const [dailyColDate, setDailyColDate] = useState(new Date().toISOString().slice(0, 10));
+  const [colStartDate, setColStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [colEndDate, setColEndDate] = useState(new Date().toISOString().slice(0, 10));
 
   const [loansGrantedData, setLoansGrantedData] = useState<any[]>([]);
   const [loansGrantedLoading, setLoansGrantedLoading] = useState(false);
@@ -165,6 +188,70 @@ export const ReportsPage = () => {
   }, [activeTab]);
 
   useEffect(() => {
+    const fetchCashFlow = async () => {
+      if (activeTab !== 'cash-flow') return;
+      setCashFlowLoading(true);
+      try {
+        const params: any = {};
+        if (cashFlowStartDate) params.startDate = cashFlowStartDate.toISOString().split('T')[0];
+        if (cashFlowEndDate) params.endDate = cashFlowEndDate.toISOString().split('T')[0];
+        const { data } = await reportsApi.getCashFlow(params);
+        setCashFlowData(data.data || { collections: [], otherIncome: [], disbursements: [], expenses: [] });
+      } catch { toaster.push(<Message type="error">Failed to load cash flow data</Message>, { placement: 'topEnd' }); }
+      finally { setCashFlowLoading(false); }
+    };
+    fetchCashFlow();
+  }, [activeTab, cashFlowStartDate, cashFlowEndDate]);
+
+  useEffect(() => {
+    const fetchExpenseReport = async () => {
+      if (activeTab !== 'expense-report') return;
+      setExpenseReportLoading(true);
+      try {
+        const params: any = {};
+        if (expenseReportStartDate) params.startDate = expenseReportStartDate.toISOString().split('T')[0];
+        if (expenseReportEndDate) params.endDate = expenseReportEndDate.toISOString().split('T')[0];
+        const { data } = await reportsApi.getExpenseReport(params);
+        setExpenseReportData(data.data || { details: [], totals: [], grandTotal: 0 });
+      } catch { toaster.push(<Message type="error">Failed to load expense report</Message>, { placement: 'topEnd' }); }
+      finally { setExpenseReportLoading(false); }
+    };
+    fetchExpenseReport();
+  }, [activeTab, expenseReportStartDate, expenseReportEndDate]);
+
+  useEffect(() => {
+    const fetchIncomeReport = async () => {
+      if (activeTab !== 'income-report') return;
+      setIncomeReportLoading(true);
+      try {
+        const params: any = {};
+        if (incomeReportStartDate) params.startDate = incomeReportStartDate.toISOString().split('T')[0];
+        if (incomeReportEndDate) params.endDate = incomeReportEndDate.toISOString().split('T')[0];
+        const { data } = await reportsApi.getIncomeReport(params);
+        setIncomeReportData(data.data || { details: [], grandTotal: 0 });
+      } catch { toaster.push(<Message type="error">Failed to load income report</Message>, { placement: 'topEnd' }); }
+      finally { setIncomeReportLoading(false); }
+    };
+    fetchIncomeReport();
+  }, [activeTab, incomeReportStartDate, incomeReportEndDate]);
+
+  useEffect(() => {
+    const fetchBranchPL = async () => {
+      if (activeTab !== 'branch-pl') return;
+      setBranchPLLoading(true);
+      try {
+        const params: any = {};
+        if (branchPLStartDate) params.startDate = branchPLStartDate.toISOString().split('T')[0];
+        if (branchPLEndDate) params.endDate = branchPLEndDate.toISOString().split('T')[0];
+        const { data } = await reportsApi.getBranchPL(params);
+        setBranchPLData(data.data || []);
+      } catch { setBranchPLData([]); }
+      finally { setBranchPLLoading(false); }
+    };
+    fetchBranchPL();
+  }, [activeTab, branchPLStartDate, branchPLEndDate]);
+
+  useEffect(() => {
     const fetchAmort = async () => {
       try {
         const params: any = {};
@@ -249,13 +336,13 @@ export const ReportsPage = () => {
       if (activeTab !== 'daily-collections') return;
       setDailyColLoading(true);
       try {
-        const { data } = await reportsApi.getDailyCollections({ date: dailyColDate });
+        const { data } = await reportsApi.getDailyCollections({ startDate: colStartDate, endDate: colEndDate });
         setDailyColData(data.data.branches || []);
       } catch { toaster.push(<Message type="error">Failed to load daily collections</Message>, { placement: 'topEnd' }); }
       finally { setDailyColLoading(false); }
     };
     fetchDailyCol();
-  }, [activeTab, dailyColDate]);
+  }, [activeTab, colStartDate, colEndDate]);
 
   useEffect(() => {
     const fetchLoansGranted = async () => {
@@ -421,6 +508,29 @@ export const ReportsPage = () => {
     } catch { toaster.push(<Message type="error">Failed to load SOA data</Message>, { placement: 'topEnd' }); }
   };
 
+  const buildCashFlowRows = (data: any) => {
+    const { collections, otherIncome, disbursements, expenses } = data;
+    const dateMap: Record<string, any> = {};
+    const add = (rows: any[], field: string) => {
+      for (const r of rows) {
+        const d = r.date.slice(0, 10);
+        if (!dateMap[d]) dateMap[d] = { date: d, collections: 0, other_income: 0, disbursements: 0, expenses: 0 };
+        dateMap[d][field] += parseFloat(r.amount || 0);
+      }
+    };
+    add(collections || [], 'collections');
+    add(otherIncome || [], 'other_income');
+    add(disbursements || [], 'disbursements');
+    add(expenses || [], 'expenses');
+    const rows = Object.values(dateMap).sort((a: any, b: any) => a.date.localeCompare(b.date));
+    for (const r of rows) {
+      r.inflow = r.collections + r.other_income;
+      r.outflow = r.disbursements + r.expenses;
+      r.net = r.inflow - r.outflow;
+    }
+    return rows;
+  };
+
   const printReport = (title: string, data: any[], columns: { key: string; label: string; format?: (v: any) => string }[]) => {
     let html = `<!DOCTYPE html><html><head><title>${title}</title>
       <style>${printStyles}</style></head><body>
@@ -442,10 +552,54 @@ export const ReportsPage = () => {
     printWindow(html);
   };
 
+  const printPLReport = () => {
+    const title = 'Branch Profit & Loss';
+    const period = `${branchPLStartDate ? branchPLStartDate.toLocaleDateString() : 'Start'} - ${branchPLEndDate ? branchPLEndDate.toLocaleDateString() : 'End'}`;
+    let html = `<!DOCTYPE html><html><head><title>${title}</title>
+      <style>${printStyles}</style></head><body>
+      ${companyHeaderHtml(companyInfo)}
+      <div class="report-title">${title}</div>
+      <div class="report-subtitle">Period: ${period} &middot; Generated: ${new Date().toLocaleString()}</div>
+      <table><thead><tr>
+        <th>Branch</th><th>Interest Income</th><th>Penalty Income</th><th>Processing Charges</th>
+        <th>Other Income</th><th>Total Income</th><th>Total Expenses</th><th>Net P&L</th>
+      </tr></thead><tbody>`;
+    let totalIncome = 0, totalExpenses = 0, totalNet = 0;
+    for (const row of branchPLData) {
+      const inc = Number(row.total_income || 0);
+      const exp = Number(row.total_expenses || 0);
+      const net = Number(row.net_pl || 0);
+      totalIncome += inc; totalExpenses += exp; totalNet += net;
+      html += `<tr>
+        <td>${row.branch_name || 'Unassigned'}</td>
+        <td class="right">${formatCurrency(row.interest_income)}</td>
+        <td class="right">${formatCurrency(row.penalty_income)}</td>
+        <td class="right">${formatCurrency(row.charge_income)}</td>
+        <td class="right">${formatCurrency(row.other_income)}</td>
+        <td class="right">${formatCurrency(inc)}</td>
+        <td class="right">${formatCurrency(exp)}</td>
+        <td class="right ${net >= 0 ? 'green' : 'red'}">${formatCurrency(net)}</td>
+      </tr>`;
+    }
+    html += `<tr class="total"><td>TOTAL</td><td class="right">${formatCurrency(totalIncome)}</td><td></td><td></td><td></td>
+      <td class="right">${formatCurrency(totalIncome)}</td><td class="right">${formatCurrency(totalExpenses)}</td>
+      <td class="right ${totalNet >= 0 ? 'green' : 'red'}">${formatCurrency(totalNet)}</td></tr>`;
+    html += `</tbody></table>
+      <div class="signatures">
+        <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+        <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+        <div><div class="sig-line"></div><p class="sig-name">Approved By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+      </div>
+      <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
+    </body></html>`;
+    printWindow(html);
+  };
+
   const categories: { key: string; label: string; tabs: { key: string; label: string }[] }[] = [
       { key: 'collections', label: 'Collections', tabs: [
-        { key: 'daily-collections', label: 'Daily Collections' },
+        { key: 'daily-collections', label: 'Collections' },
         { key: 'expected-collections', label: 'Expected Collections' },
+        { key: 'remittance-audit', label: 'Remittance Audit' },
       ]},
     { key: 'loans', label: 'Loans', tabs: [
       { key: 'loans-granted', label: 'Loans Granted' },
@@ -466,7 +620,15 @@ export const ReportsPage = () => {
     ]},
     { key: 'financial', label: 'Financial', tabs: [
       { key: 'interest', label: 'Interest Income' },
+      { key: 'expense-report', label: 'Expense Report' },
+      { key: 'income-report', label: 'Income Report' },
       { key: 'processing-charges', label: 'Processing Charges' },
+      { key: 'cash-flow', label: 'Cash Flow' },
+      { key: 'branch-pl', label: 'Branch P&L' },
+    ]},
+    { key: 'management', label: 'Management', tabs: [
+      { key: 'expenses-mgmt', label: 'Expenses' },
+      { key: 'income-mgmt', label: 'Other Income' },
     ]},
   ];
 
@@ -701,6 +863,227 @@ export const ReportsPage = () => {
               <Column width={150}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_amount)}</Cell></Column>
             </Table>
           </Panel>
+        </div>
+      )}
+
+      {activeTab === 'cash-flow' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <DatePicker placeholder="Start date" value={cashFlowStartDate} onChange={(v) => setCashFlowStartDate(v)} oneTap />
+              <DatePicker placeholder="End date" value={cashFlowEndDate} onChange={(v) => setCashFlowEndDate(v)} oneTap />
+            </div>
+            <div className="flex gap-3">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
+                const rows = buildCashFlowRows(cashFlowData);
+                printReport('Cash Flow Statement', rows, [
+                  { key: 'date', label: 'Date' },
+                  { key: 'inflow', label: 'Inflow (₱)', format: (v) => formatCurrency(v) },
+                  { key: 'outflow', label: 'Outflow (₱)', format: (v) => formatCurrency(v) },
+                  { key: 'net', label: 'Net (₱)', format: (v) => formatCurrency(v) },
+                ]);
+              }}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+                const rows = buildCashFlowRows(cashFlowData);
+                exportCSV(rows, 'cash-flow', [
+                  { key: 'date', label: 'Date' },
+                  { key: 'collections', label: 'Collections', format: (v) => formatCurrency(v) },
+                  { key: 'other_income', label: 'Other Income', format: (v) => formatCurrency(v) },
+                  { key: 'disbursements', label: 'Disbursements', format: (v) => formatCurrency(v) },
+                  { key: 'expenses', label: 'Expenses', format: (v) => formatCurrency(v) },
+                  { key: 'net', label: 'Net', format: (v) => formatCurrency(v) },
+                ]);
+              }}>Export CSV</Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+              <p className="text-sm text-green-600 dark:text-green-400 font-medium">Total Collections</p>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-300">{formatCurrency(cashFlowData.collections.reduce((s: number, r: any) => s + parseFloat(r.amount || 0), 0))}</p>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+              <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Total Other Income</p>
+              <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{formatCurrency(cashFlowData.otherIncome.reduce((s: number, r: any) => s + parseFloat(r.amount || 0), 0))}</p>
+            </div>
+            <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
+              <p className="text-sm text-red-600 dark:text-red-400 font-medium">Total Disbursements</p>
+              <p className="text-2xl font-bold text-red-700 dark:text-red-300">{formatCurrency(cashFlowData.disbursements.reduce((s: number, r: any) => s + parseFloat(r.amount || 0), 0))}</p>
+            </div>
+            <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 border border-orange-200 dark:border-orange-800">
+              <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">Total Expenses</p>
+              <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">{formatCurrency(cashFlowData.expenses.reduce((s: number, r: any) => s + parseFloat(r.amount || 0), 0))}</p>
+            </div>
+          </div>
+
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Daily Cash Flow">
+            <Table data={buildCashFlowRows(cashFlowData)} loading={cashFlowLoading} height={500} rowHeight={45}>
+              <Column width={120}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.date).toLocaleDateString()}</Cell></Column>
+              <Column width={150}><HeaderCell>Collections</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.collections)}</span>}</Cell></Column>
+              <Column width={150}><HeaderCell>Other Income</HeaderCell><Cell>{(r: any) => <span className="text-blue-600 font-medium">{formatCurrency(r.other_income)}</span>}</Cell></Column>
+              <Column width={150}><HeaderCell>Disbursements</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-medium">{formatCurrency(r.disbursements)}</span>}</Cell></Column>
+              <Column width={150}><HeaderCell>Expenses</HeaderCell><Cell>{(r: any) => <span className="text-orange-600 font-medium">{formatCurrency(r.expenses)}</span>}</Cell></Column>
+              <Column width={130}><HeaderCell>Net</HeaderCell><Cell>{(r: any) => {
+                const net = r.collections + r.other_income - r.disbursements - r.expenses;
+                return <span className={net >= 0 ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>{formatCurrency(net)}</span>;
+              }}</Cell></Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'expense-report' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <DatePicker placeholder="Start date" value={expenseReportStartDate} onChange={(v) => setExpenseReportStartDate(v)} oneTap />
+              <DatePicker placeholder="End date" value={expenseReportEndDate} onChange={(v) => setExpenseReportEndDate(v)} oneTap />
+            </div>
+            <div className="flex gap-3">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Expense Report', expenseReportData.details, [
+                { key: 'date', label: 'Date', format: (v) => new Date(v).toLocaleDateString() },
+                { key: 'category', label: 'Category' },
+                { key: 'amount', label: 'Amount', format: (v) => formatCurrency(v) },
+                { key: 'payee', label: 'Payee' },
+                { key: 'description', label: 'Notes' },
+              ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(expenseReportData.details, 'expense-report', [
+                { key: 'date', label: 'Date', format: (v) => new Date(v).toISOString().split('T')[0] },
+                { key: 'category', label: 'Category' },
+                { key: 'amount', label: 'Amount' },
+                { key: 'payee', label: 'Payee' },
+                { key: 'description', label: 'Notes' },
+              ])}>Export CSV</Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
+              <p className="text-sm text-red-600 dark:text-red-400 font-medium">Total Expenses</p>
+              <p className="text-2xl font-bold text-red-700 dark:text-red-300">{formatCurrency(expenseReportData.grandTotal)}</p>
+            </div>
+            <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 border border-orange-200 dark:border-orange-800">
+              <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">Categories</p>
+              <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">{expenseReportData.totals.length}</p>
+            </div>
+          </div>
+
+          {expenseReportData.totals.length > 0 && (
+            <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6" bordered header="By Category">
+              <Table data={expenseReportData.totals} height={200} rowHeight={45}>
+                <Column flexGrow={1}><HeaderCell>Category</HeaderCell><Cell dataKey="category" /></Column>
+                <Column width={100}><HeaderCell>Count</HeaderCell><Cell dataKey="count" /></Column>
+                <Column width={150}><HeaderCell>Total</HeaderCell><Cell>{(r: any) => formatCurrency(r.total)}</Cell></Column>
+              </Table>
+            </Panel>
+          )}
+
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Expense Details">
+            <Table data={expenseReportData.details} loading={expenseReportLoading} height={400} rowHeight={45}>
+              <Column width={110}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.date).toLocaleDateString()}</Cell></Column>
+              <Column width={130}><HeaderCell>Category</HeaderCell><Cell>{(r: any) => <Tag>{r.category}</Tag>}</Cell></Column>
+              <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-medium">{formatCurrency(r.amount)}</span>}</Cell></Column>
+              <Column width={150}><HeaderCell>Payee</HeaderCell><Cell dataKey="payee" /></Column>
+              <Column flexGrow={1}><HeaderCell>Notes</HeaderCell><Cell dataKey="description" /></Column>
+              <Column width={120}><HeaderCell>Entered By</HeaderCell><Cell dataKey="created_by_name" /></Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'income-report' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <DatePicker placeholder="Start date" value={incomeReportStartDate} onChange={(v) => setIncomeReportStartDate(v)} oneTap />
+              <DatePicker placeholder="End date" value={incomeReportEndDate} onChange={(v) => setIncomeReportEndDate(v)} oneTap />
+            </div>
+            <div className="flex gap-3">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Other Income Report', incomeReportData.details, [
+                { key: 'date', label: 'Date', format: (v) => new Date(v).toLocaleDateString() },
+                { key: 'source', label: 'Source' },
+                { key: 'amount', label: 'Amount', format: (v) => formatCurrency(v) },
+                { key: 'description', label: 'Description' },
+              ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(incomeReportData.details, 'income-report', [
+                { key: 'date', label: 'Date', format: (v) => new Date(v).toISOString().split('T')[0] },
+                { key: 'source', label: 'Source' },
+                { key: 'amount', label: 'Amount' },
+                { key: 'description', label: 'Description' },
+              ])}>Export CSV</Button>
+            </div>
+          </div>
+
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800 mb-6">
+            <p className="text-sm text-green-600 dark:text-green-400 font-medium">Total Other Income</p>
+            <p className="text-2xl font-bold text-green-700 dark:text-green-300">{formatCurrency(incomeReportData.grandTotal)}</p>
+          </div>
+
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Income Details">
+            <Table data={incomeReportData.details} loading={incomeReportLoading} height={400} rowHeight={45}>
+              <Column width={110}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.date).toLocaleDateString()}</Cell></Column>
+              <Column width={200}><HeaderCell>Source</HeaderCell><Cell dataKey="source" /></Column>
+              <Column width={130}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.amount)}</span>}</Cell></Column>
+              <Column flexGrow={1}><HeaderCell>Description</HeaderCell><Cell dataKey="description" /></Column>
+              <Column width={120}><HeaderCell>Entered By</HeaderCell><Cell dataKey="created_by_name" /></Column>
+            </Table>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'branch-pl' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <DatePicker placeholder="Start date" value={branchPLStartDate} onChange={(v) => setBranchPLStartDate(v)} oneTap />
+              <DatePicker placeholder="End date" value={branchPLEndDate} onChange={(v) => setBranchPLEndDate(v)} oneTap />
+            </div>
+            <div className="flex gap-3">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printPLReport()}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(branchPLData, 'branch-pl', [
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'interest_income', label: 'Interest Income', format: (v) => String(v) },
+                { key: 'penalty_income', label: 'Penalty Income', format: (v) => String(v) },
+                { key: 'charge_income', label: 'Processing Charges', format: (v) => String(v) },
+                { key: 'other_income', label: 'Other Income', format: (v) => String(v) },
+                { key: 'total_income', label: 'Total Income', format: (v) => String(v) },
+                { key: 'total_expenses', label: 'Total Expenses', format: (v) => String(v) },
+                { key: 'net_pl', label: 'Net P&L', format: (v) => String(v) },
+              ])}>Export CSV</Button>
+            </div>
+          </div>
+
+          <Table data={branchPLData} loading={branchPLLoading} height={500} rowHeight={50} virtualized>
+            <Column width={180}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+            <Column width={140} align="right"><HeaderCell>Interest Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.interest_income)}</span>}</Cell></Column>
+            <Column width={140} align="right"><HeaderCell>Penalty Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.penalty_income)}</span>}</Cell></Column>
+            <Column width={150} align="right"><HeaderCell>Processing Charges</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.charge_income)}</span>}</Cell></Column>
+            <Column width={140} align="right"><HeaderCell>Other Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.other_income)}</span>}</Cell></Column>
+            <Column width={140} align="right"><HeaderCell>Total Income</HeaderCell><Cell>{(r: any) => <span className="text-green-700 font-bold">{formatCurrency(r.total_income)}</span>}</Cell></Column>
+            <Column width={140} align="right"><HeaderCell>Total Expenses</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-medium">{formatCurrency(r.total_expenses)}</span>}</Cell></Column>
+            <Column width={140} align="right"><HeaderCell>Net P&L</HeaderCell><Cell>{(r: any) => <span className={`font-bold ${r.net_pl >= 0 ? 'text-green-700' : 'text-red-700'}`}>{formatCurrency(r.net_pl)}</span>}</Cell></Column>
+          </Table>
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+              <p className="text-sm text-green-600 dark:text-green-400 font-medium">Total Income</p>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+                {formatCurrency(branchPLData.reduce((s: number, r: any) => s + Number(r.total_income || 0), 0))}
+              </p>
+            </div>
+            <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
+              <p className="text-sm text-red-600 dark:text-red-400 font-medium">Total Expenses</p>
+              <p className="text-2xl font-bold text-red-700 dark:text-red-300">
+                {formatCurrency(branchPLData.reduce((s: number, r: any) => s + Number(r.total_expenses || 0), 0))}
+              </p>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+              <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Net P&L</p>
+              <p className={`text-2xl font-bold ${branchPLData.reduce((s: number, r: any) => s + Number(r.net_pl || 0), 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {formatCurrency(branchPLData.reduce((s: number, r: any) => s + Number(r.net_pl || 0), 0))}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1233,26 +1616,30 @@ export const ReportsPage = () => {
       {activeTab === 'daily-collections' && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <div className="flex gap-3">
-              <div className="relative">
-                <input type="date" value={dailyColDate} onChange={(e) => setDailyColDate(e.target.value)}
-                  className="rs-input pl-3 w-44" />
+            <div className="flex gap-3 items-center">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">From:</span>
+                <input type="date" value={colStartDate} onChange={(e) => setColStartDate(e.target.value)} className="rs-input pl-3 w-40" />
+                <span className="text-sm text-gray-500">To:</span>
+                <input type="date" value={colEndDate} onChange={(e) => setColEndDate(e.target.value)} className="rs-input pl-3 w-40" />
               </div>
             </div>
             <div className="flex gap-2">
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
+                const num = (v: any) => Number(v) || 0;
                 const grandTotal = dailyColData.reduce((s, b) => ({
-                  payment_count: s.payment_count + b.payment_count,
-                  total_principal: s.total_principal + b.total_principal,
-                  total_interest: s.total_interest + b.total_interest,
-                  total_penalty: s.total_penalty + b.total_penalty,
-                  total_collected: s.total_collected + b.total_collected,
+                  payment_count: s.payment_count + num(b.payment_count),
+                  total_principal: s.total_principal + num(b.total_principal),
+                  total_interest: s.total_interest + num(b.total_interest),
+                  total_penalty: s.total_penalty + num(b.total_penalty),
+                  total_collected: s.total_collected + num(b.total_collected),
                 }), { payment_count: 0, total_principal: 0, total_interest: 0, total_penalty: 0, total_collected: 0 });
-                let html = `<!DOCTYPE html><html><head><title>Daily Collections</title>
+                const periodLabel = `${new Date(colStartDate).toLocaleDateString()} — ${new Date(colEndDate).toLocaleDateString()}`;
+                let html = `<!DOCTYPE html><html><head><title>Collections Report</title>
                   <style>${printStyles}</style></head><body>
                   ${companyHeaderHtml(companyInfo)}
-                  <div class="report-title">Daily Collections Report</div>
-                  <div class="report-subtitle">${new Date(dailyColDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                  <div class="report-title">Collections Report</div>
+                  <div class="report-subtitle">${periodLabel}</div>
                   <table><thead><tr><th>Branch/Area</th><th class="text-right">Payments</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Penalty</th><th class="text-right">Total</th></tr></thead><tbody>`;
                 for (const b of dailyColData) {
                   html += `<tr><td>${b.branch_name}</td><td class="text-right">${b.payment_count}</td><td class="text-right">${formatCurrency(b.total_principal)}</td><td class="text-right">${formatCurrency(b.total_interest)}</td><td class="text-right">${formatCurrency(b.total_penalty)}</td><td class="text-right">${formatCurrency(b.total_collected)}</td></tr>`;
@@ -1268,7 +1655,7 @@ export const ReportsPage = () => {
                 printWindow(html);
               }}>Print</Button>
               <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
-                exportCSV(dailyColData, `daily-collections-${dailyColDate}`, [
+                exportCSV(dailyColData, `collections-${colStartDate}-to-${colEndDate}`, [
                   { key: 'branch_name', label: 'Branch' },
                   { key: 'payment_count', label: 'Payments' },
                   { key: 'total_principal', label: 'Principal', format: (v) => formatCurrency(v) },
@@ -1279,7 +1666,7 @@ export const ReportsPage = () => {
               }}>Export CSV</Button>
             </div>
           </div>
-          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Collections for ${new Date(dailyColDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`}>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Collections — ${new Date(colStartDate).toLocaleDateString()} to ${new Date(colEndDate).toLocaleDateString()}`}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -1293,7 +1680,7 @@ export const ReportsPage = () => {
               </thead>
               <tbody>
                 {dailyColData.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-8 text-gray-400">No collections for this date</td></tr>
+                  <tr><td colSpan={6} className="text-center py-8 text-gray-400">No collections for this period</td></tr>
                 ) : dailyColData.map((b) => (
                   <tr key={b.branch_id} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30">
                     <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{b.branch_name}</td>
@@ -1309,11 +1696,11 @@ export const ReportsPage = () => {
                 <tfoot>
                   <tr className="border-t-2 border-gray-300 dark:border-gray-600">
                     <td className="py-3 px-4 font-bold text-gray-900 dark:text-white">Grand Total</td>
-                    <td className="py-3 px-4 text-right font-semibold">{dailyColData.reduce((s, b) => s + b.payment_count, 0)}</td>
-                    <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{formatCurrency(dailyColData.reduce((s, b) => s + b.total_principal, 0))}</td>
-                    <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{formatCurrency(dailyColData.reduce((s, b) => s + b.total_interest, 0))}</td>
-                    <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{formatCurrency(dailyColData.reduce((s, b) => s + b.total_penalty, 0))}</td>
-                    <td className="py-3 px-4 text-right font-bold text-lg text-green-600">{formatCurrency(dailyColData.reduce((s, b) => s + b.total_collected, 0))}</td>
+                    <td className="py-3 px-4 text-right font-semibold">{dailyColData.reduce((s, b) => s + (Number(b.payment_count) || 0), 0)}</td>
+                    <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{formatCurrency(dailyColData.reduce((s, b) => s + (Number(b.total_principal) || 0), 0))}</td>
+                    <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{formatCurrency(dailyColData.reduce((s, b) => s + (Number(b.total_interest) || 0), 0))}</td>
+                    <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{formatCurrency(dailyColData.reduce((s, b) => s + (Number(b.total_penalty) || 0), 0))}</td>
+                    <td className="py-3 px-4 text-right font-bold text-lg text-green-600">{formatCurrency(dailyColData.reduce((s, b) => s + (Number(b.total_collected) || 0), 0))}</td>
                   </tr>
                 </tfoot>
               )}
@@ -1396,6 +1783,10 @@ export const ReportsPage = () => {
           </Panel>
         </div>
       )}
+
+      {activeTab === 'remittance-audit' && <CollectorRemittancePage embedded />}
+      {activeTab === 'expenses-mgmt' && <ExpensesPage embedded />}
+      {activeTab === 'income-mgmt' && <ExpensesPage embedded defaultTab="income" />}
     </div>
   );
 };

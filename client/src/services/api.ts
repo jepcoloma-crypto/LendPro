@@ -168,20 +168,41 @@ export const reportsApi = {
   getDelinquency: () => api.get('/reports/delinquency'),
   getInterestIncome: (params?: any) => api.get('/reports/interest-income', { params }),
   getAmortization: (params?: any) => api.get('/reports/amortization', { params }),
+  getCollectorPerformance: (params?: any) => api.get('/reports/collector-performance', { params }),
   getCollectorVisits: (params?: any) => api.get('/reports/collector-visits', { params }),
   getCollectorPayments: (params?: any) => api.get('/reports/collector-payments', { params }),
-  getCollectorPerformance: (params?: any) => api.get('/reports/collector-performance', { params }),
-  getCollectorRemittance: (params?: any) => api.get('/reports/collector-remittance', { params }),
+  getProcessingCharges: (params?: any) => api.get('/reports/processing-charges', { params }),
   getDailyCollections: (params?: any) => api.get('/reports/daily-collections', { params }),
   getLoansGranted: (params?: any) => api.get('/reports/loans-granted', { params }),
   getExpectedCollections: (params?: any) => api.get('/reports/expected-collections', { params }),
-  getPortfolioSummary: (params?: any) => api.get('/reports/portfolio-summary', { params }),
+  getPortfolioSummary: () => api.get('/reports/portfolio-summary'),
   getBranchPerformance: (params?: any) => api.get('/reports/branch-performance', { params }),
   getDisbursements: (params?: any) => api.get('/reports/disbursements', { params }),
-  getBorrowerPerformance: (params?: any) => api.get('/reports/borrower-performance', { params }),
-  getProcessingCharges: (params?: any) => api.get('/reports/processing-charges', { params }),
   getPastDue: (params?: any) => api.get('/reports/past-due', { params }),
   getApplicationTypes: (params?: any) => api.get('/reports/application-types', { params }),
+  getCollectorRemittance: (params?: any) => api.get('/reports/collector-remittance', { params }),
+  getBorrowerPerformance: (params?: any) => api.get('/reports/borrower-performance', { params }),
+  getCashFlow: (params?: any) => api.get('/reports/cash-flow', { params }),
+  getExpenseReport: (params?: any) => api.get('/reports/expense-report', { params }),
+  getIncomeReport: (params?: any) => api.get('/reports/income-report', { params }),
+  getBranchPL: (params?: any) => api.get('/reports/branch-pl', { params }),
+};
+
+// Expenses
+export const expensesApi = {
+  getAll: (params?: any) => api.get('/expenses', { params }),
+  create: (data: any) => api.post('/expenses', data),
+  update: (id: string, data: any) => api.put(`/expenses/${id}`, data),
+  delete: (id: string) => api.delete(`/expenses/${id}`),
+  getCategories: () => api.get('/expenses/categories'),
+};
+
+// Other Income
+export const incomeApi = {
+  getAll: (params?: any) => api.get('/income', { params }),
+  create: (data: any) => api.post('/income', data),
+  update: (id: string, data: any) => api.put(`/income/${id}`, data),
+  delete: (id: string) => api.delete(`/income/${id}`),
 };
 
 // Charges

@@ -75,6 +75,40 @@ const runMigrations = async () => {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='borrowers' AND column_name='whatsapp_phone') THEN
           ALTER TABLE borrowers ADD COLUMN whatsapp_phone VARCHAR(20);
         END IF;
+        -- Operating expenses
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='operating_expenses') THEN
+          CREATE TABLE operating_expenses (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            date DATE NOT NULL,
+            category VARCHAR(50) NOT NULL,
+            amount NUMERIC(15,2) NOT NULL,
+            payee VARCHAR(255),
+            description TEXT,
+            receipt_url TEXT,
+            branch_id UUID REFERENCES branches(id),
+            created_by UUID REFERENCES users(id),
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='operating_expenses' AND column_name='branch_id') THEN
+          ALTER TABLE operating_expenses ADD COLUMN branch_id UUID REFERENCES branches(id);
+        END IF;
+        -- Other income
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='other_income') THEN
+          CREATE TABLE other_income (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            date DATE NOT NULL,
+            source VARCHAR(255) NOT NULL,
+            amount NUMERIC(15,2) NOT NULL,
+            description TEXT,
+            branch_id UUID REFERENCES branches(id),
+            created_by UUID REFERENCES users(id),
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='other_income' AND column_name='branch_id') THEN
+          ALTER TABLE other_income ADD COLUMN branch_id UUID REFERENCES branches(id);
+        END IF;
       END $$;
     `);
 

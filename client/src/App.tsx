@@ -19,12 +19,8 @@ import { ReportsPage } from './pages/reports/ReportsPage';
 import { UsersPage } from './pages/users/UsersPage';
 import { LoanProductsPage } from './pages/loan-products/LoanProductsPage';
 import { BranchesPage } from './pages/branches/BranchesPage';
-import { SettingsPage } from './pages/settings/SettingsPage';
 import { UtilitiesPage } from './pages/utilities/UtilitiesPage';
-import { ChargesSetupPage } from './pages/charges/ChargesSetupPage';
 import { CalendarPage } from './pages/calendar/CalendarPage';
-import { AuditLogsPage } from './pages/audit-logs/AuditLogsPage';
-import { CollectorRemittancePage } from './pages/audit/CollectorRemittancePage';
 import { ProfilePage } from './pages/profile/ProfilePage';
 
 
@@ -50,11 +46,13 @@ const AppContent = () => {
             <Route path="/users" element={<ProtectedRoute roles={['super-admin']}><UsersPage /></ProtectedRoute>} />
             <Route path="/branches" element={<ProtectedRoute roles={['super-admin', 'admin']}><BranchesPage /></ProtectedRoute>} />
             <Route path="/loan-products" element={<ProtectedRoute roles={['super-admin', 'admin']}><LoanProductsPage /></ProtectedRoute>} />
-            <Route path="/settings" element={<ProtectedRoute roles={['super-admin']}><SettingsPage /></ProtectedRoute>} />
             <Route path="/utilities" element={<ProtectedRoute roles={['super-admin']}><UtilitiesPage /></ProtectedRoute>} />
-            <Route path="/charges" element={<ProtectedRoute roles={['super-admin', 'admin']}><ChargesSetupPage /></ProtectedRoute>} />
-            <Route path="/audit-logs" element={<ProtectedRoute roles={['super-admin', 'admin']}><AuditLogsPage /></ProtectedRoute>} />
-            <Route path="/collector-remittance" element={<ProtectedRoute roles={['super-admin', 'admin']}><CollectorRemittancePage /></ProtectedRoute>} />
+            {/* Redirects for merged pages */}
+            <Route path="/settings" element={<Navigate to="/utilities" replace />} />
+            <Route path="/charges" element={<Navigate to="/loan-products" replace />} />
+            <Route path="/audit-logs" element={<Navigate to="/utilities" replace />} />
+            <Route path="/collector-remittance" element={<Navigate to="/reports" replace />} />
+            <Route path="/expenses" element={<Navigate to="/reports" replace />} />
 
             <Route path="/profile" element={<ProfilePage />} />
           </Route>

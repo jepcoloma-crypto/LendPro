@@ -676,8 +676,10 @@ export class ReportController {
 
   async getDailyCollections(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { date, branchId } = req.query;
+      const { date, startDate, endDate, branchId } = req.query;
       const targetDate = date || new Date().toISOString().slice(0, 10);
+      const sDate = startDate || targetDate;
+      const eDate = endDate || targetDate;
       const rows = await paymentRepo.query(
         `SELECT
            COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
@@ -692,13 +694,13 @@ export class ReportController {
          LEFT JOIN users u ON u.id = l.collector_id
          LEFT JOIN branches b ON b.id = u.branch_id
          WHERE p.status = 'completed'
-           AND p.payment_date::date = $1::date
-           AND ($2::uuid IS NULL OR b.id = $2::uuid OR (b.id IS NULL AND $2::uuid = '00000000-0000-0000-0000-000000000000'))
+           AND p.payment_date::date BETWEEN $1::date AND $2::date
+           AND ($3::uuid IS NULL OR b.id = $3::uuid OR (b.id IS NULL AND $3::uuid = '00000000-0000-0000-0000-000000000000'))
          GROUP BY b.id, b.name
          ORDER BY branch_name`,
-        [targetDate, branchId || null]
+        [sDate, eDate, branchId || null]
       );
-      res.json({ success: true, data: { date: targetDate, branches: rows } });
+      res.json({ success: true, data: { startDate: sDate, endDate: eDate, branches: rows } });
     } catch (error: any) {
       next(new AppError(500, error.message));
     }

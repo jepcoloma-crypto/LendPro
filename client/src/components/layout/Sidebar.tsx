@@ -3,29 +3,33 @@ import { Sidenav, Nav } from 'rsuite';
 import {
   DashboardIcon, PeoplesIcon, MoneyIcon, CreditCardIcon,
   CollectionIcon, FileTextIcon, SettingsIcon, UserIcon,
-  BranchIcon, CalendarIcon, NoticeIcon, ChargeIcon,
+  BranchIcon, CalendarIcon,
 } from '../../utils/icons';
 import { useAuth } from '../../contexts/AuthContext';
 
 const menuItems = [
-  { label: 'Dashboard', path: '/dashboard', icon: DashboardIcon, roles: ['*'] },
-  { label: 'Borrowers', path: '/borrowers', icon: PeoplesIcon, roles: ['super-admin', 'admin', 'branch-manager', 'loan-officer'] },
-  { label: 'Applications', path: '/applications', icon: FileTextIcon, roles: ['super-admin', 'admin', 'branch-manager', 'loan-officer', 'credit-investigator'] },
-  { label: 'Loans', path: '/loans', icon: MoneyIcon, roles: ['*'] },
-  { label: 'Payments', path: '/payments', icon: CreditCardIcon, roles: ['super-admin', 'admin', 'branch-manager', 'cashier', 'collector'] },
-  { label: 'Collections', path: '/collections', icon: CollectionIcon, roles: ['super-admin', 'admin', 'branch-manager', 'collector'] },
-  { label: 'Calendar', path: '/calendar', icon: CalendarIcon, roles: ['*'] },
-  { label: 'Reports', path: '/reports', icon: FileTextIcon, roles: ['super-admin', 'admin', 'branch-manager'] },
+  { label: 'Dashboard', path: '/dashboard', icon: DashboardIcon, roles: ['*'], group: 'main' },
+  { label: 'Borrowers', path: '/borrowers', icon: PeoplesIcon, roles: ['super-admin', 'admin', 'branch-manager', 'loan-officer'], group: 'lending' },
+  { label: 'Applications', path: '/applications', icon: FileTextIcon, roles: ['super-admin', 'admin', 'branch-manager', 'loan-officer', 'credit-investigator'], group: 'lending' },
+  { label: 'Loans', path: '/loans', icon: MoneyIcon, roles: ['*'], group: 'lending' },
+  { label: 'Payments', path: '/payments', icon: CreditCardIcon, roles: ['super-admin', 'admin', 'branch-manager', 'cashier', 'collector'], group: 'lending' },
+  { label: 'Collections', path: '/collections', icon: CollectionIcon, roles: ['super-admin', 'admin', 'branch-manager', 'collector'], group: 'lending' },
+  { label: 'Calendar', path: '/calendar', icon: CalendarIcon, roles: ['*'], group: 'lending' },
 
-  { label: 'Audit Logs', path: '/audit-logs', icon: NoticeIcon, roles: ['super-admin', 'admin'] },
-  { label: 'Remittance Audit', path: '/collector-remittance', icon: CreditCardIcon, roles: ['super-admin', 'admin'] },
-  { label: 'Users', path: '/users', icon: UserIcon, roles: ['super-admin'] },
-  { label: 'Areas', path: '/branches', icon: BranchIcon, roles: ['super-admin', 'admin'] },
-  { label: 'Loan Products', path: '/loan-products', icon: MoneyIcon, roles: ['super-admin', 'admin'] },
-  { label: 'Charges', path: '/charges', icon: ChargeIcon, roles: ['super-admin', 'admin'] },
-  { label: 'Utilities', path: '/utilities', icon: SettingsIcon, roles: ['super-admin'] },
-  { label: 'Settings', path: '/settings', icon: SettingsIcon, roles: ['super-admin'] },
+  { label: 'Reports', path: '/reports', icon: FileTextIcon, roles: ['super-admin', 'admin', 'branch-manager'], group: 'insights' },
+
+  { label: 'Users', path: '/users', icon: UserIcon, roles: ['super-admin'], group: 'admin' },
+  { label: 'Areas', path: '/branches', icon: BranchIcon, roles: ['super-admin', 'admin'], group: 'admin' },
+  { label: 'Loan Products', path: '/loan-products', icon: MoneyIcon, roles: ['super-admin', 'admin'], group: 'admin' },
+  { label: 'Utilities', path: '/utilities', icon: SettingsIcon, roles: ['super-admin'], group: 'admin' },
 ];
+
+const groupLabels: Record<string, string> = {
+  main: '',
+  lending: 'Lending',
+  insights: 'Reports',
+  admin: 'Administration',
+};
 
 export const Sidebar = ({ collapsed, onClose }: { collapsed: boolean; onClose?: () => void }) => {
   const { user } = useAuth();
@@ -46,11 +50,22 @@ export const Sidebar = ({ collapsed, onClose }: { collapsed: boolean; onClose?: 
           )}
         </div>
         <Nav>
-          {menuItems.filter(item => isSuperAdmin || item.roles.includes('*') || item.roles.includes(user?.role_slug || '')).map((item) => (
-            <Nav.Item key={item.path} as={NavLink} to={item.path} icon={<item.icon />}>
-              {!collapsed && item.label}
-            </Nav.Item>
-          ))}
+          {['main', 'lending', 'insights', 'admin'].map(group => {
+            const items = menuItems.filter(item => item.group === group).filter(item => isSuperAdmin || item.roles.includes('*') || item.roles.includes(user?.role_slug || ''));
+            if (items.length === 0) return null;
+            return (
+              <div key={group}>
+                {!collapsed && groupLabels[group] && (
+                  <div className="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{groupLabels[group]}</div>
+                )}
+                {items.map((item) => (
+                  <Nav.Item key={item.path} as={NavLink} to={item.path} icon={<item.icon />}>
+                    {!collapsed && item.label}
+                  </Nav.Item>
+                ))}
+              </div>
+            );
+          })}
         </Nav>
       </Sidenav>
     </div>

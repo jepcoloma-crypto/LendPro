@@ -17,6 +17,7 @@ import { calendarController } from '../controllers/calendar.controller';
 import { chargesController } from '../controllers/charges.controller';
 import { utilityController } from '../controllers/utility.controller';
 import { twilioWebhook, setBorrowerPin } from '../controllers/twilio.controller';
+import { cashflowController } from '../controllers/cashflow.controller';
 import { auditLogRepo } from '../repositories';
 
 
@@ -180,6 +181,21 @@ router.delete('/charges/:id', authenticate, authorize('super-admin', 'admin'), c
 // Product Charges
 router.get('/loan-products/:id/charges', authenticate, chargesController.getProductCharges.bind(chargesController));
 router.put('/loan-products/:id/charges', authenticate, authorize('super-admin', 'admin'), chargesController.saveProductCharges.bind(chargesController));
+
+// Cash Flow & Expenses
+router.get('/expenses', authenticate, cashflowController.getExpenses.bind(cashflowController));
+router.post('/expenses', authenticate, cashflowController.createExpense.bind(cashflowController));
+router.put('/expenses/:id', authenticate, cashflowController.updateExpense.bind(cashflowController));
+router.delete('/expenses/:id', authenticate, cashflowController.deleteExpense.bind(cashflowController));
+router.get('/expenses/categories', authenticate, cashflowController.getExpenseCategories.bind(cashflowController));
+router.get('/income', authenticate, cashflowController.getIncome.bind(cashflowController));
+router.post('/income', authenticate, cashflowController.createIncome.bind(cashflowController));
+router.put('/income/:id', authenticate, cashflowController.updateIncome.bind(cashflowController));
+router.delete('/income/:id', authenticate, cashflowController.deleteIncome.bind(cashflowController));
+router.get('/reports/cash-flow', authenticate, cashflowController.getCashFlow.bind(cashflowController));
+router.get('/reports/expense-report', authenticate, cashflowController.getExpenseReport.bind(cashflowController));
+router.get('/reports/income-report', authenticate, cashflowController.getIncomeReport.bind(cashflowController));
+router.get('/reports/branch-pl', authenticate, cashflowController.getBranchPL.bind(cashflowController));
 
 // Settings (super-admin only)
 router.get('/settings', authenticate, settingsController.getAll.bind(settingsController));

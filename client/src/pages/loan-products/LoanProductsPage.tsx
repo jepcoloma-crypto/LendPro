@@ -3,10 +3,11 @@ import { Table, Button, Panel, Modal, Form, toaster, Message, Tag, InputNumber, 
 import { loanProductsApi, chargesApi } from '../../services/api';
 import { LoanProduct } from '../../types';
 import { Plus, Edit3, DollarSign } from 'lucide-react';
+import { ChargesSetupPage } from '../charges/ChargesSetupPage';
 
 const { Column, HeaderCell, Cell } = Table;
 
-export const LoanProductsPage = () => {
+const ProductsTab = () => {
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
@@ -94,11 +95,10 @@ export const LoanProductsPage = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <>
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Loan Products</h1>
-          <p className="text-gray-500 dark:text-gray-400">Configure loan products and their terms</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Configure loan products and their terms</p>
         </div>
         <Button appearance="primary" onClick={() => { setEditTarget(null); setFormValue({}); setEditOpen(true); }} startIcon={<Plus className="w-4 h-4" />}>Add Product</Button>
       </div>
@@ -283,6 +283,28 @@ export const LoanProductsPage = () => {
           <Button appearance="subtle" onClick={() => setChargesOpen(false)}>Cancel</Button>
         </Modal.Footer>
       </Modal>
+    </>
+  );
+};
+
+export const LoanProductsPage = () => {
+  const [tab, setTab] = useState('products');
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Loan Products</h1>
+        <p className="text-gray-500 dark:text-gray-400">Manage loan products, terms, and charge configurations</p>
+      </div>
+      <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+        {[{ key: 'products', label: 'Products' }, { key: 'charges', label: 'Charges Setup' }].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`text-sm px-3 py-1.5 rounded-t font-medium transition-colors ${tab === t.key ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'products' ? <ProductsTab /> : <ChargesSetupPage />}
     </div>
   );
 };

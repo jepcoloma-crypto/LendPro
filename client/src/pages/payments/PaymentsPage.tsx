@@ -9,24 +9,24 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getCompanySettings } from '../../utils/companySettings';
 
 const InstallmentInput = memo(({ scheduleId, value, onChange }: { scheduleId: string; value: number; onChange: (id: string, v: number) => void }) => {
-  const [localVal, setLocalVal] = useState(value);
-  useEffect(() => { setLocalVal(value); }, [value]);
+  const [localVal, setLocalVal] = useState(value.toFixed(2));
+  useEffect(() => { setLocalVal(value.toFixed(2)); }, [value]);
   return (
-    <InputNumber value={localVal}
-      onChange={(v: any) => setLocalVal(parseFloat(v) || 0)}
-      onBlur={() => onChange(scheduleId, localVal)}
-      min={0} step={0.01} style={{ width: '95px' }} />
+    <input type="number" step="0.01" min={0} value={localVal}
+      onChange={(e) => setLocalVal(e.target.value)}
+      onBlur={() => { const v = parseFloat(localVal) || 0; setLocalVal(v.toFixed(2)); onChange(scheduleId, v); }}
+      className="rs-input" style={{ width: '95px', textAlign: 'right' }} />
   );
 });
 
 const PenaltyInput = memo(({ scheduleId, value, onChange }: { scheduleId: string; value: number; onChange: (id: string, v: number) => void }) => {
-  const [localVal, setLocalVal] = useState(value);
-  useEffect(() => { setLocalVal(value); }, [value]);
+  const [localVal, setLocalVal] = useState(value.toFixed(2));
+  useEffect(() => { setLocalVal(value.toFixed(2)); }, [value]);
   return (
-    <InputNumber value={localVal}
-      onChange={(v: any) => setLocalVal(parseFloat(v) || 0)}
-      onBlur={() => onChange(scheduleId, localVal)}
-      min={0} step={0.01} style={{ width: '95px' }} />
+    <input type="number" step="0.01" min={0} value={localVal}
+      onChange={(e) => setLocalVal(e.target.value)}
+      onBlur={() => { const v = parseFloat(localVal) || 0; setLocalVal(v.toFixed(2)); onChange(scheduleId, v); }}
+      className="rs-input" style={{ width: '95px', textAlign: 'right' }} />
   );
 });
 
