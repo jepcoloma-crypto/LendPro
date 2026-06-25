@@ -16,6 +16,7 @@ import { notificationController } from '../controllers/notification.controller';
 import { calendarController } from '../controllers/calendar.controller';
 import { chargesController } from '../controllers/charges.controller';
 import { utilityController } from '../controllers/utility.controller';
+import { twilioWebhook, setBorrowerPin } from '../controllers/twilio.controller';
 import { auditLogRepo } from '../repositories';
 
 
@@ -47,6 +48,7 @@ router.post('/auth/logout', authenticate, authController.logout.bind(authControl
 // Users (super-admin only)
 router.get('/users', authenticate, authorize('super-admin'), userController.getAll.bind(userController));
 router.post('/users', authenticate, authorize('super-admin'), userController.create.bind(userController));
+router.get('/users/collectors', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer', 'credit-investigator'), userController.getCollectors.bind(userController));
 router.get('/users/:id', authenticate, authorize('super-admin'), userController.getById.bind(userController));
 router.put('/users/:id', authenticate, authorize('super-admin'), userController.update.bind(userController));
 router.delete('/users/:id', authenticate, authorize('super-admin'), userController.delete.bind(userController));
@@ -69,6 +71,7 @@ router.post('/borrowers/:id/photo', authenticate, authorize('super-admin', 'admi
 router.post('/borrowers/:id/documents', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), uploadDoc, borrowerController.uploadDocument.bind(borrowerController));
 router.post('/borrowers/:id/co-makers', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), borrowerController.addCoMaker.bind(borrowerController));
 router.get('/borrowers/:id/payments', authenticate, borrowerController.getPayments.bind(borrowerController));
+router.put('/borrowers/:id/pin', authenticate, authorize('super-admin', 'admin', 'branch-manager'), setBorrowerPin);
 
 // Loan Products
 router.get('/loan-products', authenticate, loanController.getProducts.bind(loanController));
@@ -207,5 +210,8 @@ router.post('/utilities/restore', authenticate, authorize('super-admin'), upload
 router.get('/notifications', authenticate, notificationController.getAll.bind(notificationController));
 router.post('/notifications/send-email', authenticate, notificationController.sendEmail.bind(notificationController));
 router.post('/notifications/send-sms', authenticate, notificationController.sendSms.bind(notificationController));
+
+// Twilio SMS/WhatsApp webhook (no auth — signed by Twilio, read-only balance inquiry)
+router.post('/twilio/webhook', twilioWebhook);
 
 export default router;

@@ -2,8 +2,9 @@ Write-Host "=== Starting LendPro ===" -ForegroundColor Cyan
 cd C:\Projects\LendingApp
 
 # Start processes
-pm2 restart ecosystem.config.js 2>$null
-if ($LASTEXITCODE -ne 0) { pm2 start ecosystem.config.js 2>$null }
+pm2 restart lendpro-server 2>$null
+pm2 restart lendpro-tunnel 2>$null
+Start-Sleep -Seconds 3
 pm2 save
 
 # Wait for tunnel URL
@@ -14,7 +15,7 @@ for ($i = 0; $i -lt 30; $i++) {
   $log = pm2 logs lendpro-tunnel --lines 30 --nostream 2>$null
   $match = $log | Select-String "https://.*\.trycloudflare\.com"
   if ($match) {
-    $tunnelUrl = $match.Matches.Value
+    $tunnelUrl = $match.Matches[0].Value
     break
   }
   Write-Host "." -NoNewline
@@ -36,5 +37,6 @@ vercel deploy --prod --yes 2>$null | Out-Null
 Write-Host "`n=== Done! ===" -ForegroundColor Green
 Write-Host "Frontend: https://lendpro-seven.vercel.app"
 Write-Host "Backend:  $tunnelUrl"
+Write-Host "Health:   $(try { (Invoke-WebRequest -Uri "$tunnelUrl/health" -UseBasicParsing -TimeoutSec 10).StatusCode } catch { 'FAIL' })" -ForegroundColor $(if ($?) { 'Green' } else { 'Red' })
 Write-Host "`nPress any key to close..." -ForegroundColor Gray
 $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")

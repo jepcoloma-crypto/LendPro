@@ -68,6 +68,13 @@ const runMigrations = async () => {
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_penalties_schedule_type') THEN
           CREATE UNIQUE INDEX idx_penalties_schedule_type ON penalties (schedule_id, penalty_type);
         END IF;
+        -- SMS/WhatsApp balance inquiry support
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='borrowers' AND column_name='pin_hash') THEN
+          ALTER TABLE borrowers ADD COLUMN pin_hash TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='borrowers' AND column_name='whatsapp_phone') THEN
+          ALTER TABLE borrowers ADD COLUMN whatsapp_phone VARCHAR(20);
+        END IF;
       END $$;
     `);
 

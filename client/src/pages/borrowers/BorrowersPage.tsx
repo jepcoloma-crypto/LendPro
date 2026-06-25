@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Table, Button, Input, InputGroup, Panel, Modal, Form, toaster, Message, Pagination, Tag, SelectPicker, DatePicker, Avatar, Whisper, Tooltip, Loader } from 'rsuite';
 import { borrowersApi, branchesApi } from '../../services/api';
 import { Borrower } from '../../types';
-import { Search, Plus, Edit, Trash2, Camera, MapPin, Copy, Eye, Phone, Mail, MapPinHouse, Briefcase, DollarSign, CreditCard, CalendarDays, User, Globe, Download } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Camera, MapPin, Copy, Eye, Phone, Mail, MapPinHouse, Briefcase, DollarSign, CreditCard, CalendarDays, User, Globe, Download, MessageCircle, KeyRound } from 'lucide-react';
 import { formatCurrency, methodColor, exportCSV } from '../../utils/format';
 import { LocationPicker } from '../../components/LocationPicker';
 import { StaticMap } from '../../components/StaticMap';
@@ -55,6 +55,7 @@ const INITIAL_FORM: Record<string, any> = {
   business_name: '', business_type: '', business_address: '',
   government_id_number: '',
   branch_id: null,
+  whatsapp_phone: '',
 };
 
 export const BorrowersPage = () => {
@@ -78,6 +79,10 @@ export const BorrowersPage = () => {
   const [payHistory, setPayHistory] = useState<any[]>([]);
   const [payHistoryLoading, setPayHistoryLoading] = useState(false);
   const [branches, setBranches] = useState<{ id: string; name: string; code: string }[]>([]);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
+  const [pinValue, setPinValue] = useState('');
+  const [pinSaving, setPinSaving] = useState(false);
+  const [editPin, setEditPin] = useState('');
   useEffect(() => { if (modalOpen) branchesApi.getAll().then(({ data }) => setBranches(data.data || [])).catch(() => {}); }, [modalOpen]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const limit = 20;
@@ -144,6 +149,9 @@ export const BorrowersPage = () => {
       if (payload.date_of_birth) payload.date_of_birth = new Date(payload.date_of_birth).toISOString().split('T')[0];
       if (editId) {
         await borrowersApi.update(editId, payload);
+        if (editPin) {
+          await borrowersApi.setPin(editId, editPin, payload.whatsapp_phone || undefined);
+        }
         if (photoFile) {
           const fd = new FormData();
           fd.append('photo', photoFile);
@@ -162,6 +170,7 @@ export const BorrowersPage = () => {
       setModalOpen(false);
       setEditId(null);
       setFormValue({ ...INITIAL_FORM });
+      setEditPin('');
       setPhotoFile(null);
       setPhotoPreview(null);
       setSameAsPresent(false);
@@ -207,6 +216,7 @@ export const BorrowersPage = () => {
       government_id_type: borrower.government_id_type || null,
       government_id_number: borrower.government_id_number || '',
       branch_id: borrower.branch_id || null,
+      whatsapp_phone: borrower.whatsapp_phone || '',
     });
     setPhotoPreview(borrower.photo_url || null);
     setPhotoFile(null);
@@ -438,7 +448,22 @@ export const BorrowersPage = () => {
                   <Form.ControlLabel>Email</Form.ControlLabel>
                   <Form.Control name="email" type="email" />
                 </Form.Group>
+                {editId && (
+                  <>
+                    <Form.Group>
+                      <Form.ControlLabel>WhatsApp Number (for alerts)</Form.ControlLabel>
+                      <Form.Control name="whatsapp_phone" placeholder="Same as mobile or different number" />
+                    </Form.Group>
+                    <Form.Group>
+                      <Form.ControlLabel>PIN (4-8 digits)</Form.ControlLabel>
+                      <Input type="password" pattern="[0-9]*" inputMode="numeric" maxLength={8} value={editPin} onChange={(v: string) => setEditPin(v.replace(/\D/g, '').slice(0, 8))} placeholder="Leave blank to keep current" />
+                    </Form.Group>
+                  </>
+                )}
               </div>
+              {editId && (
+                <p className="text-xs text-gray-400 mt-2">PIN is used for SMS/WhatsApp balance inquiry. Borrowers text: BAL &lt;code&gt; &lt;pin&gt; to the Twilio number.</p>
+              )}
             </Panel>
 
             {/* Present Address + Coordinates */}
@@ -701,6 +726,25 @@ export const BorrowersPage = () => {
                     <DetailRow icon={<CreditCard className="w-4 h-4" />} label="ID Number" value={selectedBorrower.government_id_number} />
                   </div>
                 </div>
+
+                {/* SMS/WhatsApp Access */}
+                <div>
+                  <h4 className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-3 uppercase tracking-wider">SMS/WhatsApp Access</h4>
+                  <div className="space-y-0">
+                    <DetailRow icon={<MessageCircle className="w-4 h-4" />} label="Twilio Number" value={import.meta.env.VITE_TWILIO_PHONE || 'Not configured'} />
+                    {selectedBorrower.whatsapp_phone && <DetailRow icon={<MessageCircle className="w-4 h-4" />} label="WhatsApp (alerts)" value={selectedBorrower.whatsapp_phone} />}
+                    <div className="flex items-center justify-between py-1.5">
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <KeyRound className="w-4 h-4" />
+                        <span>PIN</span>
+                      </div>
+                      <Button size="xs" appearance="primary" onClick={() => { setPinValue(''); setPinModalOpen(true); }}>Set/Change PIN</Button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Text: BAL {selectedBorrower.borrower_code} &lt;pin&gt; to {import.meta.env.VITE_TWILIO_PHONE || 'Twilio number'} to check balance
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -762,6 +806,32 @@ export const BorrowersPage = () => {
         <Modal.Footer>
           <Button onClick={handleDelete} appearance="primary" color="red">Delete</Button>
           <Button onClick={() => { setDeleteConfirmOpen(false); setDeleteTarget(null); }} appearance="subtle">Cancel</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* PIN Setup */}
+      <Modal open={pinModalOpen} onClose={() => setPinModalOpen(false)} size="xs">
+        <Modal.Header><Modal.Title>Set SMS/WhatsApp PIN — {selectedBorrower?.borrower_code}</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <p className="text-sm text-gray-500 mb-4">Set a 4-8 digit PIN for SMS/WhatsApp balance inquiry access.</p>
+          <Form.Group>
+            <Form.ControlLabel>PIN (4-8 digits)</Form.ControlLabel>
+            <Input type="password" pattern="[0-9]*" inputMode="numeric" maxLength={8} value={pinValue} onChange={(v: string) => setPinValue(v.replace(/\D/g, '').slice(0, 8))} />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button appearance="primary" loading={pinSaving} disabled={pinValue.length < 4} onClick={async () => {
+            if (!selectedBorrower) return;
+            setPinSaving(true);
+            try {
+              await borrowersApi.setPin(selectedBorrower.id, pinValue);
+              toaster.push(<Message type="success">PIN set successfully</Message>, { placement: 'topEnd' });
+              setPinModalOpen(false);
+            } catch (err: any) {
+              toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed to set PIN'}</Message>, { placement: 'topEnd' });
+            } finally { setPinSaving(false); }
+          }}>Save PIN</Button>
+          <Button onClick={() => setPinModalOpen(false)} appearance="subtle">Cancel</Button>
         </Modal.Footer>
       </Modal>
     </div>

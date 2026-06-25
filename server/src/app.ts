@@ -75,6 +75,8 @@ app.use('/uploads', authenticate, express.static(path.join(__dirname, '..', 'upl
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+// Twilio webhook needs raw urlencoded body (handled by its own route middleware)
+app.use('/api/twilio', express.urlencoded({ extended: false }));
 
 // Logging
 if (config.nodeEnv !== 'test') {

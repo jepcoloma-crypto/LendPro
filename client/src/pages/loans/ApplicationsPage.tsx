@@ -96,8 +96,8 @@ const [collectors, setCollectors] = useState<any[]>([]);
       setBorrowers(bData.data.data || []);
       setProducts(pData.data.data || []);
       try {
-        const { data: uData } = await usersApi.getAll({ limit: 100 });
-        setCollectors((uData.data || []).filter((u: any) => u.role_name === 'Collector'));
+        const { data: uData } = await usersApi.getCollectors();
+        setCollectors(uData.data || []);
       } catch {
         setCollectors([]);
       }
@@ -185,8 +185,8 @@ const [collectors, setCollectors] = useState<any[]>([]);
       setProducts(pData.data.data || []);
       setEditDocuments(docRes.data.data || []);
       try {
-        const { data: uData } = await usersApi.getAll({ limit: 100 });
-        setCollectors((uData.data || []).filter((u: any) => u.role_name === 'Collector'));
+        const { data: uData } = await usersApi.getCollectors();
+        setCollectors(uData.data || []);
       } catch { setCollectors([]); }
     } catch {
       setEditDocuments([]);

@@ -29,9 +29,8 @@ export const CollectorRemittancePage = () => {
 
   useEffect(() => {
     fetch();
-    usersApi.getAll().then(({ data }) => {
-      const all = data.data || [];
-      setCollectors(all.filter((u: any) => u.role_slug === 'collector'));
+    usersApi.getCollectors().then(({ data }) => {
+      setCollectors(data.data || []);
     }).catch(() => {});
   }, [collectorId, startDate, endDate]);
 

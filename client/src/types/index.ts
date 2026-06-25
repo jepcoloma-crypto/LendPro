@@ -81,6 +81,7 @@ export interface Borrower {
   documents?: BorrowerDocument[];
   coMakers?: CoMaker[];
   created_at: string;
+  whatsapp_phone?: string;
 }
 
 export interface BorrowerDocument {

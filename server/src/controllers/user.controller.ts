@@ -98,6 +98,23 @@ export class UserController {
       next(new AppError(400, error.message));
     }
   }
+
+  async getCollectors(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await userRepo.findAll({
+        alias: 'u',
+        select: 'u.id, u.first_name, u.last_name',
+        joins: 'JOIN roles r ON u.role_id = r.id',
+        conditions: { 'r.slug': 'collector', 'u.is_active': true },
+        orderBy: 'u.first_name ASC',
+        limit: 200,
+        offset: 0,
+      });
+      res.json({ success: true, data: result.rows });
+    } catch (error: any) {
+      next(new AppError(500, error.message));
+    }
+  }
 }
 
 export class RoleController {

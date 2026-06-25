@@ -32,8 +32,8 @@ export const CalendarPage = () => {
   const [month, setMonth] = useState<Date>(new Date());
 
   useEffect(() => {
-    usersApi.getAll({ limit: 100 }).then(({ data }) =>
-      setCollectors((data.data || []).filter((u: any) => u.role_name === 'Collector'))
+    usersApi.getCollectors().then(({ data }) =>
+      setCollectors(data.data || [])
     ).catch(() => {});
   }, []);
 

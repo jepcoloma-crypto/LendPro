@@ -91,7 +91,7 @@ export const ReportsPage = () => {
           reportsApi.getInterestIncome(),
           reportsApi.getAmortization(),
           borrowersApi.getAll({ limit: 1000 }),
-          usersApi.getAll({ limit: 100 }),
+          usersApi.getCollectors(),
           branchesApi.getAll(),
         ]);
         setAgingData(aging.data.data || []);
@@ -99,7 +99,7 @@ export const ReportsPage = () => {
         setInterestData(interest.data.data || []);
         setAmortData(amort.data.data || []);
         setBorrowers(br.data.data || []);
-        setCollectors((us.data.data || []).filter((u: any) => u.role_name === 'Collector'));
+        setCollectors(us.data.data || []);
         setBranches(bra.data.data || []);
       } catch (err) { console.error(err); }
       finally { setLoading(false); }

@@ -64,6 +64,7 @@ export const authApi = {
 // Users
 export const usersApi = {
   getAll: (params?: any) => api.get('/users', { params }),
+  getCollectors: () => api.get('/users/collectors'),
   create: (data: any) => api.post('/users', data),
   getById: (id: string) => api.get(`/users/${id}`),
   update: (id: string, data: any) => api.put(`/users/${id}`, data),
@@ -93,6 +94,7 @@ export const borrowersApi = {
   uploadDocument: (borrowerId: string, data: FormData) => api.post(`/borrowers/${borrowerId}/documents`, data),
   addCoMaker: (borrowerId: string, data: any) => api.post(`/borrowers/${borrowerId}/co-makers`, data),
   getPayments: (borrowerId: string, params?: any) => api.get(`/borrowers/${borrowerId}/payments`, { params }),
+  setPin: (borrowerId: string, pin: string, whatsapp_phone?: string) => api.put(`/borrowers/${borrowerId}/pin`, { pin, whatsapp_phone }),
 };
 
 // Loan Products
