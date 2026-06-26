@@ -1602,8 +1602,9 @@ export const ReportsPage = () => {
                 { key: 'borrower_name', label: 'Borrower' },
                 { key: 'branch_name', label: 'Branch' },
                 { key: 'disbursement_method', label: 'Method' },
-                { key: 'disbursed_amount', label: 'Amount', format: (v) => formatCurrency(v) },
                 { key: 'reference_number', label: 'Reference' },
+                { key: 'disbursed_amount', label: 'Amount', format: (v) => formatCurrency(v) },
+                { key: 'notes', label: 'Notes' },
                 { key: 'disbursed_by_name', label: 'Disbursed By' },
               ])}>Print</Button>
             <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
@@ -1613,27 +1614,54 @@ export const ReportsPage = () => {
                 { key: 'borrower_name', label: 'Borrower' },
                 { key: 'branch_name', label: 'Branch' },
                 { key: 'disbursement_method', label: 'Method' },
-                { key: 'disbursed_amount', label: 'Amount', format: (v) => formatCurrency(v) },
                 { key: 'reference_number', label: 'Reference' },
-                { key: 'disbursed_by_name', label: 'Disbursed By' },
+                { key: 'disbursed_amount', label: 'Amount', format: (v) => formatCurrency(v) },
                 { key: 'principal_amount', label: 'Loan Amount', format: (v) => formatCurrency(v) },
                 { key: 'net_proceeds', label: 'Net Proceeds', format: (v) => formatCurrency(v) },
+                { key: 'notes', label: 'Notes' },
+                { key: 'disbursed_by_name', label: 'Disbursed By' },
               ]);
             }}>Export CSV</Button>
           </div>
           </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 border border-blue-200 dark:border-blue-800">
+              <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Disbursed</p>
+              <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{formatCurrency(disbursementData.reduce((s: number, r: any) => s + Number(r.disbursed_amount || 0), 0))}</p>
+              <p className="text-xs text-blue-500">{disbursementData.length} transactions</p>
+            </div>
+            {(() => {
+              const methods = [...new Set(disbursementData.map((r: any) => r.disbursement_method))].sort();
+              return methods.map((m: any) => {
+                const total = disbursementData.filter((r: any) => r.disbursement_method === m).reduce((s: number, r: any) => s + Number(r.disbursed_amount || 0), 0);
+                const colors: Record<string, any> = { Cash: { bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-200 dark:border-green-800', text: 'text-green-700 dark:text-green-300', label: 'text-green-600 dark:text-green-400' }, 'Bank Transfer': { bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800', text: 'text-purple-700 dark:text-purple-300', label: 'text-purple-600 dark:text-purple-400' }, Check: { bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-200 dark:border-orange-800', text: 'text-orange-700 dark:text-orange-300', label: 'text-orange-600 dark:text-orange-400' } };
+                const c = colors[m] || { bg: 'bg-gray-50 dark:bg-gray-700/20', border: 'border-gray-200 dark:border-gray-700', text: 'text-gray-700 dark:text-gray-300', label: 'text-gray-600 dark:text-gray-400' };
+                const count = disbursementData.filter((r: any) => r.disbursement_method === m).length;
+                return (
+                  <div key={m} className={`${c.bg} rounded-xl p-3 border ${c.border}`}>
+                    <p className={`text-xs ${c.label} font-medium`}>{m}</p>
+                    <p className={`text-xl font-bold ${c.text}`}>{formatCurrency(total)}</p>
+                    <p className={`text-xs ${c.label}`}>{count} transactions</p>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
           <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Disbursement Report">
             <Table data={disbursementData} loading={disbursementLoading} height={500} rowHeight={45}>
               <Column width={100}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.disbursed_at).toLocaleDateString()}</Cell></Column>
               <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
               <Column width={170}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
-              <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
-              <Column width={110}><HeaderCell>Method</HeaderCell><Cell>{(r: any) => <Tag>{r.disbursement_method}</Tag>}</Cell></Column>
-              <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.disbursed_amount)}</Cell></Column>
+              <Column width={100}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={90}><HeaderCell>Method</HeaderCell><Cell>{(r: any) => <Tag>{r.disbursement_method}</Tag>}</Cell></Column>
               <Column width={130}><HeaderCell>Reference</HeaderCell><Cell>{(r: any) => r.reference_number || '-'}</Cell></Column>
-              <Column width={150}><HeaderCell>Disbursed By</HeaderCell><Cell dataKey="disbursed_by_name" /></Column>
+              <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => <span className="font-semibold">{formatCurrency(r.disbursed_amount)}</span>}</Cell></Column>
               <Column width={120}><HeaderCell>Loan Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
               <Column width={120}><HeaderCell>Net Proceeds</HeaderCell><Cell>{(r: any) => <span className="font-semibold text-green-600">{formatCurrency(r.net_proceeds)}</span>}</Cell></Column>
+              <Column width={150}><HeaderCell>Notes</HeaderCell><Cell>{(r: any) => r.notes || '-'}</Cell></Column>
+              <Column width={140}><HeaderCell>Disbursed By</HeaderCell><Cell dataKey="disbursed_by_name" /></Column>
             </Table>
           </Panel>
         </div>
