@@ -173,7 +173,8 @@ export class CashflowController {
       if (startDate) { disbWhere += ` AND l.release_date::date >= $${di++}`; disbParams.push(startDate); }
       if (endDate) { disbWhere += ` AND l.release_date::date <= $${di++}`; disbParams.push(endDate); }
       const disbursements = await pool.query(
-        `SELECT l.release_date::date as date, SUM(l.principal_amount) as amount
+        `SELECT l.release_date::date as date,
+                SUM(l.principal_amount - COALESCE((SELECT SUM(lc.amount) FROM loan_charges lc WHERE lc.loan_id = l.id), 0)) as amount
          FROM loans l WHERE l.status = 'active'${disbWhere}
          GROUP BY l.release_date::date ORDER BY l.release_date::date`,
         disbParams

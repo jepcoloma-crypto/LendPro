@@ -1332,6 +1332,7 @@ export const ReportsPage = () => {
                 { key: 'branch_name', label: 'Branch' },
                 { key: 'release_date', label: 'Date Granted', format: (v) => v ? new Date(v).toLocaleDateString() : '' },
                 { key: 'borrower_name', label: 'Borrower' },
+                { key: 'application_type', label: 'Type' },
                 { key: 'principal_amount', label: 'Loan Amount', format: (v) => formatCurrency(v) },
                 { key: 'total_charges', label: 'Total Charges', format: (v) => formatCurrency(v) },
                 { key: 'net_proceeds', label: 'Net Proceeds', format: (v) => formatCurrency(v) },
@@ -1345,6 +1346,7 @@ export const ReportsPage = () => {
                 { key: 'branch_name', label: 'Branch' },
                 { key: 'release_date', label: 'Date Granted', format: (v) => v ? new Date(v).toLocaleDateString() : '' },
                 { key: 'borrower_name', label: 'Borrower' },
+                { key: 'application_type', label: 'Type' },
                 { key: 'present_address', label: 'Address' },
                 { key: 'principal_amount', label: 'Loan Amount', format: (v) => formatCurrency(v) },
                 { key: 'interest_amount', label: 'Interest', format: (v) => formatCurrency(v) },
@@ -1358,12 +1360,36 @@ export const ReportsPage = () => {
             }}>Export CSV</Button>
           </div>
           </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 border border-green-200 dark:border-green-800">
+              <p className="text-xs text-green-600 dark:text-green-400 font-medium">New Clients</p>
+              <p className="text-xl font-bold text-green-700 dark:text-green-300">{loansGrantedData.filter((r: any) => r.application_type === 'New').length}</p>
+              <p className="text-xs text-green-500">{formatCurrency(loansGrantedData.filter((r: any) => r.application_type === 'New').reduce((s: number, r: any) => s + Number(r.principal_amount || 0), 0))}</p>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 border border-blue-200 dark:border-blue-800">
+              <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Renewals</p>
+              <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{loansGrantedData.filter((r: any) => r.application_type === 'Renewal').length}</p>
+              <p className="text-xs text-blue-500">{formatCurrency(loansGrantedData.filter((r: any) => r.application_type === 'Renewal').reduce((s: number, r: any) => s + Number(r.principal_amount || 0), 0))}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-700/20 rounded-xl p-3 border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Total Loans</p>
+              <p className="text-xl font-bold text-gray-700 dark:text-gray-300">{loansGrantedData.length}</p>
+              <p className="text-xs text-gray-500">{formatCurrency(loansGrantedData.reduce((s: number, r: any) => s + Number(r.principal_amount || 0), 0))}</p>
+            </div>
+            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3 border border-purple-200 dark:border-purple-800">
+              <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">New Client %</p>
+              <p className="text-xl font-bold text-purple-700 dark:text-purple-300">
+                {loansGrantedData.length > 0 ? Math.round(loansGrantedData.filter((r: any) => r.application_type === 'New').length / loansGrantedData.length * 100) : 0}%
+              </p>
+            </div>
+          </div>
           <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Loans Granted">
             <Table data={loansGrantedData} loading={loansGrantedLoading} height={500} rowHeight={45}>
               <Column width={130}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
               <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
               <Column width={110}><HeaderCell>Date Granted</HeaderCell><Cell>{(r: any) => r.release_date ? new Date(r.release_date).toLocaleDateString() : '-'}</Cell></Column>
               <Column width={170}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+              <Column width={100}><HeaderCell>Type</HeaderCell><Cell>{(r: any) => <Tag color={r.application_type === 'New' ? 'green' : 'blue'}>{r.application_type || 'New'}</Tag>}</Cell></Column>
               <Column width={180}><HeaderCell>Address</HeaderCell><Cell>{(r: any) => `${r.present_address || ''}, ${r.present_city || ''}`}</Cell></Column>
               <Column width={120}><HeaderCell>Loan Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
               <Column width={120}><HeaderCell>Interest Income</HeaderCell><Cell>{(r: any) => formatCurrency(r.paid_interest)}</Cell></Column>

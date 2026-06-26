@@ -441,10 +441,11 @@ export class ReportController {
       const { startDate, endDate, branchId } = req.query;
       const rows = await paymentRepo.query(
         `SELECT
-           l.loan_number, l.release_date,
-           l.principal_amount, l.interest_amount, l.total_amount, l.net_proceeds,
-           l.term_months, l.payment_frequency, l.status,
-           b.name as branch_name,
+            l.loan_number, l.release_date,
+            l.principal_amount, l.interest_amount, l.total_amount, l.net_proceeds,
+            l.term_months, l.payment_frequency, l.status,
+            la.application_type,
+            b.name as branch_name,
            br.first_name || ' ' || br.last_name as borrower_name,
            br.present_address, br.present_city, br.present_province,
            COALESCE(lc.total_charges, 0) as total_charges,
