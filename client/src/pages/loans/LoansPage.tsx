@@ -148,7 +148,9 @@ export const LoansPage = () => {
       <DataTable data={loans} loading={loading} page={page} total={total} limit={limit} onPageChange={setPage}
         columns={[
           { width: 130, fixed: true, header: 'Loan #', dataKey: 'loan_number' },
-          { width: 200, header: 'Borrower', dataKey: 'borrower_name' },
+          { width: 200, header: 'Borrower', cell: (row: Loan) => (
+            <a href="#" onClick={(e) => { e.preventDefault(); navigate(`/payments?loanId=${row.id}&autoPay=true`); }} className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer">{row.borrower_name}</a>
+          ) },
           { width: 150, header: 'Product', dataKey: 'product_name' },
           { width: 150, header: 'Principal', cell: (row: Loan) => formatCurrency(row.principal_amount) },
           { width: 150, header: 'Net Proceeds', cell: (row: Loan) => row.net_proceeds != null ? formatCurrency(row.net_proceeds) : '-' },

@@ -99,6 +99,9 @@ export const PaymentsPage = () => {
     const loanId = searchParams.get('loanId');
     if (loanId) {
       setFormValue((prev: any) => ({ ...prev, loanId }));
+      if (searchParams.get('autoPay') === 'true') {
+        setModalOpen(true);
+      }
     }
   }, [searchParams]);
 
@@ -144,11 +147,12 @@ export const PaymentsPage = () => {
 
   const handleReceivePayment = async () => {
     try {
-      await paymentsApi.create({ ...formValue, paymentDate: formValue.paymentDate ? toDateString(new Date(formValue.paymentDate)) : undefined });
+      const { data: res } = await paymentsApi.create({ ...formValue, paymentDate: formValue.paymentDate ? toDateString(new Date(formValue.paymentDate)) : undefined });
       setModalOpen(false);
       setFormValue({});
       fetchPayments();
       try { toaster.push(<Message type="success">Payment received</Message>, { placement: 'topEnd' }); } catch {}
+      if (res?.data?.id) printReceipt(res.data.id);
     } catch (err: any) {
       try { toaster.push(<Message type="error">{err?.response?.data?.error || 'Error processing payment'}</Message>, { placement: 'topEnd' }); } catch {}
     }
@@ -219,7 +223,7 @@ export const PaymentsPage = () => {
     const totalAmount = allocations.reduce((sum, a) => sum + a.amount, 0);
     setPaySubmitting(true);
     try {
-      await paymentsApi.create({
+      const { data: res } = await paymentsApi.create({
         loanId: payLoan.id,
         amount: totalAmount + penaltyTotal,
         paymentMethod: payMethod,
@@ -231,6 +235,7 @@ export const PaymentsPage = () => {
       setInstModalOpen(false);
       fetchPayments();
       try { toaster.push(<Message type="success">Payment recorded</Message>, { placement: 'topEnd' }); } catch {}
+      if (res?.data?.id) printReceipt(res.data.id);
     } catch (err: any) {
       try { toaster.push(<Message type="error">{err?.response?.data?.error || 'Payment failed'}</Message>, { placement: 'topEnd' }); } catch {}
     } finally { setPaySubmitting(false); }
