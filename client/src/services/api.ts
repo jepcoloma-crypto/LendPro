@@ -186,6 +186,7 @@ export const reportsApi = {
   getExpenseReport: (params?: any) => api.get('/reports/expense-report', { params }),
   getIncomeReport: (params?: any) => api.get('/reports/income-report', { params }),
   getBranchPL: (params?: any) => api.get('/reports/branch-pl', { params }),
+  getBorrowerMasterList: (params?: any) => api.get('/reports/borrower-master-list', { params }),
 };
 
 // Expenses

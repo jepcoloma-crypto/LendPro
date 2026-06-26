@@ -196,6 +196,7 @@ router.get('/reports/cash-flow', authenticate, cashflowController.getCashFlow.bi
 router.get('/reports/expense-report', authenticate, cashflowController.getExpenseReport.bind(cashflowController));
 router.get('/reports/income-report', authenticate, cashflowController.getIncomeReport.bind(cashflowController));
 router.get('/reports/branch-pl', authenticate, cashflowController.getBranchPL.bind(cashflowController));
+router.get('/reports/borrower-master-list', authenticate, reportController.getBorrowerMasterList.bind(reportController));
 
 // Settings (super-admin only)
 router.get('/settings', authenticate, settingsController.getAll.bind(settingsController));

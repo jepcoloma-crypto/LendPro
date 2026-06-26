@@ -616,6 +616,31 @@ export class ReportController {
     }
   }
 
+  async getBorrowerMasterList(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { branchId } = req.query;
+      const rows = await paymentRepo.query(
+        `SELECT
+           b.id as branch_id, b.name as branch_name,
+           br.id as borrower_id, br.borrower_code, br.first_name, br.last_name, br.middle_name, br.suffix,
+           br.mobile, br.present_address, br.present_city, br.present_province, br.status,
+           COUNT(l.id) FILTER (WHERE l.status = 'active') as active_loans,
+           COALESCE(SUM(l.outstanding_balance) FILTER (WHERE l.status = 'active'), 0) as outstanding_balance
+         FROM borrowers br
+         JOIN branches b ON b.id = br.branch_id
+         LEFT JOIN loans l ON l.borrower_id = br.id
+         WHERE ($1::uuid IS NULL OR br.branch_id = $1::uuid)
+         GROUP BY b.id, b.name, br.id, br.borrower_code, br.first_name, br.last_name, br.middle_name, br.suffix,
+                  br.mobile, br.present_address, br.present_city, br.present_province, br.status
+         ORDER BY b.name, br.last_name, br.first_name`,
+        [branchId || null]
+      );
+      res.json({ success: true, data: rows });
+    } catch (error: any) {
+      next(new AppError(500, error.message));
+    }
+  }
+
   async getProcessingCharges(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { startDate, endDate } = req.query;

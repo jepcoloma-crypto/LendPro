@@ -86,6 +86,10 @@ export const ReportsPage = () => {
   const [loansGrantedStart, setLoansGrantedStart] = useState<string | null>(null);
   const [loansGrantedEnd, setLoansGrantedEnd] = useState<string | null>(null);
 
+  const [masterListData, setMasterListData] = useState<any[]>([]);
+  const [masterListLoading, setMasterListLoading] = useState(false);
+  const [masterListBranch, setMasterListBranch] = useState<string | null>(null);
+
   const [expectedColData, setExpectedColData] = useState<any[]>([]);
   const [expectedColLoading, setExpectedColLoading] = useState(false);
   const [expectedColStart, setExpectedColStart] = useState<string>(new Date().toISOString().slice(0, 10));
@@ -361,6 +365,19 @@ export const ReportsPage = () => {
   }, [activeTab, loansGrantedStart, loansGrantedEnd]);
 
   useEffect(() => {
+    if (activeTab !== 'borrower-master-list') return;
+    const fetch = async () => {
+      setMasterListLoading(true);
+      try {
+        const { data } = await reportsApi.getBorrowerMasterList(masterListBranch ? { branchId: masterListBranch } : {});
+        setMasterListData(data.data || []);
+      } catch { setMasterListData([]); }
+      finally { setMasterListLoading(false); }
+    };
+    fetch();
+  }, [activeTab, masterListBranch]);
+
+  useEffect(() => {
     if (activeTab !== 'expected-collections') return;
     const fetch = async () => {
       setExpectedColLoading(true);
@@ -595,6 +612,56 @@ export const ReportsPage = () => {
     printWindow(html);
   };
 
+  const printMasterList = () => {
+    const title = masterListBranch ? `Borrower Master List - ${masterListData[0]?.branch_name || ''}` : 'Borrower Master List - All Areas';
+    let html = `<!DOCTYPE html><html><head><title>${title}</title>
+      <style>${printStyles}</style></head><body>
+      ${companyHeaderHtml(companyInfo)}
+      <div class="report-title">${title}</div>
+      <div class="report-subtitle">Generated: ${new Date().toLocaleString()} &middot; ${masterListData.length} borrowers</div>
+      <table><thead><tr>
+        <th>Code</th><th>Borrower Name</th><th>Mobile</th><th>Address</th><th>Status</th><th>Active Loans</th><th class="right">Outstanding</th>
+      </tr></thead><tbody>`;
+    let currentBranch = '';
+    let branchTotal = 0;
+    let grandTotal = 0;
+    for (const row of masterListData) {
+      if (row.branch_name !== currentBranch) {
+        if (currentBranch) {
+          html += `<tr class="subtotal"><td colspan="6" class="right"><strong>Subtotal - ${currentBranch}</strong></td><td class="right"><strong>${formatCurrency(branchTotal)}</strong></td></tr>`;
+        }
+        currentBranch = row.branch_name;
+        branchTotal = 0;
+        html += `<tr class="group-header"><td colspan="7"><strong>${currentBranch}</strong></td></tr>`;
+      }
+      const bal = Number(row.outstanding_balance || 0);
+      branchTotal += bal;
+      grandTotal += bal;
+      html += `<tr>
+        <td>${row.borrower_code || ''}</td>
+        <td>${row.last_name}, ${row.first_name}${row.middle_name ? ' ' + row.middle_name : ''}${row.suffix ? ' ' + row.suffix : ''}</td>
+        <td>${row.mobile || ''}</td>
+        <td>${row.present_address || ''}, ${row.present_city || ''}</td>
+        <td>${row.status}</td>
+        <td class="center">${row.active_loans}</td>
+        <td class="right">${formatCurrency(bal)}</td>
+      </tr>`;
+    }
+    if (currentBranch) {
+      html += `<tr class="subtotal"><td colspan="6" class="right"><strong>Subtotal - ${currentBranch}</strong></td><td class="right"><strong>${formatCurrency(branchTotal)}</strong></td></tr>`;
+    }
+    html += `<tr class="total"><td colspan="6" class="right"><strong>GRAND TOTAL</strong></td><td class="right"><strong>${formatCurrency(grandTotal)}</strong></td></tr>`;
+    html += `</tbody></table>
+      <div class="signatures">
+        <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+        <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+        <div><div class="sig-line"></div><p class="sig-name">Approved By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+      </div>
+      <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
+    </body></html>`;
+    printWindow(html);
+  };
+
   const categories: { key: string; label: string; tabs: { key: string; label: string }[] }[] = [
       { key: 'collections', label: 'Collections', tabs: [
         { key: 'daily-collections', label: 'Collections' },
@@ -605,6 +672,7 @@ export const ReportsPage = () => {
       { key: 'loans-granted', label: 'Loans Granted' },
       { key: 'disbursements', label: 'Disbursements' },
       { key: 'portfolio-summary', label: 'Portfolio Summary' },
+      { key: 'borrower-master-list', label: 'Borrower Master List' },
       { key: 'amort', label: 'Amortization Schedule' },
       { key: 'application-types', label: 'Application Types' },
     ]},
@@ -1550,6 +1618,67 @@ export const ReportsPage = () => {
         </div>
       )}
 
+      {activeTab === 'borrower-master-list' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <SelectPicker
+                placeholder="All areas"
+                data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                value={masterListBranch}
+                onChange={(v) => setMasterListBranch(v)}
+                style={{ width: 220 }}
+                cleanable
+              />
+              <p className="text-sm text-gray-500 self-center">{masterListData.length} borrowers</p>
+            </div>
+            <div className="flex gap-2">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printMasterList()}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+                exportCSV(masterListData, 'borrower-master-list', [
+                  { key: 'branch_name', label: 'Area' },
+                  { key: 'borrower_code', label: 'Code' },
+                  { key: 'last_name', label: 'Last Name' },
+                  { key: 'first_name', label: 'First Name' },
+                  { key: 'middle_name', label: 'Middle Name' },
+                  { key: 'mobile', label: 'Mobile' },
+                  { key: 'present_address', label: 'Address' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'active_loans', label: 'Active Loans' },
+                  { key: 'outstanding_balance', label: 'Outstanding Balance', format: (v) => String(v) },
+                ]);
+              }}>Export CSV</Button>
+            </div>
+          </div>
+
+          <Table data={masterListData} loading={masterListLoading} height={550} rowHeight={45}>
+            <Column width={150}><HeaderCell>Area</HeaderCell><Cell>{(r: any) => <span className="font-semibold text-gray-700 dark:text-gray-300">{r.branch_name}</span>}</Cell></Column>
+            <Column width={100}><HeaderCell>Code</HeaderCell><Cell dataKey="borrower_code" /></Column>
+            <Column width={160}><HeaderCell>Borrower Name</HeaderCell><Cell>{(r: any) => `${r.last_name}, ${r.first_name}${r.middle_name ? ' ' + r.middle_name : ''}${r.suffix ? ' ' + r.suffix : ''}`}</Cell></Column>
+            <Column width={130}><HeaderCell>Mobile</HeaderCell><Cell dataKey="mobile" /></Column>
+            <Column flexGrow={1}><HeaderCell>Address</HeaderCell><Cell>{(r: any) => `${r.present_address || ''}, ${r.present_city || ''}`}</Cell></Column>
+            <Column width={90}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.status === 'active' ? 'green' : r.status === 'inactive' ? 'orange' : 'red'}>{r.status}</Tag>}</Cell></Column>
+            <Column width={100} align="center"><HeaderCell>Active Loans</HeaderCell><Cell>{(r: any) => <span className="font-semibold">{r.active_loans}</span>}</Cell></Column>
+            <Column width={140} align="right"><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="font-semibold text-blue-600">{formatCurrency(r.outstanding_balance)}</span>}</Cell></Column>
+          </Table>
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-gray-50 dark:bg-gray-700/20 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+              <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Total Borrowers</p>
+              <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">{masterListData.length}</p>
+            </div>
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+              <p className="text-sm text-green-600 dark:text-green-400 font-medium">Active Borrowers</p>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-300">{masterListData.filter((r: any) => r.status === 'active').length}</p>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+              <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Total Outstanding</p>
+              <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{formatCurrency(masterListData.reduce((s: number, r: any) => s + Number(r.outstanding_balance || 0), 0))}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeTab === 'application-types' && (
         <div>
           <div className="flex justify-end gap-2 mb-4">
@@ -1628,13 +1757,13 @@ export const ReportsPage = () => {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 border border-blue-200 dark:border-blue-800">
               <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Disbursed</p>
-              <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{formatCurrency(disbursementData.reduce((s: number, r: any) => s + Number(r.disbursed_amount || 0), 0))}</p>
+              <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{formatCurrency(disbursementData.reduce((s: number, r: any) => s + Number(r.net_proceeds || 0), 0))}</p>
               <p className="text-xs text-blue-500">{disbursementData.length} transactions</p>
             </div>
             {(() => {
               const methods = [...new Set(disbursementData.map((r: any) => r.disbursement_method))].sort();
               return methods.map((m: any) => {
-                const total = disbursementData.filter((r: any) => r.disbursement_method === m).reduce((s: number, r: any) => s + Number(r.disbursed_amount || 0), 0);
+                const total = disbursementData.filter((r: any) => r.disbursement_method === m).reduce((s: number, r: any) => s + Number(r.net_proceeds || 0), 0);
                 const colors: Record<string, any> = { Cash: { bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-200 dark:border-green-800', text: 'text-green-700 dark:text-green-300', label: 'text-green-600 dark:text-green-400' }, 'Bank Transfer': { bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800', text: 'text-purple-700 dark:text-purple-300', label: 'text-purple-600 dark:text-purple-400' }, Check: { bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-200 dark:border-orange-800', text: 'text-orange-700 dark:text-orange-300', label: 'text-orange-600 dark:text-orange-400' } };
                 const c = colors[m] || { bg: 'bg-gray-50 dark:bg-gray-700/20', border: 'border-gray-200 dark:border-gray-700', text: 'text-gray-700 dark:text-gray-300', label: 'text-gray-600 dark:text-gray-400' };
                 const count = disbursementData.filter((r: any) => r.disbursement_method === m).length;
@@ -1657,9 +1786,10 @@ export const ReportsPage = () => {
               <Column width={100}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
               <Column width={90}><HeaderCell>Method</HeaderCell><Cell>{(r: any) => <Tag>{r.disbursement_method}</Tag>}</Cell></Column>
               <Column width={130}><HeaderCell>Reference</HeaderCell><Cell>{(r: any) => r.reference_number || '-'}</Cell></Column>
-              <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => <span className="font-semibold">{formatCurrency(r.disbursed_amount)}</span>}</Cell></Column>
               <Column width={120}><HeaderCell>Loan Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
               <Column width={120}><HeaderCell>Net Proceeds</HeaderCell><Cell>{(r: any) => <span className="font-semibold text-green-600">{formatCurrency(r.net_proceeds)}</span>}</Cell></Column>
+              {/* Amount column hidden but kept — remove comment to restore */}
+              {/* <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => <span className="font-semibold">{formatCurrency(r.disbursed_amount)}</span>}</Cell></Column> */}
               <Column width={150}><HeaderCell>Notes</HeaderCell><Cell>{(r: any) => r.notes || '-'}</Cell></Column>
               <Column width={140}><HeaderCell>Disbursed By</HeaderCell><Cell dataKey="disbursed_by_name" /></Column>
             </Table>

@@ -20,6 +20,10 @@ export const printStyles = `
   td { padding: 3px 5px; border: 1px solid #d1d5db; }
   th { border: 1px solid #374151; }
   tr:nth-child(even) td { background: #f9fafb; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .group-header td { background: #e5e7eb; font-weight: 700; font-size: 9px; }
+  .subtotal td { background: #f3f4f6; font-weight: 600; border-top: 2px solid #9ca3af; }
   .text-right { text-align: right; }
   .text-center { text-align: center; }
   .font-medium { font-weight: 500; }
