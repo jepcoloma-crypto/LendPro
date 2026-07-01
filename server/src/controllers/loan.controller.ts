@@ -392,7 +392,13 @@ export class LoanController {
         }
       }
 
-      autoRecordTransaction({
+      // Require an open shift to record the disbursement
+      const myShift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
+      if (!myShift) {
+        throw new AppError(400, 'No open shift found. Please open a cashier shift before releasing a loan.');
+      }
+
+      await autoRecordTransaction({
         userId: req.user!.userId,
         loanId: loan.id,
         borrowerId: loan.borrower_id,
