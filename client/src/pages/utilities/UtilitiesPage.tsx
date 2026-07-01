@@ -1,9 +1,21 @@
-import { useState, useRef } from 'react';
-import { Panel, Button, toaster, Message, Modal, Loader, Tag } from 'rsuite';
-import api, { utilitiesApi } from '../../services/api';
+import { useState, useEffect, useRef } from 'react';
+import { Panel, Button, toaster, Message, Modal, Loader, Tag, Checkbox, CheckboxGroup } from 'rsuite';
+import api, { utilitiesApi, cancellationRequestsApi } from '../../services/api';
 import { RefreshCw, Trash2, HeartPulse, Database, Download, Upload, AlertTriangle } from 'lucide-react';
 import { AuditLogsPage } from '../audit-logs/AuditLogsPage';
+import { LoginHistoryPage } from '../audit-logs/LoginHistoryPage';
+import { PendingApprovalsPage } from '../audit-logs/PendingApprovalsPage';
 import { SettingsPage } from '../settings/SettingsPage';
+
+const MODULE_OPTIONS = [
+  { label: 'Borrowers', value: 'borrowers', desc: 'Borrowers, co-makers, documents' },
+  { label: 'Applications', value: 'applications', desc: 'Loan applications, approvals, documents' },
+  { label: 'Loans', value: 'loans', desc: 'Loans, schedules, disbursements, penalties' },
+  { label: 'Payments', value: 'payments', desc: 'Payments, allocations' },
+  { label: 'Cashier', value: 'cashier', desc: 'Sessions, transactions, counts, reconciliations, expenses, income' },
+  { label: 'Collections', value: 'collections', desc: 'Collections, visits' },
+  { label: 'Reports/Audit', value: 'reports', desc: 'Audit logs, notifications, email/sms logs' },
+];
 
 const SystemToolsTab = () => {
   const [health, setHealth] = useState<any>(null);
@@ -15,6 +27,7 @@ const SystemToolsTab = () => {
   const [backupTable, setBackupTable] = useState('');
   const [clearOpen, setClearOpen] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
+  const [clearModules, setClearModules] = useState<string[]>([]);
   const [recalcResult, setRecalcResult] = useState<string | null>(null);
   const [penaltyLoading, setPenaltyLoading] = useState(false);
   const [penaltyResult, setPenaltyResult] = useState<string | null>(null);
@@ -95,9 +108,10 @@ const SystemToolsTab = () => {
   };
 
   const clearData = async () => {
+    if (clearModules.length === 0) { toaster.push(<Message type="warning">Select at least one module</Message>, { placement: 'topEnd' }); return; }
     setClearLoading(true);
     try {
-      const { data } = await utilitiesApi.clearData();
+      const { data } = await utilitiesApi.clearData({ modules: clearModules });
       toaster.push(<Message type="success">{data.message}</Message>, { placement: 'topEnd' });
       setClearOpen(false);
     } catch { toaster.push(<Message type="error">Failed to clear data</Message>, { placement: 'topEnd' }); }
@@ -175,8 +189,8 @@ const SystemToolsTab = () => {
 
       {/* Clear Operational Data */}
       <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-red-200 dark:border-red-800" bordered header={<div className="text-sm font-semibold flex items-center gap-2 text-red-600"><Trash2 className="w-4 h-4" /> Clear Operational Data</div>}>
-        <p className="text-sm text-gray-500 mb-3">Remove all operational data while preserving users, roles, loan products, charges, and settings.</p>
-        <Button appearance="primary" color="red" onClick={() => setClearOpen(true)} startIcon={<Trash2 className="w-4 h-4" />}>Clear All Data</Button>
+        <p className="text-sm text-gray-500 mb-3">Remove data from selected modules. Users, roles, loan products, charges, and settings are always preserved.</p>
+        <Button appearance="primary" color="red" onClick={() => { setClearModules([]); setClearOpen(true); }} startIcon={<Trash2 className="w-4 h-4" />}>Clear Data</Button>
       </Panel>
 
       {/* Restore Confirmation */}
@@ -267,25 +281,38 @@ const SystemToolsTab = () => {
       </Modal>
 
       {/* Clear Confirmation */}
-      <Modal open={clearOpen} onClose={() => setClearOpen(false)} size="xs">
-        <Modal.Header><Modal.Title>Clear All Operational Data</Modal.Title></Modal.Header>
+      <Modal open={clearOpen} onClose={() => setClearOpen(false)} size="sm">
+        <Modal.Header><Modal.Title>Clear Operational Data</Modal.Title></Modal.Header>
         <Modal.Body>
-          <div className="text-center py-4">
-            <Trash2 className="w-12 h-12 text-red-500 mx-auto mb-3" />
-            <p className="text-gray-700 dark:text-gray-300 font-medium">This will permanently delete:</p>
-            <ul className="text-sm text-gray-500 dark:text-gray-400 mt-2 space-y-1">
-              <li>• All borrowers and co-makers</li>
-              <li>• All loan applications and documents</li>
-              <li>• All loans, schedules, and disbursements</li>
-              <li>• All payments and allocations</li>
-              <li>• All collections and visits</li>
-              <li>• All audit logs and notifications</li>
-            </ul>
-            <p className="text-sm text-red-500 mt-3 font-medium">This action cannot be undone.</p>
+          <div className="py-2">
+            <p className="text-gray-700 dark:text-gray-300 font-medium mb-3">Select modules to clear:</p>
+            <div className="space-y-2 mb-4">
+              {MODULE_OPTIONS.map(m => (
+                <label key={m.value} className="flex items-start gap-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                  <input type="checkbox" checked={clearModules.includes(m.value)}
+                    onChange={(e) => setClearModules(e.target.checked ? [...clearModules, m.value] : clearModules.filter(v => v !== m.value))}
+                    className="mt-0.5" />
+                  <div>
+                    <div className="font-medium text-sm">{m.label}</div>
+                    <div className="text-xs text-gray-400">{m.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            {clearModules.length > 0 && (
+              <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-900/20 rounded text-sm">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                <span className="text-amber-700 dark:text-amber-300">
+                  <strong>{clearModules.length} module(s)</strong> selected. This cannot be undone.
+                </span>
+              </div>
+            )}
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <Button appearance="primary" color="red" onClick={clearData} loading={clearLoading}>Yes, Clear Everything</Button>
+          <Button appearance="primary" color="red" onClick={clearData} loading={clearLoading} disabled={clearModules.length === 0}>
+            <Trash2 className="w-4 h-4 mr-1" />Clear Selected
+          </Button>
           <Button onClick={() => setClearOpen(false)} appearance="subtle">Cancel</Button>
         </Modal.Footer>
       </Modal>
@@ -295,6 +322,11 @@ const SystemToolsTab = () => {
 
 export const UtilitiesPage = () => {
   const [tab, setTab] = useState('tools');
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    cancellationRequestsApi.getPendingCount().then(({ data }) => setPendingCount(data.data?.count || 0)).catch(() => {});
+  }, [tab]);
 
   return (
     <div className="space-y-6">
@@ -306,6 +338,8 @@ export const UtilitiesPage = () => {
         {[
           { key: 'tools', label: 'System Tools' },
           { key: 'audit', label: 'Audit Logs' },
+          { key: 'login-history', label: 'Login History' },
+          { key: 'approvals', label: `Pending Approvals${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
           { key: 'settings', label: 'Settings' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
@@ -316,6 +350,8 @@ export const UtilitiesPage = () => {
       </div>
       {tab === 'tools' && <SystemToolsTab />}
       {tab === 'audit' && <AuditLogsPage />}
+      {tab === 'login-history' && <LoginHistoryPage />}
+      {tab === 'approvals' && <PendingApprovalsPage />}
       {tab === 'settings' && <SettingsPage />}
     </div>
   );

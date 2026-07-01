@@ -3,6 +3,17 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { userRepo, roleRepo, auditLogRepo } from '../repositories';
 import { JwtPayload } from '../types';
+import { pool } from '../database/connection';
+
+const logLogin = async (userId: string | null, username: string, action: string, ip?: string, userAgent?: string, success?: boolean, failureReason?: string) => {
+  try {
+    await pool.query(
+      `INSERT INTO login_history (user_id, username, action, ip_address, user_agent, success, failure_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, username, action, ip || null, userAgent || null, success ?? true, failureReason || null]
+    );
+  } catch (e) { console.error('Failed to log login history:', e); }
+};
 import { generateId } from '../utils/helpers';
 
 export class AuthService {
@@ -16,12 +27,23 @@ export class AuthService {
       console.error('Auth login query error:', err?.message || err);
       throw new Error('Authentication failed. Please try again.');
     }
-    if (!user) throw new Error('Invalid email or password');
+    if (!user) {
+      await logLogin(null, email, 'login', ip, userAgent, false, 'User not found');
+      throw new Error('Invalid email or password');
+    }
 
     const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) throw new Error('Invalid email or password');
+    if (!valid) {
+      await logLogin(user.id, email, 'login', ip, userAgent, false, 'Invalid password');
+      throw new Error('Invalid email or password');
+    }
 
-    if (!user.is_active) throw new Error('Account is deactivated');
+    if (!user.is_active) {
+      await logLogin(user.id, email, 'login', ip, userAgent, false, 'Account deactivated');
+      throw new Error('Account is deactivated');
+    }
+
+    await logLogin(user.id, email, 'login', ip, userAgent, true);
 
     const role = await roleRepo.findById(user.role_id);
     if (!role) throw new Error('Role not found');
@@ -78,6 +100,7 @@ export class AuthService {
   }
 
   async logout(userId: string) {
+    try { await logLogin(userId, '', 'logout'); } catch {}
     await userRepo.update(userId, { refresh_token: null });
     await auditLogRepo.create({
       user_id: userId,

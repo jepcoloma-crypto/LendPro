@@ -18,6 +18,8 @@ import { chargesController } from '../controllers/charges.controller';
 import { utilityController } from '../controllers/utility.controller';
 import { twilioWebhook, setBorrowerPin } from '../controllers/twilio.controller';
 import { cashflowController } from '../controllers/cashflow.controller';
+import { cancellationController } from '../controllers/cancellation.controller';
+import { cashierController } from '../controllers/cashier.controller';
 import { auditLogRepo } from '../repositories';
 
 
@@ -118,7 +120,43 @@ router.get('/payments/recent', authenticate, paymentController.getRecentPayments
 router.get('/payments/:id', authenticate, paymentController.getPaymentById.bind(paymentController));
 router.get('/payments/:id/receipt', authenticate, paymentController.getReceipt.bind(paymentController));
 router.put('/payments/:id', authenticate, auditLog('update', 'payment'), paymentController.updatePayment.bind(paymentController));
+router.put('/payments/:id/cancel', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('cancel', 'payment'), paymentController.cancelPayment.bind(paymentController));
 router.delete('/payments/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('delete', 'payment'), paymentController.deletePayment.bind(paymentController));
+// Cancellation approval workflow
+router.post('/payments/:id/cancel-request', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cancellationController.requestCancel.bind(cancellationController));
+router.post('/payments/:id/void-repay-request', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cancellationController.requestVoidRepay.bind(cancellationController));
+router.get('/cancellation-requests', authenticate, authorize('super-admin', 'admin'), cancellationController.list.bind(cancellationController));
+router.get('/cancellation-requests/pending-count', authenticate, cancellationController.pendingCount.bind(cancellationController));
+router.put('/cancellation-requests/:id/approve', authenticate, authorize('super-admin', 'admin'), cancellationController.approve.bind(cancellationController));
+router.put('/cancellation-requests/:id/reject', authenticate, authorize('super-admin', 'admin'), cancellationController.reject.bind(cancellationController));
+// Cashier reconciliation v2
+router.post('/cashier-sessions/open', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.shiftOpen.bind(cashierController));
+router.put('/cashier-sessions/:id/close', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.shiftClose.bind(cashierController));
+router.get('/cashier-sessions', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.shiftList.bind(cashierController));
+router.get('/cashier-sessions/my-open', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.shiftMyOpen.bind(cashierController));
+router.get('/cashier-sessions/:id/details', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.shiftDetails.bind(cashierController));
+router.get('/cashier-sessions/dashboard/stats', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.dashboard.bind(cashierController));
+// Cash transactions
+router.post('/cash-transactions', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.recordTransaction.bind(cashierController));
+router.get('/cash-transactions', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.getTransactions.bind(cashierController));
+// Cash counts
+router.post('/cash-counts', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.recordCashCount.bind(cashierController));
+router.get('/cash-counts', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.getCashCounts.bind(cashierController));
+// Reconciliations
+router.post('/cash-reconciliations', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.submitReconciliation.bind(cashierController));
+router.get('/cash-reconciliations', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.getReconciliations.bind(cashierController));
+router.get('/cash-reconciliations/pending', authenticate, authorize('super-admin', 'admin'), cashierController.pendingReconciliations.bind(cashierController));
+router.put('/cash-reconciliations/:id/approve', authenticate, authorize('super-admin', 'admin'), cashierController.approveReconciliation.bind(cashierController));
+router.put('/cash-reconciliations/:id/reject', authenticate, authorize('super-admin', 'admin'), cashierController.rejectReconciliation.bind(cashierController));
+router.put('/cash-reconciliations/:id/request-recount', authenticate, authorize('super-admin', 'admin'), cashierController.requestRecount.bind(cashierController));
+// Approval history
+router.get('/approval-history', authenticate, authorize('super-admin', 'admin'), cashierController.approvalHistory.bind(cashierController));
+// Cash management reports
+router.get('/cash-reports/collection-summary', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.reportCollectionSummary.bind(cashierController));
+router.get('/cash-reports/variance-summary', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.reportVarianceSummary.bind(cashierController));
+router.get('/cash-reports/method-summary', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.reportMethodSummary.bind(cashierController));
+router.get('/cash-reports/branch-daily', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.reportBranchDaily.bind(cashierController));
+router.get('/cash-reports/daily-chart', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.reportDailyChart.bind(cashierController));
 
 // Collections
 router.get('/collections', authenticate, collectionController.getAll.bind(collectionController));
@@ -155,12 +193,13 @@ router.get('/calendar/events', authenticate, calendarController.getEvents.bind(c
 // Audit Logs
 router.get('/audit-logs', authenticate, authorize('super-admin', 'admin'), async (req, res, next) => {
   try {
-    const { limit, offset, userId, entityType, action } = req.query;
+    const { limit, offset, userId, entityType, entityId, action } = req.query;
     let sql = `SELECT al.*, u.first_name || ' ' || u.last_name as user_name FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id`;
     const conditions: string[] = [];
     const values: any[] = [];
     if (userId) { values.push(userId); conditions.push(`al.user_id = $${values.length}`); }
     if (entityType) { values.push(entityType); conditions.push(`al.entity_type = $${values.length}`); }
+    if (entityId) { values.push(entityId); conditions.push(`al.entity_id = $${values.length}`); }
     if (action) { values.push(action); conditions.push(`al.action = $${values.length}`); }
     if (conditions.length) sql += ` WHERE ${conditions.join(' AND ')}`;
     sql += ` ORDER BY al.created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
@@ -222,6 +261,7 @@ router.post('/utilities/apply-penalties', authenticate, authorize('super-admin')
 router.post('/utilities/clear-data', authenticate, authorize('super-admin'), utilityController.clearOperationalData.bind(utilityController));
 router.get('/utilities/backup', authenticate, authorize('super-admin'), utilityController.backupDatabase.bind(utilityController));
 router.post('/utilities/restore', authenticate, authorize('super-admin'), upload.single('file'), utilityController.restoreDatabase.bind(utilityController));
+router.get('/login-history', authenticate, authorize('super-admin'), utilityController.getLoginHistory.bind(utilityController));
 
 // Notifications
 router.get('/notifications', authenticate, notificationController.getAll.bind(notificationController));

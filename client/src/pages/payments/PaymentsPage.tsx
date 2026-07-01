@@ -1,9 +1,9 @@
 import { useState, useEffect, memo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Table, Button, Panel, Modal, Form, toaster, Message, Pagination, Tag, SelectPicker, DatePicker, InputNumber, Input, InputGroup } from 'rsuite';
-import { paymentsApi, loansApi } from '../../services/api';
+import { paymentsApi, loansApi, auditLogsApi, cancellationRequestsApi } from '../../services/api';
 import { Payment, Loan } from '../../types';
-import { Plus, ListOrdered, Eye, Trash2, Search, Printer, Download } from 'lucide-react';
+import { Plus, ListOrdered, Eye, Search, Printer, Download, RotateCcw, Ban } from 'lucide-react';
 import { formatCurrency, methodColor, exportCSV, numberToWords } from '../../utils/format';
 import { useAuth } from '../../contexts/AuthContext';
 import { getCompanySettings } from '../../utils/companySettings';
@@ -43,11 +43,11 @@ export const PaymentsPage = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [viewPayment, setViewPayment] = useState<any>(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<any>({});
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [viewAuditTrail, setViewAuditTrail] = useState<any[]>([]);
+
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<any>(null);
+  const [cancelReason, setCancelReason] = useState('');
   const [loans, setLoans] = useState<Loan[]>([]);
   const [formValue, setFormValue] = useState<any>({});
 
@@ -55,6 +55,7 @@ export const PaymentsPage = () => {
   const [payLoan, setPayLoan] = useState<any>(null);
   const [paySchedule, setPaySchedule] = useState<any[]>([]);
   const [payAllocations, setPayAllocations] = useState<Record<string, { amount: number; penalty: number }>>({});
+  const [voidPaymentId, setVoidPaymentId] = useState<string | null>(null);
   const [payMethod, setPayMethod] = useState('cash');
   const [payDate, setPayDate] = useState<Date>(new Date());
   const [payReference, setPayReference] = useState('');
@@ -148,10 +149,14 @@ export const PaymentsPage = () => {
   const handleReceivePayment = async () => {
     try {
       const { data: res } = await paymentsApi.create({ ...formValue, paymentDate: formValue.paymentDate ? toDateString(new Date(formValue.paymentDate)) : undefined });
+      if (voidPaymentId && res?.data?.id) {
+        await paymentsApi.requestVoidRepay(voidPaymentId, { reason: 'Replaced by new payment ' + res.data.payment_number, replacementPaymentId: res.data.id });
+      }
       setModalOpen(false);
       setFormValue({});
+      setVoidPaymentId(null);
       fetchPayments();
-      try { toaster.push(<Message type="success">Payment received</Message>, { placement: 'topEnd' }); } catch {}
+      try { toaster.push(<Message type="success">Payment received. {voidPaymentId ? 'Cancellation request submitted for old payment.' : ''}</Message>, { placement: 'topEnd' }); } catch {}
       if (res?.data?.id) printReceipt(res.data.id);
     } catch (err: any) {
       try { toaster.push(<Message type="error">{err?.response?.data?.error || 'Error processing payment'}</Message>, { placement: 'topEnd' }); } catch {}
@@ -245,39 +250,42 @@ export const PaymentsPage = () => {
     try {
       const { data } = await paymentsApi.getById(id);
       setViewPayment(data.data);
+      try { const { data: trail } = await auditLogsApi.getAll({ entityType: 'payment', entityId: id, limit: 50 }); setViewAuditTrail(trail.data || []); } catch { setViewAuditTrail([]); }
       setViewOpen(true);
     } catch { toaster.push(<Message type="error">Failed to load payment</Message>, { placement: 'topEnd' }); }
   };
 
-  const openEdit = (row: any) => {
-    setEditTarget(row.id);
-    setEditForm({ notes: row.notes || '' });
-    setEditOpen(true);
+  const openCancel = (payment: any) => {
+    setCancelTarget(payment);
+    setCancelReason('');
+    setCancelOpen(true);
   };
 
-  const handleEdit = async () => {
-    if (!editTarget) return;
+  const handleCancel = async () => {
+    if (!cancelTarget || !cancelReason.trim()) return;
     try {
-      await paymentsApi.update(editTarget, editForm);
-      setEditOpen(false);
+      await paymentsApi.requestCancel(cancelTarget.id, { reason: cancelReason });
+      toaster.push(<Message type="success">Cancellation request submitted for approval</Message>, { placement: 'topEnd' });
+      setCancelOpen(false);
+      setCancelTarget(null);
+      setCancelReason('');
       setViewOpen(false);
       fetchPayments();
-      try { toaster.push(<Message type="success">Payment updated</Message>, { placement: 'topEnd' }); } catch {}
-    } catch (err: any) {
-      try { toaster.push(<Message type="error">{err?.response?.data?.error || 'Update failed'}</Message>, { placement: 'topEnd' }); } catch {}
-    }
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed to submit cancellation request'}</Message>, { placement: 'topEnd' }); }
   };
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    try {
-      await paymentsApi.delete(deleteTarget);
-      toaster.push(<Message type="success">Payment deleted</Message>, { placement: 'topEnd' });
-      setDeleteOpen(false);
-      setDeleteTarget(null);
-      setViewOpen(false);
-      fetchPayments();
-    } catch { toaster.push(<Message type="error">Failed to delete payment</Message>, { placement: 'topEnd' }); }
+  const voidAndRepay = (payment: any) => {
+    setFormValue({
+      loanId: payment.loan_id,
+      paymentMethod: payment.payment_method,
+      paymentDate: payment.payment_date ? new Date(payment.payment_date) : undefined,
+      referenceNumber: payment.reference_number || '',
+      notes: '',
+      amount: null,
+    });
+    setVoidPaymentId(payment.id);
+    toaster.push(<Message type="info">Enter new amount and submit to cancel old payment and create replacement</Message>, { placement: 'topEnd' });
+    setModalOpen(true);
   };
 
   const printReceipt = async (paymentId: string) => {
@@ -393,12 +401,14 @@ export const PaymentsPage = () => {
           <Column width={200}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
           <Column width={130}><HeaderCell>Amount</HeaderCell><Cell>{(r: Payment) => formatCurrency(r.amount)}</Cell></Column>
           <Column width={120}><HeaderCell>Method</HeaderCell><Cell>{(r: Payment) => <Tag color={methodColor(r.payment_method)}>{r.payment_method}</Tag>}</Cell></Column>
+          <Column width={100}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => r.status === 'cancelled' ? <Tag color="red">Cancelled</Tag> : <Tag color="green">Completed</Tag>}</Cell></Column>
           <Column width={130}><HeaderCell>Date</HeaderCell><Cell>{(r: Payment) => new Date(r.payment_date).toLocaleDateString()}</Cell></Column>
-          <Column width={210} align="center"><HeaderCell>Actions</HeaderCell><Cell>{(r: Payment) => (
+          <Column width={280} align="center"><HeaderCell>Actions</HeaderCell><Cell>{(r: any) => (
             <div className="flex gap-1 justify-center">
               <Button size="sm" appearance="subtle" onClick={() => viewDetails(r.id)} className="group"><Eye className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">View</span></Button>
-              <Button size="sm" appearance="subtle" color="green" onClick={() => printReceipt(r.id)} className="group"><Printer className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Receipt</span></Button>
-              {!isCollector && <Button size="sm" appearance="subtle" color="red" onClick={() => { setDeleteTarget(r.id); setDeleteOpen(true); }} className="group"><Trash2 className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Delete</span></Button>}
+              {r.status !== 'cancelled' && <Button size="sm" appearance="subtle" color="green" onClick={() => printReceipt(r.id)} className="group"><Printer className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Receipt</span></Button>}
+              {!isCollector && r.status !== 'cancelled' && <Button size="sm" appearance="subtle" color="orange" onClick={() => voidAndRepay(r)} className="group"><RotateCcw className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Void & Repay</span></Button>}
+              {!isCollector && r.status !== 'cancelled' && <Button size="sm" appearance="subtle" color="red" onClick={() => openCancel(r)} className="group"><Ban className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Cancel</span></Button>}
             </div>
           )}</Cell></Column>
         </Table>
@@ -407,7 +417,7 @@ export const PaymentsPage = () => {
         </div>
       </Panel>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} size="sm">
+      <Modal open={modalOpen} onClose={() => { setModalOpen(false); setVoidPaymentId(null); }} size="sm">
         <Modal.Header><Modal.Title>Quick Payment</Modal.Title></Modal.Header>
         <Modal.Body>
           <Form fluid formValue={formValue} onChange={setFormValue}>
@@ -445,14 +455,14 @@ export const PaymentsPage = () => {
             </Form.Group>
           </Form>
           <div className="mt-3 text-sm text-gray-500">
-            <Button appearance="link" size="sm" onClick={() => { setModalOpen(false); openInstallmentModal(); }}>
+            <Button appearance="link" size="sm" onClick={() => { setModalOpen(false); setVoidPaymentId(null); openInstallmentModal(); }}>
               Need per-installment allocation? Use Per-Installment mode instead
             </Button>
           </div>
         </Modal.Body>
         <Modal.Footer>
           <Button onClick={handleReceivePayment} appearance="primary">Receive Payment</Button>
-          <Button onClick={() => setModalOpen(false)} appearance="subtle">Cancel</Button>
+          <Button onClick={() => { setModalOpen(false); setVoidPaymentId(null); }} appearance="subtle">Cancel</Button>
         </Modal.Footer>
       </Modal>
 
@@ -566,37 +576,42 @@ export const PaymentsPage = () => {
               ))}
             </div>
           )}
+          {viewAuditTrail.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Audit Trail</h4>
+              <div className="space-y-2">
+                {viewAuditTrail.map((a: any) => (
+                  <div key={a.id} className="flex items-start gap-2 text-xs">
+                    <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${a.action === 'create' ? 'bg-green-500' : a.action === 'cancel' ? 'bg-red-500' : 'bg-blue-500'}`} />
+                    <div>
+                      <span className={`font-medium ${a.action === 'cancel' ? 'text-red-600' : a.action === 'create' ? 'text-green-600' : 'text-blue-600'}`}>{a.action}</span>
+                      <span className="text-gray-500"> by {a.user_name || 'System'} — {new Date(a.created_at).toLocaleString()}</span>
+                      {a.action === 'cancel' && a.new_values && (() => {
+                        const nv = typeof a.new_values === 'string' ? JSON.parse(a.new_values) : a.new_values;
+                        return nv.cancellation_reason ? <div className="text-red-500 italic mt-0.5">Reason: {nv.cancellation_reason}</div> : null;
+                      })()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </Modal.Body>
         <Modal.Footer>
-          <Button onClick={() => { setViewOpen(false); if (viewPayment) printReceipt(viewPayment.id); }} appearance="primary" color="green" startIcon={<Printer className="w-4 h-4" />}>Print Receipt</Button>
+          {viewPayment?.status !== 'cancelled' && <Button onClick={() => { setViewOpen(false); if (viewPayment) printReceipt(viewPayment.id); }} appearance="primary" color="green" startIcon={<Printer className="w-4 h-4" />}>Print Receipt</Button>}
           <Button onClick={() => setViewOpen(false)} appearance="subtle">Close</Button>
         </Modal.Footer>
       </Modal>
 
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} size="sm">
-        <Modal.Header><Modal.Title>Edit Payment</Modal.Title></Modal.Header>
+      <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} size="sm">
+        <Modal.Header><Modal.Title>Cancel Payment</Modal.Title></Modal.Header>
         <Modal.Body>
-          <Form fluid formValue={editForm} onChange={(v: any) => setEditForm((prev: any) => ({ ...prev, ...v }))}>
-            <Form.Group>
-              <Form.ControlLabel>Notes</Form.ControlLabel>
-              <textarea className="rs-input w-full" rows={3} value={editForm.notes || ''} onChange={(e) => setEditForm((prev: any) => ({ ...prev, notes: e.target.value }))} />
-            </Form.Group>
-          </Form>
+          <p className="text-gray-600 dark:text-gray-300 mb-3">This will reverse all balances and mark this payment as cancelled. Provide a reason:</p>
+          <textarea className="rs-input w-full" rows={3} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Reason for cancellation..." />
         </Modal.Body>
         <Modal.Footer>
-          <Button appearance="primary" onClick={handleEdit}>Save Changes</Button>
-          <Button appearance="subtle" onClick={() => setEditOpen(false)}>Cancel</Button>
-        </Modal.Footer>
-      </Modal>
-
-      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} size="xs">
-        <Modal.Header><Modal.Title>Confirm Delete</Modal.Title></Modal.Header>
-        <Modal.Body>
-          <p className="text-gray-600 dark:text-gray-300">Are you sure you want to delete this payment? This action cannot be undone.</p>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button color="red" appearance="primary" onClick={handleDelete}>Delete</Button>
-          <Button appearance="subtle" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+          <Button color="red" appearance="primary" onClick={handleCancel} disabled={!cancelReason.trim()}>Cancel Payment</Button>
+          <Button appearance="subtle" onClick={() => setCancelOpen(false)}>Close</Button>
         </Modal.Footer>
       </Modal>
     </div>

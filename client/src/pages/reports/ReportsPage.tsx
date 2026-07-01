@@ -6,7 +6,6 @@ import { formatCurrency, exportCSV } from '../../utils/format';
 import { printStyles, companyHeaderHtml, printWindow } from '../../utils/print';
 import { getCompanySettings } from '../../utils/companySettings';
 import { CollectorRemittancePage } from '../audit/CollectorRemittancePage';
-import { ExpensesPage } from '../expenses/ExpensesPage';
 
 const { Column, HeaderCell, Cell } = Table;
 
@@ -693,10 +692,6 @@ export const ReportsPage = () => {
       { key: 'processing-charges', label: 'Processing Charges' },
       { key: 'cash-flow', label: 'Cash Flow' },
       { key: 'branch-pl', label: 'Branch P&L' },
-    ]},
-    { key: 'management', label: 'Management', tabs: [
-      { key: 'expenses-mgmt', label: 'Expenses' },
-      { key: 'income-mgmt', label: 'Other Income' },
     ]},
   ];
 
@@ -1969,8 +1964,6 @@ export const ReportsPage = () => {
       )}
 
       {activeTab === 'remittance-audit' && <CollectorRemittancePage embedded />}
-      {activeTab === 'expenses-mgmt' && <ExpensesPage embedded />}
-      {activeTab === 'income-mgmt' && <ExpensesPage embedded defaultTab="income" />}
     </div>
   );
 };

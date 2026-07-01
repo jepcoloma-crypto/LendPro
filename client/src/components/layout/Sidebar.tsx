@@ -1,9 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { Sidenav, Nav } from 'rsuite';
+import { Sidenav, Nav, Badge } from 'rsuite';
+import { useState, useEffect } from 'react';
+import { cancellationRequestsApi } from '../../services/api';
 import {
   DashboardIcon, PeoplesIcon, MoneyIcon, CreditCardIcon,
   CollectionIcon, FileTextIcon, SettingsIcon, UserIcon,
-  BranchIcon, CalendarIcon,
+  BranchIcon, CalendarIcon, DollarSignIcon,
 } from '../../utils/icons';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -13,6 +15,7 @@ const menuItems = [
   { label: 'Applications', path: '/applications', icon: FileTextIcon, roles: ['super-admin', 'admin', 'branch-manager', 'loan-officer', 'credit-investigator'], group: 'lending' },
   { label: 'Loans', path: '/loans', icon: MoneyIcon, roles: ['*'], group: 'lending' },
   { label: 'Payments', path: '/payments', icon: CreditCardIcon, roles: ['super-admin', 'admin', 'branch-manager', 'cashier', 'collector'], group: 'lending' },
+  { label: 'Cashier', path: '/cashier', icon: DollarSignIcon, roles: ['super-admin', 'admin', 'branch-manager', 'cashier'], group: 'lending' },
   { label: 'Collections', path: '/collections', icon: CollectionIcon, roles: ['super-admin', 'admin', 'branch-manager', 'collector'], group: 'lending' },
   { label: 'Calendar', path: '/calendar', icon: CalendarIcon, roles: ['*'], group: 'lending' },
 
@@ -34,6 +37,15 @@ const groupLabels: Record<string, string> = {
 export const Sidebar = ({ collapsed, onClose }: { collapsed: boolean; onClose?: () => void }) => {
   const { user } = useAuth();
   const isSuperAdmin = user?.role_slug === 'super-admin';
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    cancellationRequestsApi.getPendingCount().then(({ data }) => setPendingCount(data.data?.count || 0)).catch(() => {});
+    const interval = setInterval(() => {
+      cancellationRequestsApi.getPendingCount().then(({ data }) => setPendingCount(data.data?.count || 0)).catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className={`bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 transition-all duration-300 ${collapsed ? 'w-16' : 'w-56 sm:w-64'}`}>
@@ -60,7 +72,14 @@ export const Sidebar = ({ collapsed, onClose }: { collapsed: boolean; onClose?: 
                 )}
                 {items.map((item) => (
                   <Nav.Item key={item.path} as={NavLink} to={item.path} icon={<item.icon />}>
-                    {!collapsed && item.label}
+                    {!collapsed && (
+                      <span className="flex items-center gap-2">
+                        {item.label}
+                        {item.path === '/utilities' && pendingCount > 0 && (
+                          <span className="bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[18px] text-center">{pendingCount}</span>
+                        )}
+                      </span>
+                    )}
                   </Nav.Item>
                 ))}
               </div>

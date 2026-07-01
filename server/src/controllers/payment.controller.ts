@@ -1,15 +1,29 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { paymentService } from '../services/payment.service';
-import { paymentRepo, loanRepo, amortizationScheduleRepo, paymentAllocationRepo } from '../repositories';
+import { paymentRepo, loanRepo, amortizationScheduleRepo, paymentAllocationRepo, auditLogRepo } from '../repositories';
 import { AppError } from '../middleware/errorHandler';
 import { parsePagination, paramStr } from '../utils/helpers';
 import { parse } from 'csv-parse/sync';
+import { autoRecordTransaction } from '../services/cash-transaction.service';
 
 export class PaymentController {
   async receivePayment(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const payment = await paymentService.receivePayment(req.body, req.user!.userId);
+      autoRecordTransaction({
+        userId: req.user!.userId,
+        loanId: payment.loan_id,
+        borrowerId: payment.borrower_id,
+        paymentId: payment.id,
+        transactionType: 'collection',
+        direction: 'in',
+        amount: parseFloat(payment.amount) || 0,
+        paymentMethod: payment.payment_method,
+        referenceNumber: payment.reference_number,
+        receiptNumber: payment.receipt_number,
+        description: `Payment ${payment.payment_number}`,
+      });
       res.status(201).json({ success: true, data: payment, message: 'Payment received successfully' });
     } catch (error: any) {
       next(new AppError(400, error.message));
@@ -85,6 +99,9 @@ export class PaymentController {
   async updatePayment(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const id = paramStr(req.params.id);
+      const oldPayment = await paymentRepo.findById(id);
+      if (!oldPayment) throw new Error('Payment not found');
+      (req as any).oldValues = oldPayment;
       const payment = await paymentRepo.update(id, req.body);
       if (!payment) throw new Error('Payment not found');
       res.json({ success: true, data: payment });
@@ -284,9 +301,62 @@ export class PaymentController {
       }
 
       // Delete the payment itself
+      (req as any).oldValues = payment;
       await paymentRepo.delete(id);
 
       res.json({ success: true, message: 'Payment deleted and balances restored' });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
+  async cancelPayment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const { cancellation_reason } = req.body;
+      if (!cancellation_reason) throw new Error('Cancellation reason is required');
+
+      const payment = await paymentRepo.findById(id);
+      if (!payment) throw new Error('Payment not found');
+      if (payment.status === 'cancelled') throw new Error('Payment is already cancelled');
+
+      const loanId = payment.loan_id;
+      const restoreAmount = (parseFloat(payment.amount) || 0) - (parseFloat(payment.penalty_amount) || 0);
+      const allocations = await paymentAllocationRepo.query(`SELECT * FROM payment_allocations WHERE payment_id = $1`, [id]);
+
+      const penaltyAmt = parseFloat(payment.penalty_amount) || 0;
+      for (const alloc of allocations) {
+        const schedule = await amortizationScheduleRepo.findById(alloc.schedule_id);
+        if (schedule) {
+          const oldPaid = parseFloat(schedule.paid_amount) || 0;
+          const newPaid = Math.max(0, oldPaid - (parseFloat(alloc.amount) || 0));
+          const totalDue = parseFloat(schedule.total_due) || 0;
+          const status = newPaid <= 0 ? 'pending' : (newPaid >= totalDue - 0.005 ? 'paid' : 'partial');
+          await amortizationScheduleRepo.update(alloc.schedule_id, {
+            paid_amount: newPaid,
+            status,
+            paid_at: status === 'pending' ? null : schedule.paid_at,
+            penalty_amount: penaltyAmt > 0 ? '0' : undefined,
+          });
+        }
+      }
+
+      await paymentAllocationRepo.query(`DELETE FROM payment_allocations WHERE payment_id = $1`, [id]);
+
+      const loan = await loanRepo.findById(loanId);
+      if (loan) {
+        const oldBalance = parseFloat(loan.outstanding_balance) || 0;
+        const newBalance = oldBalance + restoreAmount;
+        const newStatus = loan.status === 'closed' ? 'active' : loan.status;
+        await loanRepo.update(loanId, {
+          outstanding_balance: newBalance,
+          status: newStatus,
+        });
+      }
+
+      (req as any).oldValues = payment;
+      const cancelled = await paymentRepo.update(id, { status: 'cancelled', cancellation_reason });
+      res.json({ success: true, data: cancelled });
     } catch (error: any) {
       next(new AppError(400, error.message));
     }

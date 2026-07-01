@@ -109,6 +109,147 @@ const runMigrations = async () => {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='other_income' AND column_name='branch_id') THEN
           ALTER TABLE other_income ADD COLUMN branch_id UUID REFERENCES branches(id);
         END IF;
+        -- Login history for monitoring
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='login_history') THEN
+          CREATE TABLE login_history (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID REFERENCES users(id),
+            username VARCHAR(100),
+            action VARCHAR(20) NOT NULL DEFAULT 'login',
+            ip_address VARCHAR(50),
+            user_agent TEXT,
+            success BOOLEAN DEFAULT true,
+            failure_reason VARCHAR(255),
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_login_history_user ON login_history(user_id);
+          CREATE INDEX IF NOT EXISTS idx_login_history_created ON login_history(created_at);
+        END IF;
+        -- Payment cancellation support
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='cancellation_reason') THEN
+          ALTER TABLE payments ADD COLUMN cancellation_reason TEXT;
+        END IF;
+        -- Cancellation requests for approval workflow
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='cancellation_requests') THEN
+          CREATE TABLE cancellation_requests (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            payment_id UUID REFERENCES payments(id),
+            requested_by UUID REFERENCES users(id),
+            reason TEXT NOT NULL,
+            status VARCHAR(20) DEFAULT 'pending',
+            type VARCHAR(20) DEFAULT 'cancel',
+            replacement_payment_id UUID REFERENCES payments(id),
+            reviewed_by UUID REFERENCES users(id),
+            reviewed_at TIMESTAMPTZ,
+            rejection_reason TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_cancellation_requests_status ON cancellation_requests(status);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='cancellation_requests' AND column_name='updated_at') THEN
+          ALTER TABLE cancellation_requests ADD COLUMN updated_at TIMESTAMPTZ;
+        END IF;
+        -- Cashier shifts (formerly cashier_sessions, enhanced)
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='cashier_sessions') THEN
+          CREATE TABLE cashier_sessions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID REFERENCES users(id),
+            branch_id UUID REFERENCES branches(id),
+            opened_at TIMESTAMPTZ DEFAULT NOW(),
+            closed_at TIMESTAMPTZ,
+            opening_float NUMERIC(15,2) DEFAULT 0,
+            expected_cash NUMERIC(15,2) DEFAULT 0,
+            actual_cash NUMERIC(15,2),
+            over_short NUMERIC(15,2) DEFAULT 0,
+            cash_collected NUMERIC(15,2) DEFAULT 0,
+            non_cash_collected NUMERIC(15,2) DEFAULT 0,
+            cash_disbursed NUMERIC(15,2) DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'open',
+            approved_by UUID REFERENCES users(id),
+            approved_at TIMESTAMPTZ,
+            notes TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_cashier_sessions_user ON cashier_sessions(user_id);
+          CREATE INDEX IF NOT EXISTS idx_cashier_sessions_status ON cashier_sessions(status);
+        END IF;
+        -- Rename starting_cash to opening_float if old column still exists
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='cashier_sessions' AND column_name='starting_cash') AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='cashier_sessions' AND column_name='opening_float') THEN
+          ALTER TABLE cashier_sessions RENAME COLUMN starting_cash TO opening_float;
+        END IF;
+        -- Cash transactions (auto-recorded from payments, disbursements, etc.)
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='cash_transactions') THEN
+          CREATE TABLE cash_transactions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            shift_id UUID REFERENCES cashier_sessions(id) NOT NULL,
+            loan_id UUID REFERENCES loans(id),
+            borrower_id UUID REFERENCES borrowers(id),
+            payment_id UUID REFERENCES payments(id),
+            transaction_type VARCHAR(30) NOT NULL,
+            direction VARCHAR(3) NOT NULL CHECK (direction IN ('in','out')),
+            amount NUMERIC(15,2) NOT NULL,
+            payment_method VARCHAR(30),
+            reference_number VARCHAR(100),
+            receipt_number VARCHAR(100),
+            description TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            created_by UUID REFERENCES users(id) NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_ct_shift ON cash_transactions(shift_id);
+          CREATE INDEX IF NOT EXISTS idx_ct_created ON cash_transactions(created_at);
+          CREATE INDEX IF NOT EXISTS idx_ct_type ON cash_transactions(transaction_type);
+        END IF;
+        -- Cash counts (denomination breakdown)
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='cash_counts') THEN
+          CREATE TABLE cash_counts (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            shift_id UUID REFERENCES cashier_sessions(id) NOT NULL,
+            counted_at TIMESTAMPTZ DEFAULT NOW(),
+            denominations JSONB NOT NULL DEFAULT '{}',
+            total_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
+            notes TEXT,
+            created_by UUID REFERENCES users(id) NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_cc_shift ON cash_counts(shift_id);
+        END IF;
+        -- Cash reconciliations
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='cash_reconciliations') THEN
+          CREATE TABLE cash_reconciliations (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            shift_id UUID REFERENCES cashier_sessions(id) NOT NULL,
+            count_id UUID REFERENCES cash_counts(id),
+            expected_cash NUMERIC(15,2) NOT NULL,
+            actual_cash NUMERIC(15,2) NOT NULL,
+            variance NUMERIC(15,2) NOT NULL DEFAULT 0,
+            variance_type VARCHAR(10) NOT NULL DEFAULT 'balanced',
+            variance_reason TEXT,
+            status VARCHAR(20) DEFAULT 'pending',
+            reviewed_by UUID REFERENCES users(id),
+            reviewed_at TIMESTAMPTZ,
+            review_notes TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_cr_shift ON cash_reconciliations(shift_id);
+          CREATE INDEX IF NOT EXISTS idx_cr_status ON cash_reconciliations(status);
+        END IF;
+        -- Approval history
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='approval_history') THEN
+          CREATE TABLE approval_history (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            shift_id UUID REFERENCES cashier_sessions(id),
+            reconciliation_id UUID REFERENCES cash_reconciliations(id),
+            action VARCHAR(30) NOT NULL,
+            performed_by UUID REFERENCES users(id) NOT NULL,
+            comments TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_ah_shift ON approval_history(shift_id);
+        END IF;
+        -- Cash variance threshold setting
+        INSERT INTO system_settings (key, value, description) VALUES ('cash_variance_threshold', '500', 'Auto-approve variances within this amount (PHP)')
+        ON CONFLICT (key) DO NOTHING;
       END $$;
     `);
 

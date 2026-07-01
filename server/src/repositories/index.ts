@@ -24,6 +24,12 @@ export class NotificationRepository extends BaseRepository { constructor() { sup
 export class EmailLogRepository extends BaseRepository { constructor() { super('email_logs'); } }
 export class SmsLogRepository extends BaseRepository { constructor() { super('sms_logs'); } }
 export class AuditLogRepository extends BaseRepository { constructor() { super('audit_logs'); } }
+export class CancellationRequestRepository extends BaseRepository { constructor() { super('cancellation_requests'); } }
+export class CashierSessionRepository extends BaseRepository { constructor() { super('cashier_sessions'); } }
+export class CashTransactionRepository extends BaseRepository { constructor() { super('cash_transactions'); } }
+export class CashCountRepository extends BaseRepository { constructor() { super('cash_counts'); } }
+export class CashReconciliationRepository extends BaseRepository { constructor() { super('cash_reconciliations'); } }
+export class ApprovalHistoryRepository extends BaseRepository { constructor() { super('approval_history'); } }
 export class ChargeRepository extends BaseRepository { constructor() { super('charges'); } }
 export class LoanProductChargeRepository extends BaseRepository { constructor() { super('loan_product_charges'); } }
 export class LoanChargeRepository extends BaseRepository { constructor() { super('loan_charges'); } }
@@ -46,6 +52,12 @@ export const loanDisbursementRepo = new LoanDisbursementRepository();
 export const amortizationScheduleRepo = new AmortizationScheduleRepository();
 export const paymentRepo = new PaymentRepository();
 export const paymentAllocationRepo = new PaymentAllocationRepository();
+export const cancellationRequestRepo = new CancellationRequestRepository();
+export const cashierSessionRepo = new CashierSessionRepository();
+export const cashTransactionRepo = new CashTransactionRepository();
+export const cashCountRepo = new CashCountRepository();
+export const cashReconciliationRepo = new CashReconciliationRepository();
+export const approvalHistoryRepo = new ApprovalHistoryRepository();
 export const penaltyRepo = new PenaltyRepository();
 export const penaltyRuleRepo = new PenaltyRuleRepository();
 export const collectionRepo = new CollectionRepository();

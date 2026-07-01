@@ -21,6 +21,7 @@ export {
   CalendarDays as CalendarIcon,
   Bell as NoticeIcon,
   Receipt as ChargeIcon,
+  DollarSign as DollarSignIcon,
   ArrowUpRight, ArrowDownRight, DollarSign, Percent, TrendingUp,
   AlertCircle, CheckCircle, XCircle, Clock, Search, Plus,
   Eye, Edit, Trash2, Download, Upload, Filter, ChevronDown,

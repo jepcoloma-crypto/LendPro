@@ -333,21 +333,66 @@ export class UtilityController {
     }
   }
 
-  async clearOperationalData(req: AuthRequest, res: Response, next: NextFunction) {
+  async getLoginHistory(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const tables = [
-        'collection_visits', 'collections', 'payment_allocations', 'payments',
-        'penalties', 'penalty_rules', 'amortization_schedules', 'loan_disbursements',
-        'loans', 'loan_approvals', 'application_documents', 'loan_applications',
-        'co_makers', 'borrower_documents', 'borrowers',
-        'notifications', 'email_logs', 'sms_logs', 'audit_logs',
-      ];
-      for (const t of tables) {
-        await pool.query('TRUNCATE TABLE ' + t + ' CASCADE');
-      }
-      res.json({ success: true, message: 'All operational data cleared. Users, roles, products, charges, settings preserved.' });
+      const { userId, limit = '100' } = req.query;
+      let where = '';
+      const params: any[] = [];
+      let idx = 1;
+      if (userId) { where = `WHERE lh.user_id = $${idx++}`; params.push(userId); }
+      const rows = await pool.query(
+        `SELECT lh.*, u.first_name || ' ' || u.last_name as user_name
+         FROM login_history lh
+         LEFT JOIN users u ON u.id = lh.user_id
+         ${where} ORDER BY lh.created_at DESC LIMIT $${idx++}`,
+        [...params, parseInt(limit as string)]
+      );
+      res.json({ success: true, data: rows.rows });
     } catch (error: any) {
       next(new AppError(500, error.message));
+    }
+  }
+
+  async clearOperationalData(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { modules } = req.body;
+      if (!modules || !Array.isArray(modules) || modules.length === 0) {
+        throw new Error('Select at least one module to clear');
+      }
+
+      const MODULE_TABLES: Record<string, string[]> = {
+        borrowers: ['borrower_documents', 'co_makers', 'borrowers'],
+        applications: ['application_documents', 'loan_approvals', 'loan_applications'],
+        loans: ['loan_charges', 'penalties', 'amortization_schedules', 'loan_disbursements', 'loans'],
+        payments: ['payment_allocations', 'payments'],
+        cashier: ['approval_history', 'cash_reconciliations', 'cash_counts', 'cash_transactions', 'cashier_sessions', 'operating_expenses', 'other_income'],
+        collections: ['collection_visits', 'collections'],
+        reports: ['audit_logs', 'notifications', 'email_logs', 'sms_logs'],
+      };
+
+      // Order matters — child tables before parents
+      const TABLE_ORDER: Record<string, number> = {};
+      const allTables = Object.values(MODULE_TABLES).flat();
+      allTables.forEach((t, i) => { TABLE_ORDER[t] = i; });
+
+      const tablesToClear = new Set<string>();
+      for (const mod of modules) {
+        const tbls = MODULE_TABLES[mod];
+        if (tbls) tbls.forEach((t: string) => tablesToClear.add(t));
+      }
+
+      const sorted = [...tablesToClear].sort((a, b) => (TABLE_ORDER[a] || 0) - (TABLE_ORDER[b] || 0));
+
+      for (const t of sorted) {
+        await pool.query('TRUNCATE TABLE ' + t + ' CASCADE');
+      }
+
+      res.json({
+        success: true,
+        message: `Cleared data for: ${modules.join(', ')} (${sorted.length} tables truncated). Users, roles, products, charges, settings preserved.`
+      });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
     }
   }
 }

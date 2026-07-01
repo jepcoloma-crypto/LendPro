@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { paramStr } from '../utils/helpers';
 import { pool } from '../database/connection';
+import { autoRecordTransaction } from '../services/cash-transaction.service';
 
 export class CashflowController {
   async getExpenses(req: AuthRequest, res: Response, next: NextFunction) {
@@ -40,6 +41,14 @@ export class CashflowController {
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
         [date, category, amount, payee || null, description || null, branch_id || null, req.user?.userId]
       );
+      autoRecordTransaction({
+        userId: req.user!.userId,
+        transactionType: 'expense',
+        direction: 'out',
+        amount: parseFloat(amount) || 0,
+        paymentMethod: 'cash',
+        description: `${category}: ${description || payee || ''}`,
+      });
       res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error: any) {
       next(new AppError(400, error.message));

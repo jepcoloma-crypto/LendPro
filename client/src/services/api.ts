@@ -147,6 +147,9 @@ export const paymentsApi = {
   getById: (id: string) => api.get(`/payments/${id}`),
   update: (id: string, data: any) => api.put(`/payments/${id}`, data),
   delete: (id: string) => api.delete(`/payments/${id}`),
+  cancel: (id: string, data: any) => api.put(`/payments/${id}/cancel`, data),
+  requestCancel: (id: string, data: any) => api.post(`/payments/${id}/cancel-request`, data),
+  requestVoidRepay: (id: string, data: any) => api.post(`/payments/${id}/void-repay-request`, data),
   getRecent: (limit?: number) => api.get('/payments/recent', { params: { limit } }),
   getReceipt: (id: string) => api.get(`/payments/${id}/receipt`),
   importCsv: (data: FormData) => api.post('/payments/import', data, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }),
@@ -230,12 +233,23 @@ export const auditLogsApi = {
   getAll: (params?: any) => api.get('/audit-logs', { params }),
 };
 
+export const loginHistoryApi = {
+  getAll: (params?: any) => api.get('/login-history', { params }),
+};
+
+export const cancellationRequestsApi = {
+  getAll: (params?: any) => api.get('/cancellation-requests', { params }),
+  getPendingCount: () => api.get('/cancellation-requests/pending-count'),
+  approve: (id: string) => api.put(`/cancellation-requests/${id}/approve`),
+  reject: (id: string, data: any) => api.put(`/cancellation-requests/${id}/reject`, data),
+};
+
 // Utilities
 export const utilitiesApi = {
   health: () => api.get('/utilities/health'),
   recalculateBalances: () => api.post('/utilities/recalculate-balances'),
   applyPenalties: () => api.post('/utilities/apply-penalties'),
-  clearData: () => api.post('/utilities/clear-data'),
+  clearData: (data?: any) => api.post('/utilities/clear-data', data),
   backup: () => api.get('/utilities/backup', { responseType: 'blob' }),
   restore: (file: File) => { const fd = new FormData(); fd.append('file', file); return api.post('/utilities/restore', fd, { timeout: 120000 }); },
 };
