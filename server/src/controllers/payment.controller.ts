@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { paymentService } from '../services/payment.service';
-import { paymentRepo, loanRepo, amortizationScheduleRepo, paymentAllocationRepo, auditLogRepo } from '../repositories';
+import { paymentRepo, loanRepo, amortizationScheduleRepo, paymentAllocationRepo, auditLogRepo, cashierSessionRepo } from '../repositories';
 import { AppError } from '../middleware/errorHandler';
 import { parsePagination, paramStr } from '../utils/helpers';
 import { parse } from 'csv-parse/sync';
@@ -10,8 +10,11 @@ import { autoRecordTransaction } from '../services/cash-transaction.service';
 export class PaymentController {
   async receivePayment(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      const myShift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
+      if (!myShift) throw new AppError(400, 'No open shift found. Please open a cashier shift before accepting a payment.');
+
       const payment = await paymentService.receivePayment(req.body, req.user!.userId);
-      autoRecordTransaction({
+      await autoRecordTransaction({
         userId: req.user!.userId,
         loanId: payment.loan_id,
         borrowerId: payment.borrower_id,

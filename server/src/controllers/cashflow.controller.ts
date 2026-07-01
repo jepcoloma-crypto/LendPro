@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { paramStr } from '../utils/helpers';
 import { pool } from '../database/connection';
+import { cashierSessionRepo } from '../repositories';
 import { autoRecordTransaction } from '../services/cash-transaction.service';
 
 export class CashflowController {
@@ -41,7 +42,10 @@ export class CashflowController {
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
         [date, category, amount, payee || null, description || null, branch_id || null, req.user?.userId]
       );
-      autoRecordTransaction({
+      const myShift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
+      if (!myShift) throw new AppError(400, 'No open shift found. Please open a cashier shift before recording an expense.');
+
+      await autoRecordTransaction({
         userId: req.user!.userId,
         transactionType: 'expense',
         direction: 'out',
