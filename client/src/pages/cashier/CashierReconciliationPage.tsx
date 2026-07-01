@@ -427,20 +427,14 @@ ${transactions.map((t: any, i: number) => `<tr>
           <p className="text-gray-500 dark:text-gray-400">{myShift ? `Shift open since ${new Date(myShift.opened_at).toLocaleString()}` : dashStats ? `${dashStats.open_shifts} open shift(s) today` : 'No active shift'}</p>
         </div>
         <div className="flex gap-2">
-          {myShift ? (
-            <>
-              <span className="px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-sm font-medium flex items-center gap-1">
-                <DollarSign className="w-4 h-4" /> {formatCurrency(myShift.expected_cash)}
-              </span>
-              <Button color="orange" appearance="primary" onClick={() => { setCloseForm({ actual_cash: parseFloat(myShift.expected_cash) || 0, notes: '' }); setCloseModal(true); }}>
-                <Clock className="w-4 h-4 mr-1" />Close Shift
-              </Button>
-            </>
-          ) : (
-            <Button appearance="primary" onClick={() => { setOpenShiftForm({ opening_float: 0 }); setOpenShiftModal(true); }}>
-              <Plus className="w-4 h-4 mr-1" /> Open Shift
+          {myShift && <>
+            <span className="px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-sm font-medium flex items-center gap-1">
+              <DollarSign className="w-4 h-4" /> {formatCurrency(myShift.expected_cash)}
+            </span>
+            <Button color="orange" appearance="primary" onClick={() => { setCloseForm({ actual_cash: parseFloat(myShift.expected_cash) || 0, notes: '' }); setCloseModal(true); }}>
+              <Clock className="w-4 h-4 mr-1" />Close Shift
             </Button>
-          )}
+          </>}
         </div>
       </div>
 
