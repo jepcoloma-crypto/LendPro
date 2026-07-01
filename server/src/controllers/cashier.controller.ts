@@ -434,6 +434,16 @@ export class CashierController {
         `SELECT COUNT(*) as count FROM cash_reconciliations WHERE status = 'pending'`
       );
 
+      const openShift = await cashierSessionRepo.query(
+        `SELECT expected_cash, opening_float, opened_at FROM cashier_sessions WHERE user_id = $1 AND status = 'open' LIMIT 1`,
+        [userId]
+      );
+
+      const todayTxns = await cashierSessionRepo.query(
+        `SELECT COUNT(*) as count FROM cash_transactions WHERE created_at::date = $1`,
+        [today]
+      );
+
       res.json({
         success: true,
         data: {
@@ -442,6 +452,11 @@ export class CashierController {
           open_shifts: parseInt(stats[0]?.open_shifts) || 0,
           closed_shifts: parseInt(stats[0]?.closed_shifts) || 0,
           pending_approvals: parseInt(pendingApprovals[0]?.count) || 0,
+          cash_on_hand: openShift[0]?.expected_cash || 0,
+          shift_open: !!openShift[0],
+          shift_opened_at: openShift[0]?.opened_at || null,
+          shift_opening_float: openShift[0]?.opening_float || 0,
+          today_txns: parseInt(todayTxns[0]?.count) || 0,
         }
       });
     } catch (error: any) {

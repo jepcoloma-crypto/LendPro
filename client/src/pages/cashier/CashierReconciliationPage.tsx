@@ -445,7 +445,7 @@ ${transactions.map((t: any, i: number) => `<tr>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered>
           <div className="text-xs text-gray-500">Today Collections</div>
           <div className="text-lg font-bold text-green-600">{formatCurrency(dashStats?.today_collections || 0)}</div>
@@ -453,6 +453,14 @@ ${transactions.map((t: any, i: number) => `<tr>
         <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered>
           <div className="text-xs text-gray-500">Today Disbursed</div>
           <div className="text-lg font-bold text-red-600">{formatCurrency(dashStats?.today_disbursed || 0)}</div>
+        </Panel>
+        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered>
+          <div className="text-xs text-gray-500">Cash on Hand</div>
+          <div className="text-lg font-bold text-blue-600">{formatCurrency(dashStats?.cash_on_hand || 0)}</div>
+        </Panel>
+        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered>
+          <div className="text-xs text-gray-500">Today's Txns</div>
+          <div className="text-lg font-bold">{dashStats?.today_txns || 0}</div>
         </Panel>
         <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered>
           <div className="text-xs text-gray-500">Open Shifts</div>
@@ -467,6 +475,29 @@ ${transactions.map((t: any, i: number) => `<tr>
           <div className="text-lg font-bold text-amber-600">{dashStats?.pending_approvals || 0}</div>
         </Panel>
       </div>
+
+      {/* My Shift Status */}
+      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered
+        header={<div className="flex items-center gap-2"><Clock className="w-4 h-4" /><span className="font-semibold">My Shift</span></div>}>
+        {dashStats?.shift_open ? (
+          <div className="flex flex-wrap items-center gap-4">
+            <div><span className="text-xs text-gray-500">Status</span><div className="font-medium text-green-600">Open</div></div>
+            <div><span className="text-xs text-gray-500">Opening Float</span><div className="font-medium">{formatCurrency(dashStats.shift_opening_float)}</div></div>
+            <div><span className="text-xs text-gray-500">Cash on Hand</span><div className="font-medium">{formatCurrency(dashStats.cash_on_hand)}</div></div>
+            <div><span className="text-xs text-gray-500">Opened</span><div className="font-medium">{dashStats.shift_opened_at ? new Date(dashStats.shift_opened_at).toLocaleString() : '-'}</div></div>
+            <div className="ml-auto">
+              <Button size="sm" color="orange" appearance="primary" onClick={() => setActiveTab('close')}><Clock className="w-3.5 h-3.5 mr-1" />Close Shift</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-4">
+            <div><span className="text-xs text-gray-500">Status</span><div className="font-medium text-gray-400">No open shift</div></div>
+            <div className="ml-auto">
+              <Button size="sm" appearance="primary" onClick={() => { setOpenShiftForm({ opening_float: 0 }); setOpenShiftModal(true); }}><Plus className="w-3.5 h-3.5 mr-1" />Open Shift</Button>
+            </div>
+          </div>
+        )}
+      </Panel>
 
       {/* Daily Chart */}
       {chartData.length > 0 && (
