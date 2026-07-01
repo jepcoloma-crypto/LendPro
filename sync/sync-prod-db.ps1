@@ -9,10 +9,12 @@ $stagingEnv = "C:\Projects\LendingApp\server\.env.staging"
 $currentEnv = "C:\Projects\LendingApp\server\.env"
 
 if (-not (Test-Path $prodEnv)) {
-    Write-Host "ERROR: Production env file not found at server\.env.production" -ForegroundColor Red
-    Write-Host "`nCreate it first:" -ForegroundColor Yellow
-    Write-Host "  copy server\.env.production.example server\.env.production" -ForegroundColor Gray
-    Write-Host "  # Then edit server\.env.production with production DB values`n" -ForegroundColor Gray
+    Write-Host "Production env file not found — copying from example..." -ForegroundColor Yellow
+    Copy-Item "C:\Projects\LendingApp\sync\.env.production.example" $prodEnv
+    Write-Host "Opened server\.env.production for editing — fill in your production DB credentials, save, and close." -ForegroundColor Cyan
+    Start-Sleep -Seconds 1
+    notepad $prodEnv
+    Write-Host "`nRun sync-prod-db.cmd again after saving." -ForegroundColor Green
     pause
     exit 1
 }
