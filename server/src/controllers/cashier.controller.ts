@@ -406,7 +406,18 @@ export class CashierController {
   async dashboard(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const userId = req.user?.userId;
+      const { userId, roleSlug, branchId } = req.user!;
+
+      let userFilter = '';
+      const params: any[] = [today];
+
+      if (roleSlug === 'cashier') {
+        userFilter = `AND user_id = $2`;
+        params.push(userId);
+      } else if (roleSlug === 'branch-manager' && branchId) {
+        userFilter = `AND branch_id = $2`;
+        params.push(branchId);
+      }
 
       const stats = await cashierSessionRepo.query(
         `SELECT
@@ -415,8 +426,8 @@ export class CashierController {
            COUNT(*) FILTER (WHERE status = 'open') as open_shifts,
            COUNT(*) FILTER (WHERE status = 'closed') as closed_shifts
          FROM cashier_sessions
-         WHERE created_at::date = $1 AND ($2::uuid IS NULL OR user_id = $2)`,
-        [today, userId || null]
+         WHERE created_at::date = $1 ${userFilter}`,
+        params
       );
 
       const pendingApprovals = await cashReconciliationRepo.query(
