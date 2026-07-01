@@ -115,7 +115,7 @@ export const CashierReconciliationPage = () => {
     } catch { setApprovals([]); }
   }, [myShift?.id]);
 
-  useEffect(() => { fetchMyShift(); }, [fetchMyShift]);
+  useEffect(() => { fetchMyShift(); }, [fetchMyShift, activeTab]);
   useEffect(() => { fetchShifts(); }, [fetchShifts]);
   useEffect(() => { if (myShift) { fetchTransactions(); fetchCounts(); fetchReconciliations(); fetchApprovals(); } }, [myShift, activeTab, fetchTransactions, fetchCounts, fetchReconciliations, fetchApprovals]);
   useEffect(() => { if (activeTab === 'approvals') fetchPending(); }, [activeTab, fetchPending]);
