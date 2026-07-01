@@ -370,33 +370,14 @@ export class LoanController {
   async releaseLoan(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const method = req.body.method || 'cash';
-      const loan = await loanService.releaseLoan(paramStr(req.params.id), req.user!.userId, method, req.body.reference);
+      const appId = paramStr(req.params.id);
 
-      // Check cash availability for cash disbursements
-      let cashWarning: string | null = null;
-      if (method === 'cash') {
-        const netProceeds = parseFloat(loan.net_proceeds) || 0;
-        const shifts = await cashierSessionRepo.query(
-          `SELECT expected_cash FROM cashier_sessions WHERE user_id = $1 AND status = 'open' LIMIT 1`,
-          [req.user!.userId]
-        );
-        const expectedCash = shifts.length > 0 ? parseFloat(shifts[0].expected_cash) || 0 : 0;
-        if (expectedCash < netProceeds) {
-          const isAdmin = req.user?.roleSlug === 'super-admin' || req.user?.roleSlug === 'admin';
-          if (!isAdmin) {
-            throw new AppError(400,
-              `Insufficient cash available (₱${expectedCash.toFixed(2)}) for disbursement of ₱${netProceeds.toFixed(2)}. Please replenish cash or use a non-cash method.`
-            );
-          }
-          cashWarning = `Cash available (₱${expectedCash.toFixed(2)}) is less than net proceeds (₱${netProceeds.toFixed(2)}).`;
-        }
-      }
-
-      // Require an open shift to record the disbursement
       const myShift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
       if (!myShift) {
         throw new AppError(400, 'No open shift found. Please open a cashier shift before releasing a loan.');
       }
+
+      const loan = await loanService.releaseLoan(appId, req.user!.userId, method, req.body.reference);
 
       await autoRecordTransaction({
         userId: req.user!.userId,
@@ -409,7 +390,7 @@ export class LoanController {
         referenceNumber: req.body.reference || null,
         description: `Loan release ${loan.loan_number}`,
       });
-      res.status(201).json({ success: true, data: loan, message: 'Loan released successfully', cashWarning });
+      res.status(201).json({ success: true, data: loan, message: 'Loan released successfully' });
     } catch (error: any) {
       next(new AppError(400, error.message));
     }
