@@ -331,6 +331,79 @@ ${reportData.map((r:any) => `<tr>${Object.keys(reportData[0]).filter(k => !k.inc
     win.document.close(); win.print();
   };
 
+  const printTransactions = () => {
+    if (!transactions.length) { toaster.push(<Message type="warning">No transactions to print</Message>, { placement: 'topEnd' }); return; }
+    const win = window.open('', '_blank');
+    if (!win) return;
+    const typeLabel = txnFilter ? txnFilter.charAt(0).toUpperCase() + txnFilter.slice(1) : 'All';
+    const totalIn = transactions.filter((t: any) => t.direction === 'in').reduce((s: number, t: any) => s + (parseFloat(t.amount) || 0), 0);
+    const totalOut = transactions.filter((t: any) => t.direction === 'out').reduce((s: number, t: any) => s + (parseFloat(t.amount) || 0), 0);
+    win.document.write(`<!DOCTYPE html><html><head><title>Cash Transactions</title>
+<style>body{font-family:'Segoe UI',Arial,sans-serif;font-size:10px;margin:10mm;color:#333;}
+h1{font-size:16px;text-align:center;margin-bottom:2px;}
+.sub{text-align:center;color:#666;margin-bottom:15px;font-size:11px;}
+table{width:100%;border-collapse:collapse;margin:8px 0;}
+th{background:#1a1a2e;color:#fff;padding:5px 7px;text-align:left;font-size:9px;}
+td{padding:4px 7px;border-bottom:1px solid #ddd;font-size:9px;}
+tr:nth-child(even) td{background:#f8f8f8;}
+.r{text-align:right;}
+.c{text-align:center;}
+.summary{display:flex;gap:20px;justify-content:center;margin:12px 0;}
+.summary-card{border:1px solid #ddd;border-radius:6px;padding:8px 16px;text-align:center;}
+.summary-card .label{font-size:9px;color:#666;}
+.summary-card .value{font-size:14px;font-weight:bold;}
+.footer{margin-top:25px;display:flex;justify-content:space-between;}
+.footer .line{width:150px;border-top:1px solid #333;margin:25px auto 4px;}
+@media print{body{margin:8mm;}}</style></head><body>
+<h1>Prime Capital Lending Corp</h1>
+<div class="sub">Cash Transactions — ${typeLabel}<br>${new Date().toLocaleDateString()} | ${transactions.length} records</div>
+<div class="summary">
+  <div class="summary-card"><div class="label">Total In</div><div class="value" style="color:#059669;">${formatCurrency(totalIn)}</div></div>
+  <div class="summary-card"><div class="label">Total Out</div><div class="value" style="color:#dc2626;">${formatCurrency(totalOut)}</div></div>
+  <div class="summary-card"><div class="label">Net</div><div class="value">${formatCurrency(totalIn - totalOut)}</div></div>
+</div>
+<table><thead><tr><th>#</th><th>Date</th><th>Type</th><th>Dir</th><th>Method</th><th class="r">Amount</th><th>Loan #</th><th>Borrower</th><th>OR #</th><th>Reference</th><th>Description</th></tr></thead><tbody>
+${transactions.map((t: any, i: number) => `<tr>
+  <td class="c">${i+1}</td>
+  <td>${new Date(t.created_at).toLocaleDateString()}</td>
+  <td>${t.transaction_type}</td>
+  <td class="c">${t.direction === 'in' ? 'In' : 'Out'}</td>
+  <td>${t.payment_method || '-'}</td>
+  <td class="r">${formatCurrency(t.amount)}</td>
+  <td>${t.loan_number || '-'}</td>
+  <td>${t.borrower_name || '-'}</td>
+  <td>${t.receipt_number || '-'}</td>
+  <td>${t.reference_number || '-'}</td>
+  <td>${t.description || '-'}</td>
+</tr>`).join('')}
+</tbody></table>
+<div class="footer"><div><div class="line"></div>Prepared By</div><div><div class="line"></div>Checked By</div><div><div class="line"></div>Approved By</div></div></body></html>`);
+    win.document.close(); win.print();
+  };
+
+  const exportTransactionsCsv = () => {
+    if (!transactions.length) { toaster.push(<Message type="warning">No transactions to export</Message>, { placement: 'topEnd' }); return; }
+    const headers = ['Date', 'Type', 'Direction', 'Method', 'Amount', 'Loan #', 'Borrower', 'OR #', 'Reference', 'Description'];
+    const rows = transactions.map((t: any) => [
+      new Date(t.created_at).toLocaleDateString(),
+      t.transaction_type,
+      t.direction,
+      t.payment_method || '',
+      t.amount,
+      t.loan_number || '',
+      t.borrower_name || '',
+      t.receipt_number || '',
+      t.reference_number || '',
+      (t.description || '').replace(/,/g, ';'),
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `cash-transactions-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
   const renderTabNav = () => (
     <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700 pb-1 overflow-x-auto">
       {TABS.map(tab => {
@@ -473,7 +546,12 @@ ${reportData.map((r:any) => `<tr>${Object.keys(reportData[0]).filter(k => !k.inc
 
       {/* ===== TAB: Cash Transactions ===== */}
       {activeTab === 'transactions' && (
-        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<span>Cash Transactions {myShift ? '' : '(open a shift first)'}</span>}>
+        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="flex items-center justify-between"><span>Cash Transactions {myShift ? '' : '(all shifts)'}</span>
+          <div className="flex gap-2">
+            <Button size="sm" appearance="ghost" onClick={printTransactions} disabled={!transactions.length}><Printer className="w-3.5 h-3.5 mr-1" />Print</Button>
+            <Button size="sm" appearance="ghost" onClick={exportTransactionsCsv} disabled={!transactions.length}><Download className="w-3.5 h-3.5 mr-1" />CSV</Button>
+          </div>
+        </div>}>
           <div className="mb-3 flex gap-2">
             <div style={{ width: 160 }}>
               <SelectPicker data={[
