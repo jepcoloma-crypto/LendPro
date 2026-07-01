@@ -60,8 +60,12 @@ export const ReleaseModal = ({ open, applicationId, productId, principal, onClos
   const handleRelease = async () => {
     setSaving(true);
     try {
-      await applicationsApi.release(applicationId, method, reference);
-      toaster.push(<Message type="success">Loan released successfully. Net proceeds: {formatCurrency(netProceeds)}</Message>, { placement: 'topEnd' });
+      const res = await applicationsApi.release(applicationId, method, reference);
+      const msg = res?.data?.message || 'Loan released successfully';
+      if (res?.data?.cashWarning) {
+        toaster.push(<Message type="warning">{res.data.cashWarning}<br /><small>Release proceeded as admin override.</small></Message>, { placement: 'topEnd' });
+      }
+      toaster.push(<Message type="success">{msg}. Net proceeds: {formatCurrency(netProceeds)}</Message>, { placement: 'topEnd' });
       onSuccess();
       onClose();
     } catch (err: any) {

@@ -1,9 +1,10 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { loanService } from '../services/loan.service';
-import { loanRepo, loanApplicationRepo, loanProductRepo, amortizationScheduleRepo, applicationDocumentRepo, coMakerRepo } from '../repositories';
+import { loanRepo, loanApplicationRepo, loanProductRepo, amortizationScheduleRepo, applicationDocumentRepo, coMakerRepo, cashierSessionRepo } from '../repositories';
 import { AppError } from '../middleware/errorHandler';
 import { parsePagination, paramStr, calculateAmortization, calculateInterest } from '../utils/helpers';
+import { autoRecordTransaction } from '../services/cash-transaction.service';
 import { validateUploadedFile } from '../utils/fileValidation';
 import multer from 'multer';
 import path from 'path';
@@ -368,8 +369,41 @@ export class LoanController {
 
   async releaseLoan(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const loan = await loanService.releaseLoan(paramStr(req.params.id), req.user!.userId, req.body.method, req.body.reference);
-      res.status(201).json({ success: true, data: loan, message: 'Loan released successfully' });
+      const method = req.body.method || 'cash';
+      const loan = await loanService.releaseLoan(paramStr(req.params.id), req.user!.userId, method, req.body.reference);
+
+      // Check cash availability for cash disbursements
+      let cashWarning: string | null = null;
+      if (method === 'cash') {
+        const netProceeds = parseFloat(loan.net_proceeds) || 0;
+        const shifts = await cashierSessionRepo.query(
+          `SELECT expected_cash FROM cashier_sessions WHERE user_id = $1 AND status = 'open' LIMIT 1`,
+          [req.user!.userId]
+        );
+        const expectedCash = shifts.length > 0 ? parseFloat(shifts[0].expected_cash) || 0 : 0;
+        if (expectedCash < netProceeds) {
+          const isAdmin = req.user?.roleSlug === 'super-admin' || req.user?.roleSlug === 'admin';
+          if (!isAdmin) {
+            throw new AppError(400,
+              `Insufficient cash available (₱${expectedCash.toFixed(2)}) for disbursement of ₱${netProceeds.toFixed(2)}. Please replenish cash or use a non-cash method.`
+            );
+          }
+          cashWarning = `Cash available (₱${expectedCash.toFixed(2)}) is less than net proceeds (₱${netProceeds.toFixed(2)}).`;
+        }
+      }
+
+      autoRecordTransaction({
+        userId: req.user!.userId,
+        loanId: loan.id,
+        borrowerId: loan.borrower_id,
+        transactionType: 'disbursement',
+        direction: 'out',
+        amount: parseFloat(loan.net_proceeds) || 0,
+        paymentMethod: req.body.method || 'cash',
+        referenceNumber: req.body.reference || null,
+        description: `Loan release ${loan.loan_number}`,
+      });
+      res.status(201).json({ success: true, data: loan, message: 'Loan released successfully', cashWarning });
     } catch (error: any) {
       next(new AppError(400, error.message));
     }
