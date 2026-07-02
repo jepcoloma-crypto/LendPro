@@ -187,7 +187,7 @@ export class UtilityController {
                   if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
                   if (typeof v === 'string') return `'${v.replace(/'/g, "''")}'`;
                   if (v instanceof Date) return `'${v.toISOString()}'`;
-                  if (typeof v === 'object') return `'${JSON.stringify(v)}'::jsonb`;
+                  if (typeof v === 'object') return `'${JSON.stringify(v).replace(/'/g, "''")}'::jsonb`;
                   return String(v);
                 });
                 return `(${vals.join(', ')})`;
