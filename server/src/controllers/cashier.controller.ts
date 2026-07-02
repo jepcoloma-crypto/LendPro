@@ -654,6 +654,54 @@ export class CashierController {
       next(new AppError(400, error.message));
     }
   }
+
+  async reportDailyCashPosition(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { date } = req.query;
+      const targetDate = date ? (date as string) : new Date().toISOString().slice(0, 10);
+
+      const rows = await cashierSessionRepo.query(
+        `WITH shift_data AS (
+           SELECT cs.id as shift_id, cs.opening_float, cs.expected_cash, cs.actual_cash, cs.over_short,
+                  cs.status as shift_status, cs.opened_at, cs.closed_at,
+                  u.first_name || ' ' || u.last_name as cashier_name,
+                  b.name as branch_name
+           FROM cashier_sessions cs
+           JOIN users u ON u.id = cs.user_id
+           LEFT JOIN branches b ON b.id = cs.branch_id
+           WHERE cs.created_at::date = $1::date
+         ),
+         txn_data AS (
+           SELECT ct.shift_id,
+                  COALESCE(SUM(ct.amount) FILTER (WHERE ct.direction = 'in' AND ct.transaction_type IN ('payment', 'collection')), 0) as collections,
+                  COALESCE(SUM(ct.amount) FILTER (WHERE ct.direction = 'out' AND ct.transaction_type = 'disbursement'), 0) as disbursements,
+                  COALESCE(SUM(ct.amount) FILTER (WHERE ct.direction = 'out' AND ct.transaction_type = 'expense'), 0) as expenses,
+                  COALESCE(SUM(ct.amount) FILTER (WHERE ct.direction = 'in' AND ct.transaction_type IN ('replenishment', 'other')), 0) as replenishments,
+                  COALESCE(SUM(ct.amount) FILTER (WHERE ct.direction = 'out' AND ct.transaction_type IN ('withdrawal', 'other')), 0) as withdrawals,
+                  COUNT(*) as txn_count
+           FROM cash_transactions ct
+           WHERE ct.created_at::date = $1::date
+           GROUP BY ct.shift_id
+         )
+         SELECT sd.*,
+                COALESCE(td.collections, 0) as collections,
+                COALESCE(td.disbursements, 0) as disbursements,
+                COALESCE(td.expenses, 0) as expenses,
+                COALESCE(td.replenishments, 0) as replenishments,
+                COALESCE(td.withdrawals, 0) as withdrawals,
+                COALESCE(td.collections, 0) + COALESCE(td.replenishments, 0) - COALESCE(td.disbursements, 0) - COALESCE(td.expenses, 0) - COALESCE(td.withdrawals, 0) as net_cash_flow,
+                COALESCE(td.txn_count, 0) as txn_count
+         FROM shift_data sd
+         LEFT JOIN txn_data td ON td.shift_id = sd.shift_id
+         ORDER BY sd.opened_at DESC`,
+        [targetDate]
+      );
+
+      res.json({ success: true, data: rows });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
 }
 
 export const cashierController = new CashierController();

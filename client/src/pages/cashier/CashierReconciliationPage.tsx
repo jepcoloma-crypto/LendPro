@@ -157,9 +157,10 @@ export const CashierReconciliationPage = () => {
   const fetchReport = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get(`/cash-reports/${reportType}`, {
-        params: { startDate: reportDateRange[0].toISOString().split('T')[0], endDate: reportDateRange[1].toISOString().split('T')[0] }
-      });
+      const params: any = reportType === 'daily-cash-position'
+        ? { date: reportDateRange[0].toISOString().split('T')[0] }
+        : { startDate: reportDateRange[0].toISOString().split('T')[0], endDate: reportDateRange[1].toISOString().split('T')[0] };
+      const { data } = await api.get(`/cash-reports/${reportType}`, { params });
       setReportData(data.data || []);
     } catch { setReportData([]); }
     finally { setLoading(false); }
@@ -342,7 +343,8 @@ tr:nth-child(even) td{background:#f8f8f8;}
     if (!win || !reportData.length) return;
     const reportLabel = reportType === 'collection-summary' ? 'Collection Summary'
       : reportType === 'variance-summary' ? 'Variance Report'
-      : reportType === 'method-summary' ? 'Payment Method Summary' : 'Branch Daily Report';
+      : reportType === 'method-summary' ? 'Payment Method Summary'
+      : reportType === 'daily-cash-position' ? 'Daily Cash Position' : 'Branch Daily Report';
     win.document.write(`<!DOCTYPE html><html><head><title>${reportLabel}</title>
 <style>body{font-family:'Segoe UI',Arial,sans-serif;font-size:10px;margin:10mm;color:#333;}
 h1{font-size:16px;text-align:center;margin-bottom:2px;}
@@ -806,6 +808,7 @@ ${transactions.map((t: any, i: number) => `<tr>
                 { label: 'Variance Report', value: 'variance-summary' },
                 { label: 'Payment Method Summary', value: 'method-summary' },
                 { label: 'Branch Daily Report', value: 'branch-daily' },
+                { label: 'Daily Cash Position', value: 'daily-cash-position' },
               ]} placeholder="Report type" searchable cleanable value={reportType} onChange={(v:any) => setReportType(v||'collection-summary')} style={{width:'100%'}} />
             </div>
             <DatePicker value={reportDateRange[0]} onChange={(v:any) => v && setReportDateRange([v, reportDateRange[1]])} placeholder="Start date" />
@@ -847,6 +850,22 @@ ${transactions.map((t: any, i: number) => `<tr>
               <Column width={110}><HeaderCell>Cash Out</HeaderCell><Cell>{(r:any)=>formatCurrency(r.total_cash_out)}</Cell></Column>
               <Column width={110}><HeaderCell>Expected</HeaderCell><Cell>{(r:any)=>formatCurrency(r.total_expected)}</Cell></Column>
               <Column width={110}><HeaderCell>Variance</HeaderCell><Cell>{(r:any)=>{const v=parseFloat(r.total_variance)||0;return <span className={v<0?'text-red-600':v>0?'text-green-600':''}>{formatCurrency(v)}</span>;}}</Cell></Column>
+            </>}
+            {reportType === 'daily-cash-position' && <>
+              <Column width={140}><HeaderCell>Date</HeaderCell><Cell>{(r:any)=>new Date(r.opened_at).toLocaleDateString()}</Cell></Column>
+              <Column width={140}><HeaderCell>Cashier</HeaderCell><Cell dataKey="cashier_name" /></Column>
+              <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={110}><HeaderCell>Opening Float</HeaderCell><Cell>{(r:any)=>formatCurrency(r.opening_float)}</Cell></Column>
+              <Column width={110}><HeaderCell>Collections</HeaderCell><Cell>{(r:any)=>formatCurrency(r.collections)}</Cell></Column>
+              <Column width={110}><HeaderCell>Disbursements</HeaderCell><Cell>{(r:any)=>formatCurrency(r.disbursements)}</Cell></Column>
+              <Column width={100}><HeaderCell>Expenses</HeaderCell><Cell>{(r:any)=>formatCurrency(r.expenses)}</Cell></Column>
+              <Column width={110}><HeaderCell>Replenish</HeaderCell><Cell>{(r:any)=>formatCurrency(r.replenishments)}</Cell></Column>
+              <Column width={110}><HeaderCell>Withdrawals</HeaderCell><Cell>{(r:any)=>formatCurrency(r.withdrawals)}</Cell></Column>
+              <Column width={110}><HeaderCell>Net Flow</HeaderCell><Cell>{(r:any)=>{const v=parseFloat(r.net_cash_flow)||0;return <span className={v<0?'text-red-600':'text-green-600'}>{formatCurrency(v)}</span>;}}</Cell></Column>
+              <Column width={110}><HeaderCell>Expected Cash</HeaderCell><Cell>{(r:any)=>formatCurrency(r.expected_cash)}</Cell></Column>
+              <Column width={100}><HeaderCell>Actual Cash</HeaderCell><Cell>{(r:any)=>r.actual_cash?formatCurrency(r.actual_cash):'-'}</Cell></Column>
+              <Column width={90}><HeaderCell>Variance</HeaderCell><Cell>{(r:any)=>{if(!r.actual_cash)return'-';const v=parseFloat(r.over_short)||0;return <span className={v<0?'text-red-600':v>0?'text-green-600':''}>{formatCurrency(v)}</span>;}}</Cell></Column>
+              <Column width={90}><HeaderCell>Status</HeaderCell><Cell>{(r:any)=><Tag color={r.shift_status==='approved'?'green':r.shift_status==='closed'?'blue':r.shift_status==='open'?'orange':'yellow'}>{r.shift_status}</Tag>}</Cell></Column>
             </>}
           </Table>
           {reportType === 'method-summary' && reportData.length > 0 && <MethodSummaryFooter data={reportData} />}

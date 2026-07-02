@@ -339,6 +339,7 @@ export class CashflowController {
       if (endDate) { chargeDateFilter += ` AND l.release_date <= $${ci++}`; chargeParams.push(endDate); }
       const charges = await pool.query(
         `SELECT COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
+                COALESCE(b.name, 'Unassigned') as branch_name,
                 COALESCE(SUM(lc.amount), 0) as charge_income
          FROM loan_charges lc
          JOIN loans l ON l.id = lc.loan_id
@@ -357,11 +358,12 @@ export class CashflowController {
       if (endDate) { oiDateFilter += ` AND date <= $${oi++}`; oiParams.push(endDate); }
       const otherIncome = await pool.query(
         `SELECT COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
+                COALESCE(b.name, 'Unassigned') as branch_name,
                 COALESCE(SUM(o.amount), 0) as other_income
          FROM other_income o
          LEFT JOIN branches b ON b.id = o.branch_id
          WHERE 1=1${oiDateFilter}
-         GROUP BY b.id`,
+         GROUP BY b.id, b.name`,
         oiParams
       );
 
@@ -373,11 +375,12 @@ export class CashflowController {
       if (endDate) { expDateFilter += ` AND date <= $${ei++}`; expParams.push(endDate); }
       const expenses = await pool.query(
         `SELECT COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
+                COALESCE(b.name, 'Unassigned') as branch_name,
                 COALESCE(SUM(e.amount), 0) as total_expenses
          FROM operating_expenses e
          LEFT JOIN branches b ON b.id = e.branch_id
          WHERE 1=1${expDateFilter}
-         GROUP BY b.id`,
+         GROUP BY b.id, b.name`,
         expParams
       );
 
@@ -393,15 +396,15 @@ export class CashflowController {
         branchMap[r.branch_id].penalty_income = parseFloat(r.penalty_income) || 0;
       }
       for (const r of charges.rows) {
-        addBranch(r.branch_id, '');
+        addBranch(r.branch_id, r.branch_name);
         branchMap[r.branch_id].charge_income = parseFloat(r.charge_income) || 0;
       }
       for (const r of otherIncome.rows) {
-        addBranch(r.branch_id, '');
+        addBranch(r.branch_id, r.branch_name);
         branchMap[r.branch_id].other_income = parseFloat(r.other_income) || 0;
       }
       for (const r of expenses.rows) {
-        addBranch(r.branch_id, '');
+        addBranch(r.branch_id, r.branch_name);
         branchMap[r.branch_id].total_expenses = parseFloat(r.total_expenses) || 0;
       }
 

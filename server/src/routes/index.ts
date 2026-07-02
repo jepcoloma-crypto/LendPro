@@ -157,6 +157,7 @@ router.get('/cash-reports/variance-summary', authenticate, authorize('super-admi
 router.get('/cash-reports/method-summary', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.reportMethodSummary.bind(cashierController));
 router.get('/cash-reports/branch-daily', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.reportBranchDaily.bind(cashierController));
 router.get('/cash-reports/daily-chart', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.reportDailyChart.bind(cashierController));
+router.get('/cash-reports/daily-cash-position', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.reportDailyCashPosition.bind(cashierController));
 
 // Collections
 router.get('/collections', authenticate, collectionController.getAll.bind(collectionController));
