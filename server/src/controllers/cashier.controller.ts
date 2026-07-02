@@ -56,6 +56,7 @@ export class CashierController {
       const actual = parseFloat(req.body.actual_cash) ?? expectedCash;
       const overShort = actual - expectedCash;
 
+      // Update shift record
       await cashierSessionRepo.update(id, {
         closed_at: new Date().toISOString(),
         actual_cash: actual,
@@ -67,6 +68,40 @@ export class CashierController {
         status: 'closed',
         notes: req.body.notes || '',
       });
+
+      // Create reconciliation record for audit trail / variance approval
+      const varianceType = overShort === 0 ? 'balanced' : overShort > 0 ? 'over' : 'short';
+      const reconciliation = await cashReconciliationRepo.create({
+        shift_id: id, count_id: null,
+        expected_cash: expectedCash, actual_cash: actual,
+        variance: overShort, variance_type: varianceType,
+        variance_reason: req.body.variance_reason || null,
+        status: 'pending',
+      });
+
+      // Auto-approve if within threshold
+      const thresholdResult = await cashierSessionRepo.query(
+        `SELECT value FROM system_settings WHERE key = 'cash_variance_threshold'`
+      );
+      const threshold = parseFloat(thresholdResult[0]?.value) || 500;
+      const absVariance = Math.abs(overShort);
+      if (absVariance <= threshold) {
+        await cashReconciliationRepo.update(reconciliation.id, {
+          status: 'approved', reviewed_by: req.user?.userId,
+          reviewed_at: new Date().toISOString(),
+        });
+        await approvalHistoryRepo.create({
+          shift_id: id, reconciliation_id: reconciliation.id,
+          action: 'auto-approved', performed_by: req.user?.userId,
+          comments: `Variance ${overShort.toFixed(2)} within threshold (${threshold.toFixed(2)}) — auto-approved`,
+        });
+      } else {
+        await approvalHistoryRepo.create({
+          shift_id: id, reconciliation_id: reconciliation.id,
+          action: 'submitted', performed_by: req.user?.userId,
+          comments: `Variance ${overShort.toFixed(2)} exceeds threshold (${threshold.toFixed(2)}) — pending approval`,
+        });
+      }
 
       const updated = await cashierSessionRepo.findById(id);
       res.json({ success: true, data: updated });
@@ -408,26 +443,45 @@ export class CashierController {
       const today = new Date().toISOString().slice(0, 10);
       const { userId, roleSlug, branchId } = req.user!;
 
-      let userFilter = '';
-      const params: any[] = [today];
-
+      // Collections/disbursed from cash_transactions (real-time, not just at close)
+      let txnFilter = '';
+      const txnParams: any[] = [today];
       if (roleSlug === 'cashier') {
-        userFilter = `AND user_id = $2`;
-        params.push(userId);
+        txnFilter = `AND ct.created_by = $2`;
+        txnParams.push(userId);
       } else if (roleSlug === 'branch-manager' && branchId) {
-        userFilter = `AND branch_id = $2`;
-        params.push(branchId);
+        txnFilter = `AND cs.branch_id = $2`;
+        txnParams.push(branchId);
       }
 
-      const stats = await cashierSessionRepo.query(
+      const txnStats = await cashierSessionRepo.query(
         `SELECT
-           COALESCE(SUM(cash_collected), 0) as today_collections,
-           COALESCE(SUM(cash_disbursed), 0) as today_disbursed,
+           COALESCE(SUM(ct.amount) FILTER (WHERE ct.transaction_type = 'payment' OR ct.transaction_type = 'collection'), 0) as today_collections,
+           COALESCE(SUM(ct.amount) FILTER (WHERE ct.transaction_type = 'disbursement'), 0) as today_disbursed
+         FROM cash_transactions ct
+         LEFT JOIN cashier_sessions cs ON cs.id = ct.shift_id
+         WHERE ct.created_at::date = $1 ${txnFilter}`,
+        txnParams
+      );
+
+      // Open/closed shift counts from cashier_sessions
+      let shiftFilter = '';
+      const shiftParams: any[] = [today];
+      if (roleSlug === 'cashier') {
+        shiftFilter = `AND user_id = $2`;
+        shiftParams.push(userId);
+      } else if (roleSlug === 'branch-manager' && branchId) {
+        shiftFilter = `AND branch_id = $2`;
+        shiftParams.push(branchId);
+      }
+
+      const shiftStats = await cashierSessionRepo.query(
+        `SELECT
            COUNT(*) FILTER (WHERE status = 'open') as open_shifts,
            COUNT(*) FILTER (WHERE status = 'closed') as closed_shifts
          FROM cashier_sessions
-         WHERE created_at::date = $1 ${userFilter}`,
-        params
+         WHERE created_at::date = $1 ${shiftFilter}`,
+        shiftParams
       );
 
       const pendingApprovals = await cashReconciliationRepo.query(
@@ -447,10 +501,10 @@ export class CashierController {
       res.json({
         success: true,
         data: {
-          today_collections: stats[0]?.today_collections || 0,
-          today_disbursed: stats[0]?.today_disbursed || 0,
-          open_shifts: parseInt(stats[0]?.open_shifts) || 0,
-          closed_shifts: parseInt(stats[0]?.closed_shifts) || 0,
+          today_collections: txnStats[0]?.today_collections || 0,
+          today_disbursed: txnStats[0]?.today_disbursed || 0,
+          open_shifts: parseInt(shiftStats[0]?.open_shifts) || 0,
+          closed_shifts: parseInt(shiftStats[0]?.closed_shifts) || 0,
           pending_approvals: parseInt(pendingApprovals[0]?.count) || 0,
           cash_on_hand: openShift[0]?.expected_cash || 0,
           shift_open: !!openShift[0],

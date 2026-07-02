@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Button, Panel, Modal, Form, toaster, Message, Tag, Table, SelectPicker, InputNumber, DatePicker } from 'rsuite';
+import { Button, Panel, Modal, Form, toaster, Message, Tag, Table, SelectPicker, InputNumber, Input, DatePicker } from 'rsuite';
 import api from '../../services/api';
 import { formatCurrency } from '../../utils/format';
 import { DollarSign, Plus, Check, X, Eye, Printer, Search, RotateCcw, TrendingUp, TrendingDown, Wallet, Clock, ShieldCheck, ArrowDownCircle, ArrowUpCircle, BarChart3, Download } from 'lucide-react';
@@ -8,6 +8,20 @@ import { ExpensesPage } from '../expenses/ExpensesPage';
 import { printStyles, companyHeaderHtml, printWindow } from '../../utils/print';
 
 const { Column, HeaderCell, Cell } = Table;
+
+const MethodSummaryFooter = ({ data }: { data: any[] }) => {
+  const tIn = data.reduce((s: number, r: any) => s + (parseFloat(r.in_total) || 0), 0);
+  const tOut = data.reduce((s: number, r: any) => s + (parseFloat(r.out_total) || 0), 0);
+  const tTxns = data.reduce((s: number, r: any) => s + (parseInt(r.txn_count) || 0), 0);
+  return (
+    <div className="border-t border-gray-300 mt-2 pt-2 flex justify-end gap-6 text-sm">
+      <span><strong>Total Txns:</strong> {tTxns}</span>
+      <span><strong>Total In:</strong> <span className="text-green-600">{formatCurrency(tIn)}</span></span>
+      <span><strong>Total Out:</strong> <span className="text-red-600">{formatCurrency(tOut)}</span></span>
+      <span><strong>Net:</strong> <span className={(tIn - tOut) < 0 ? 'text-red-600' : 'text-green-600'}>{formatCurrency(tIn - tOut)}</span></span>
+    </div>
+  );
+};
 
 const DENOMINATIONS = [1000, 500, 200, 100, 50, 20, 10, 5, 1];
 
@@ -33,6 +47,7 @@ export const CashierReconciliationPage = () => {
   const [activeTab, setActiveTab] = useState('shift');
   const [myShift, setMyShift] = useState<any>(null);
   const [shifts, setShifts] = useState<any[]>([]);
+  const [closedShifts, setClosedShifts] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [counts, setCounts] = useState<any[]>([]);
   const [reconciliations, setReconciliations] = useState<any[]>([]);
@@ -53,9 +68,12 @@ export const CashierReconciliationPage = () => {
   const [reconForm, setReconForm] = useState({ shift_id: '', count_id: '', variance_reason: '' });
   const [viewModal, setViewModal] = useState(false);
   const [viewData, setViewData] = useState<any>(null);
+  const [shiftDetail, setShiftDetail] = useState<any>(null);
   const [rejectModal, setRejectModal] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<any>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [txnModal, setTxnModal] = useState(false);
+  const [txnForm, setTxnForm] = useState<any>({ direction: 'in', amount: 0, transaction_type: 'replenishment', description: '', reference_number: '' });
 
   // Report filters
   const [reportDateRange, setReportDateRange] = useState<[Date, Date]>([new Date(Date.now() - 30*86400000), new Date()]);
@@ -79,6 +97,13 @@ export const CashierReconciliationPage = () => {
       setShifts(data.data || []);
     } catch { setShifts([]); }
   }, [shiftFilter]);
+
+  const fetchClosedShifts = useCallback(async () => {
+    try {
+      const { data } = await api.get('/cashier-sessions', { params: { status: 'closed' } });
+      setClosedShifts(data.data || []);
+    } catch { setClosedShifts([]); }
+  }, []);
 
   const fetchTransactions = useCallback(async () => {
     try {
@@ -117,6 +142,7 @@ export const CashierReconciliationPage = () => {
 
   useEffect(() => { fetchMyShift(); }, [fetchMyShift, activeTab]);
   useEffect(() => { fetchShifts(); }, [fetchShifts]);
+  useEffect(() => { if (activeTab === 'close') fetchClosedShifts(); }, [activeTab, fetchClosedShifts]);
   useEffect(() => { fetchTransactions(); fetchCounts(); fetchReconciliations(); fetchApprovals(); }, [activeTab, fetchTransactions, fetchCounts, fetchReconciliations, fetchApprovals]);
   useEffect(() => { if (activeTab === 'approvals') fetchPending(); }, [activeTab, fetchPending]);
 
@@ -159,7 +185,7 @@ export const CashierReconciliationPage = () => {
       await api.put(`/cashier-sessions/${myShift.id}/close`, closeForm);
       setCloseModal(false);
       toaster.push(<Message type="success">Shift closed</Message>, { placement: 'topEnd' });
-      setMyShift(null); fetchShifts();
+      setMyShift(null); fetchShifts(); fetchClosedShifts();
     } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
   };
 
@@ -222,6 +248,18 @@ export const CashierReconciliationPage = () => {
       await api.put(`/cash-reconciliations/${id}/request-recount`, { comments: 'Recount requested' });
       toaster.push(<Message type="info">Recount requested</Message>, { placement: 'topEnd' });
       fetchPending();
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+  };
+
+  // ========== RECORD MANUAL TRANSACTION ==========
+  const handleRecordTxn = async () => {
+    if (!myShift) return;
+    if (!txnForm.amount || txnForm.amount <= 0) { toaster.push(<Message type="warning">Enter an amount</Message>, { placement: 'topEnd' }); return; }
+    try {
+      await api.post('/cash-transactions', { shift_id: myShift.id, ...txnForm });
+      setTxnModal(false);
+      toaster.push(<Message type="success">Transaction recorded</Message>, { placement: 'topEnd' });
+      fetchTransactions(); fetchMyShift();
     } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
   };
 
@@ -473,12 +511,12 @@ ${transactions.map((t: any, i: number) => `<tr>
       {/* My Shift Status */}
       <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered
         header={<div className="flex items-center gap-2"><Clock className="w-4 h-4" /><span className="font-semibold">My Shift</span></div>}>
-        {dashStats?.shift_open ? (
+        {myShift ? (
           <div className="flex flex-wrap items-center gap-4">
             <div><span className="text-xs text-gray-500">Status</span><div className="font-medium text-green-600">Open</div></div>
-            <div><span className="text-xs text-gray-500">Opening Float</span><div className="font-medium">{formatCurrency(dashStats.shift_opening_float)}</div></div>
-            <div><span className="text-xs text-gray-500">Cash on Hand</span><div className="font-medium">{formatCurrency(dashStats.cash_on_hand)}</div></div>
-            <div><span className="text-xs text-gray-500">Opened</span><div className="font-medium">{dashStats.shift_opened_at ? new Date(dashStats.shift_opened_at).toLocaleString() : '-'}</div></div>
+            <div><span className="text-xs text-gray-500">Opening Float</span><div className="font-medium">{formatCurrency(myShift.opening_float)}</div></div>
+            <div><span className="text-xs text-gray-500">Cash on Hand</span><div className="font-medium">{formatCurrency(myShift.expected_cash)}</div></div>
+            <div><span className="text-xs text-gray-500">Opened</span><div className="font-medium">{myShift.opened_at ? new Date(myShift.opened_at).toLocaleString() : '-'}</div></div>
             <div className="ml-auto">
               <Button size="sm" color="orange" appearance="primary" onClick={() => setActiveTab('close')}><Clock className="w-3.5 h-3.5 mr-1" />Close Shift</Button>
             </div>
@@ -573,6 +611,7 @@ ${transactions.map((t: any, i: number) => `<tr>
       {activeTab === 'transactions' && (
         <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="flex items-center justify-between"><span>Cash Transactions {myShift ? '' : '(all shifts)'}</span>
           <div className="flex gap-2">
+            {myShift && <Button size="sm" appearance="primary" onClick={() => { setTxnForm({ direction: 'in', amount: 0, transaction_type: 'replenishment', description: '', reference_number: '' }); setTxnModal(true); }}><Plus className="w-3.5 h-3.5 mr-1" />Record</Button>}
             <Button size="sm" appearance="ghost" onClick={printTransactions} disabled={!transactions.length}><Printer className="w-3.5 h-3.5 mr-1" />Print</Button>
             <Button size="sm" appearance="ghost" onClick={exportTransactionsCsv} disabled={!transactions.length}><Download className="w-3.5 h-3.5 mr-1" />CSV</Button>
           </div>
@@ -582,6 +621,7 @@ ${transactions.map((t: any, i: number) => `<tr>
               <SelectPicker data={[
                 { label: 'All', value: null }, { label: 'Collection', value: 'collection' },
                 { label: 'Disbursement', value: 'disbursement' }, { label: 'Expense', value: 'expense' },
+                { label: 'Replenishment', value: 'replenishment' }, { label: 'Withdrawal', value: 'withdrawal' },
               ]} placeholder="Type" searchable cleanable value={txnFilter} onChange={(v) => setTxnFilter(v || null)} style={{ width: '100%' }} />
             </div>
           </div>
@@ -702,32 +742,52 @@ ${transactions.map((t: any, i: number) => `<tr>
 
       {/* ===== TAB: Shift Closing ===== */}
       {activeTab === 'close' && (
-        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Close Shift">
-          {!myShift ? <p className="text-gray-400">No active shift to close.</p> : (
-            <div className="max-w-md space-y-4">
-              <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded space-y-2">
-                <div className="flex justify-between"><span>Opening Float</span><span className="font-bold">{formatCurrency(myShift.opening_float)}</span></div>
-                <div className="flex justify-between"><span>Cash Collected</span><span className="font-bold text-green-600">{formatCurrency(myShift.cash_collected)}</span></div>
-                <div className="flex justify-between"><span>Cash Disbursed</span><span className="font-bold text-red-600">{formatCurrency(myShift.cash_disbursed)}</span></div>
-                <div className="flex justify-between border-t pt-2"><span>Expected Cash</span><span className="font-bold text-lg">{formatCurrency(myShift.expected_cash)}</span></div>
+        <>
+          {myShift && (
+            <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-4" bordered header="Close Shift">
+              <div className="max-w-md space-y-4">
+                <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded space-y-2">
+                  <div className="flex justify-between"><span>Opening Float</span><span className="font-bold">{formatCurrency(myShift.opening_float)}</span></div>
+                  <div className="flex justify-between"><span>Cash Collected</span><span className="font-bold text-green-600">{formatCurrency(myShift.cash_collected)}</span></div>
+                  <div className="flex justify-between"><span>Cash Disbursed</span><span className="font-bold text-red-600">{formatCurrency(myShift.cash_disbursed)}</span></div>
+                  <div className="flex justify-between border-t pt-2"><span>Expected Cash</span><span className="font-bold text-lg">{formatCurrency(myShift.expected_cash)}</span></div>
+                </div>
+                <Form fluid>
+                  <Form.Group>
+                    <Form.ControlLabel>Actual Cash on Hand</Form.ControlLabel>
+                    <InputNumber value={closeForm.actual_cash} onChange={(v: any) => setCloseForm((p: any) => ({ ...p, actual_cash: Number(v) || 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
+                  </Form.Group>
+                  <Form.Group>
+                    <Form.ControlLabel>Notes</Form.ControlLabel>
+                    <textarea className="rs-input w-full" rows={2} value={closeForm.notes} onChange={(e: any) => setCloseForm((p: any) => ({ ...p, notes: e.target.value }))} />
+                  </Form.Group>
+                </Form>
+                <div className="flex gap-2">
+                  <Button color="orange" appearance="primary" onClick={handleClose}><Clock className="w-4 h-4 mr-1" />Close Shift</Button>
+                  <Button appearance="ghost" onClick={() => printReport(myShift.id)}><Printer className="w-3.5 h-3.5 mr-1" />Print Report</Button>
+                </div>
               </div>
-              <Form fluid>
-                <Form.Group>
-                  <Form.ControlLabel>Actual Cash on Hand</Form.ControlLabel>
-                  <InputNumber value={closeForm.actual_cash} onChange={(v: any) => setCloseForm((p: any) => ({ ...p, actual_cash: Number(v) || 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
-                </Form.Group>
-                <Form.Group>
-                  <Form.ControlLabel>Notes</Form.ControlLabel>
-                  <textarea className="rs-input w-full" rows={2} value={closeForm.notes} onChange={(e: any) => setCloseForm((p: any) => ({ ...p, notes: e.target.value }))} />
-                </Form.Group>
-              </Form>
-              <div className="flex gap-2">
-                <Button color="orange" appearance="primary" onClick={handleClose}><Clock className="w-4 h-4 mr-1" />Close Shift</Button>
-                <Button appearance="ghost" onClick={() => printReport(myShift.id)}><Printer className="w-3.5 h-3.5 mr-1" />Print Report</Button>
-              </div>
-            </div>
+            </Panel>
           )}
-        </Panel>
+
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Closed Shifts">
+            {closedShifts.length === 0 ? (
+              <p className="text-gray-400">No closed shifts found.</p>
+            ) : (
+              <Table data={closedShifts} virtualized height={350} rowHeight={45} loading={loading}>
+                <Column width={160}><HeaderCell>Opened</HeaderCell><Cell>{(r: any) => new Date(r.opened_at).toLocaleString()}</Cell></Column>
+                <Column width={160}><HeaderCell>Closed</HeaderCell><Cell>{(r: any) => r.closed_at ? new Date(r.closed_at).toLocaleString() : '-'}</Cell></Column>
+                <Column width={120}><HeaderCell>Cashier</HeaderCell><Cell dataKey="user_name" /></Column>
+                <Column width={140}><HeaderCell>Opening Float</HeaderCell><Cell>{(r: any) => formatCurrency(r.opening_float)}</Cell></Column>
+                <Column width={140}><HeaderCell>Expected</HeaderCell><Cell>{(r: any) => formatCurrency(r.expected_cash)}</Cell></Column>
+                <Column width={140}><HeaderCell>Actual</HeaderCell><Cell>{(r: any) => formatCurrency(r.actual_cash)}</Cell></Column>
+                <Column width={140}><HeaderCell>Over/Short</HeaderCell><Cell>{(r: any) => { const v = parseFloat(r.over_short) || 0; return <span className={v < 0 ? 'text-red-600' : v > 0 ? 'text-green-600' : ''}>{formatCurrency(v)}</span>; }}</Cell></Column>
+                <Column width={100}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.status === 'closed' ? 'orange' : r.status === 'approved' ? 'green' : undefined}>{r.status}</Tag>}</Cell></Column>
+                <Column width={90}><HeaderCell>View</HeaderCell><Cell>{(r: any) => <Button size="sm" appearance="ghost" onClick={async () => { setViewData(r); setViewModal(true); try { const { data } = await api.get(`/cashier-sessions/${r.id}/details`); setShiftDetail(data.data); } catch { setShiftDetail(null); } }}><Eye className="w-4 h-4" /></Button>}</Cell></Column>
+              </Table>
+            )}
+          </Panel>
+        </>
       )}
 
       {/* ===== TAB: Expenses & Income ===== */}
@@ -776,7 +836,7 @@ ${transactions.map((t: any, i: number) => `<tr>
               <Column width={100}><HeaderCell>Txns</HeaderCell><Cell>{(r:any)=>r.txn_count}</Cell></Column>
               <Column width={130}><HeaderCell>In (Collections)</HeaderCell><Cell>{(r:any)=>formatCurrency(r.in_total)}</Cell></Column>
               <Column width={130}><HeaderCell>Out (Disb.)</HeaderCell><Cell>{(r:any)=>formatCurrency(r.out_total)}</Cell></Column>
-              <Column width={130}><HeaderCell>Net Total</HeaderCell><Cell>{(r:any)=>{const net=(parseFloat(r.in_total)||0)-(parseFloat(r.out_total)||0);return <span className={net<0?'text-red-600':'text-green-600'}>{formatCurrency(net)}</span>;}}</Cell></Column>
+              <Column width={130}><HeaderCell>Net (+/-)</HeaderCell><Cell>{(r:any)=>{let net=(parseFloat(r.in_total)||0)-(parseFloat(r.out_total)||0);return <span className={net<0?'text-red-600':'text-green-600'}>{formatCurrency(net)}</span>;}}</Cell></Column>
             </>}
             {reportType === 'branch-daily' && <>
               <Column width={140}><HeaderCell>Date</HeaderCell><Cell>{(r:any)=>new Date(r.shift_date).toLocaleDateString()}</Cell></Column>
@@ -789,6 +849,7 @@ ${transactions.map((t: any, i: number) => `<tr>
               <Column width={110}><HeaderCell>Variance</HeaderCell><Cell>{(r:any)=>{const v=parseFloat(r.total_variance)||0;return <span className={v<0?'text-red-600':v>0?'text-green-600':''}>{formatCurrency(v)}</span>;}}</Cell></Column>
             </>}
           </Table>
+          {reportType === 'method-summary' && reportData.length > 0 && <MethodSummaryFooter data={reportData} />}
         </Panel>
       )}
 
@@ -899,6 +960,103 @@ ${transactions.map((t: any, i: number) => `<tr>
         <Modal.Footer>
           <Button color="red" appearance="primary" onClick={handleReject}><X className="w-4 h-4 mr-1" />Reject</Button>
           <Button appearance="subtle" onClick={() => setRejectModal(false)}>Cancel</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Shift Detail modal */}
+      <Modal open={viewModal} onClose={() => { setViewModal(false); setShiftDetail(null); }} size="lg">
+        <Modal.Header><Modal.Title>Shift Details</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {!shiftDetail ? <p className="text-gray-400">Loading...</p> : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-700 rounded">
+                <div><span className="text-gray-500">Cashier:</span> <span className="font-bold">{shiftDetail.user_name || viewData?.user_name || '-'}</span></div>
+                <div><span className="text-gray-500">Branch:</span> <span className="font-bold">{shiftDetail.branch_name || viewData?.branch_name || '-'}</span></div>
+                <div><span className="text-gray-500">Opened:</span> <span className="font-bold">{shiftDetail.opened_at ? new Date(shiftDetail.opened_at).toLocaleString() : '-'}</span></div>
+                <div><span className="text-gray-500">Closed:</span> <span className="font-bold">{shiftDetail.closed_at ? new Date(shiftDetail.closed_at).toLocaleString() : '-'}</span></div>
+                <div><span className="text-gray-500">Opening Float:</span> <span className="font-bold">{formatCurrency(shiftDetail.opening_float)}</span></div>
+                <div><span className="text-gray-500">Expected Cash:</span> <span className="font-bold">{formatCurrency(shiftDetail.expected_cash)}</span></div>
+                <div><span className="text-gray-500">Actual Cash:</span> <span className="font-bold">{formatCurrency(shiftDetail.actual_cash)}</span></div>
+                <div><span className="text-gray-500">Over/Short:</span> <span className={`font-bold ${parseFloat(shiftDetail.over_short) < 0 ? 'text-red-600' : parseFloat(shiftDetail.over_short) > 0 ? 'text-green-600' : ''}`}>{formatCurrency(shiftDetail.over_short)}</span></div>
+                <div><span className="text-gray-500">Status:</span> <Tag color={shiftDetail.status === 'closed' ? 'orange' : shiftDetail.status === 'open' ? 'yellow' : undefined}>{shiftDetail.status}</Tag></div>
+                <div><span className="text-gray-500">Notes:</span> <span>{shiftDetail.notes || '-'}</span></div>
+              </div>
+
+              <div className="text-sm font-bold border-b-2 border-gray-800 pb-1 mt-4 mb-2">Transactions ({shiftDetail.transactions?.length || 0})</div>
+              {(!shiftDetail.transactions || shiftDetail.transactions.length === 0) ? (
+                <p className="text-gray-400 text-sm">No transactions.</p>
+              ) : (
+                <Table data={shiftDetail.transactions} virtualized height={200} rowHeight={35}>
+                  <Column width={140}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.created_at).toLocaleString()}</Cell></Column>
+                  <Column width={100}><HeaderCell>Type</HeaderCell><Cell>{(r: any) => <Tag color={r.transaction_type === 'payment' ? 'green' : r.transaction_type === 'disbursement' ? 'red' : r.transaction_type === 'expense' ? 'orange' : r.transaction_type === 'income' ? 'blue' : undefined}>{r.transaction_type}</Tag>}</Cell></Column>
+                  <Column width={80}><HeaderCell>Dir</HeaderCell><Cell>{(r: any) => r.direction === 'in' ? <span className="text-green-600">In</span> : <span className="text-red-600">Out</span>}</Cell></Column>
+                  <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.amount)}</Cell></Column>
+                  <Column width={160}><HeaderCell>Method</HeaderCell><Cell dataKey="payment_method" /></Column>
+                  <Column width={200} flexGrow={1}><HeaderCell>Description</HeaderCell><Cell dataKey="description" /></Column>
+                </Table>
+              )}
+
+              <div className="text-sm font-bold border-b-2 border-gray-800 pb-1 mt-4 mb-2">Reconciliations ({shiftDetail.reconciliations?.length || 0})</div>
+              {(!shiftDetail.reconciliations || shiftDetail.reconciliations.length === 0) ? (
+                <p className="text-gray-400 text-sm">No reconciliations.</p>
+              ) : (
+                <Table data={shiftDetail.reconciliations} virtualized height={150} rowHeight={35}>
+                  <Column width={120}><HeaderCell>Expected</HeaderCell><Cell>{(r: any) => formatCurrency(r.expected_cash)}</Cell></Column>
+                  <Column width={120}><HeaderCell>Actual</HeaderCell><Cell>{(r: any) => formatCurrency(r.actual_cash)}</Cell></Column>
+                  <Column width={120}><HeaderCell>Variance</HeaderCell><Cell>{(r: any) => { const v = parseFloat(r.variance) || 0; return <span className={v < 0 ? 'text-red-600' : v > 0 ? 'text-green-600' : ''}>{formatCurrency(v)}</span>; }}</Cell></Column>
+                  <Column width={80}><HeaderCell>Type</HeaderCell><Cell>{(r: any) => r.variance_type}</Cell></Column>
+                  <Column width={80}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'red' : 'yellow'}>{r.status}</Tag>}</Cell></Column>
+                </Table>
+              )}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button appearance="ghost" onClick={() => printReport(viewData?.id)} disabled={!viewData?.id}><Printer className="w-4 h-4 mr-1" />Print Report</Button>
+          <Button appearance="subtle" onClick={() => { setViewModal(false); setShiftDetail(null); }}>Close</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Record Transaction modal */}
+      <Modal open={txnModal} onClose={() => setTxnModal(false)} size="sm">
+        <Modal.Header><Modal.Title>Record Manual Transaction</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <Form fluid>
+            <Form.Group>
+              <Form.ControlLabel>Direction *</Form.ControlLabel>
+              <SelectPicker value={txnForm.direction} onChange={(v: any) => setTxnForm((p: any) => ({ ...p, direction: v }))} data={[
+                { label: 'Cash In (add cash)', value: 'in' },
+                { label: 'Cash Out (remove cash)', value: 'out' },
+              ]} block searchable={false} />
+            </Form.Group>
+            <Form.Group>
+              <Form.ControlLabel>Amount *</Form.ControlLabel>
+              <InputNumber value={txnForm.amount} onChange={(v: any) => setTxnForm((p: any) => ({ ...p, amount: Number(v) || 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
+            </Form.Group>
+            <Form.Group>
+              <Form.ControlLabel>Transaction Type</Form.ControlLabel>
+              <SelectPicker value={txnForm.transaction_type} onChange={(v: any) => setTxnForm((p: any) => ({ ...p, transaction_type: v }))} data={[
+                { label: 'Replenishment', value: 'replenishment' },
+                { label: 'Withdrawal', value: 'withdrawal' },
+                { label: 'Collection', value: 'collection' },
+                { label: 'Disbursement', value: 'disbursement' },
+                { label: 'Expense', value: 'expense' },
+                { label: 'Other', value: 'other' },
+              ]} block searchable={false} />
+            </Form.Group>
+            <Form.Group>
+              <Form.ControlLabel>Description</Form.ControlLabel>
+              <textarea className="rs-input w-full" rows={2} value={txnForm.description} onChange={(e: any) => setTxnForm((p: any) => ({ ...p, description: e.target.value }))} />
+            </Form.Group>
+            <Form.Group>
+              <Form.ControlLabel>Reference Number</Form.ControlLabel>
+              <Input value={txnForm.reference_number} onChange={(v: any) => setTxnForm((p: any) => ({ ...p, reference_number: v }))} />
+            </Form.Group>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button appearance="primary" onClick={handleRecordTxn} loading={loading}><Plus className="w-4 h-4 mr-1" />Record</Button>
+          <Button appearance="subtle" onClick={() => setTxnModal(false)}>Cancel</Button>
         </Modal.Footer>
       </Modal>
     </div>

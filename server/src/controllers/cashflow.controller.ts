@@ -62,6 +62,8 @@ export class CashflowController {
   async updateExpense(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const id = paramStr(req.params.id);
+      const old = await pool.query('SELECT * FROM operating_expenses WHERE id = $1', [id]);
+      (req as any).oldValues = old.rows[0] || null;
       const { date, category, amount, payee, description, branch_id } = req.body;
       const result = await pool.query(
         `UPDATE operating_expenses SET date=$1, category=$2, amount=$3, payee=$4, description=$5, branch_id=$6 WHERE id=$7 RETURNING *`,
@@ -76,6 +78,10 @@ export class CashflowController {
 
   async deleteExpense(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      const shift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
+      if (!shift) throw new AppError(400, 'Cannot delete expense — shift is closed. Open a new shift first.');
+
+      (req as any).oldValues = (await pool.query('SELECT * FROM operating_expenses WHERE id = $1', [paramStr(req.params.id)])).rows[0] || null;
       const result = await pool.query('DELETE FROM operating_expenses WHERE id=$1 RETURNING id', [paramStr(req.params.id)]);
       if (!result.rows.length) return next(new AppError(404, 'Expense not found'));
       res.json({ success: true });
@@ -113,11 +119,25 @@ export class CashflowController {
     try {
       const { date, source, amount, description, branch_id } = req.body;
       if (!date || !source || !amount) return next(new AppError(400, 'Date, source, and amount are required'));
+
+      const myShift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
+      if (!myShift) throw new AppError(400, 'No open shift found. Please open a cashier shift before recording income.');
+
       const result = await pool.query(
         `INSERT INTO other_income (date, source, amount, description, branch_id, created_by)
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
         [date, source, amount, description || null, branch_id || null, req.user?.userId]
       );
+
+      await autoRecordTransaction({
+        userId: req.user!.userId,
+        transactionType: 'income',
+        direction: 'in',
+        amount: parseFloat(amount) || 0,
+        paymentMethod: 'cash',
+        description: `${source}: ${description || ''}`,
+      });
+
       res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error: any) {
       next(new AppError(400, error.message));
@@ -127,6 +147,8 @@ export class CashflowController {
   async updateIncome(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const id = paramStr(req.params.id);
+      const old = await pool.query('SELECT * FROM other_income WHERE id = $1', [id]);
+      (req as any).oldValues = old.rows[0] || null;
       const { date, source, amount, description, branch_id } = req.body;
       const result = await pool.query(
         `UPDATE other_income SET date=$1, source=$2, amount=$3, description=$4, branch_id=$5 WHERE id=$6 RETURNING *`,
@@ -141,6 +163,10 @@ export class CashflowController {
 
   async deleteIncome(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      const shift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
+      if (!shift) throw new AppError(400, 'Cannot delete income — shift is closed. Open a new shift first.');
+
+      (req as any).oldValues = (await pool.query('SELECT * FROM other_income WHERE id = $1', [paramStr(req.params.id)])).rows[0] || null;
       const result = await pool.query('DELETE FROM other_income WHERE id=$1 RETURNING id', [paramStr(req.params.id)]);
       if (!result.rows.length) return next(new AppError(404, 'Income not found'));
       res.json({ success: true });

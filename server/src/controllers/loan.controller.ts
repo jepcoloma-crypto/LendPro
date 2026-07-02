@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { loanService } from '../services/loan.service';
-import { loanRepo, loanApplicationRepo, loanProductRepo, amortizationScheduleRepo, applicationDocumentRepo, coMakerRepo, cashierSessionRepo } from '../repositories';
+import { loanRepo, loanApplicationRepo, loanProductRepo, loanProductChargeRepo, amortizationScheduleRepo, applicationDocumentRepo, coMakerRepo, cashierSessionRepo } from '../repositories';
 import { AppError } from '../middleware/errorHandler';
 import { parsePagination, paramStr, calculateAmortization, calculateInterest } from '../utils/helpers';
 import { autoRecordTransaction } from '../services/cash-transaction.service';
@@ -34,7 +34,9 @@ export class LoanController {
 
   async submitApplication(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const app = await loanService.submitApplication(paramStr(req.params.id));
+      const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanApplicationRepo.findById(id);
+      const app = await loanService.submitApplication(id);
       res.json({ success: true, data: app });
     } catch (error: any) {
       next(new AppError(400, error.message));
@@ -43,7 +45,9 @@ export class LoanController {
 
   async reviewApplication(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const app = await loanService.reviewApplication(paramStr(req.params.id), req.user!.userId);
+      const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanApplicationRepo.findById(id);
+      const app = await loanService.reviewApplication(id, req.user!.userId);
       res.json({ success: true, data: app });
     } catch (error: any) {
       next(new AppError(400, error.message));
@@ -52,7 +56,9 @@ export class LoanController {
 
   async investigateApplication(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const app = await loanService.investigateApplication(paramStr(req.params.id), req.user!.userId, req.body.riskScore, req.body.riskNotes);
+      const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanApplicationRepo.findById(id);
+      const app = await loanService.investigateApplication(id, req.user!.userId, req.body.riskScore, req.body.riskNotes);
       res.json({ success: true, data: app });
     } catch (error: any) {
       next(new AppError(400, error.message));
@@ -61,7 +67,9 @@ export class LoanController {
 
   async assessApplication(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const app = await loanService.assessApplication(paramStr(req.params.id), req.user!.userId, req.body.decision, req.body.comments);
+      const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanApplicationRepo.findById(id);
+      const app = await loanService.assessApplication(id, req.user!.userId, req.body.decision, req.body.comments);
       res.json({ success: true, data: app, message: `Application ${req.body.decision}d` });
     } catch (error: any) {
       next(new AppError(400, error.message));
@@ -333,7 +341,9 @@ export class LoanController {
 
   async approveApplication(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const app = await loanService.approveApplication(paramStr(req.params.id), req.user!.userId, req.body.comments);
+      const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanApplicationRepo.findById(id);
+      const app = await loanService.approveApplication(id, req.user!.userId, req.body.comments);
       res.json({ success: true, data: app, message: 'Application approved' });
     } catch (error: any) {
       next(new AppError(400, error.message));
@@ -342,7 +352,9 @@ export class LoanController {
 
   async rejectApplication(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const app = await loanService.rejectApplication(paramStr(req.params.id), req.user!.userId, req.body.comments);
+      const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanApplicationRepo.findById(id);
+      const app = await loanService.rejectApplication(id, req.user!.userId, req.body.comments);
       res.json({ success: true, data: app, message: 'Application rejected' });
     } catch (error: any) {
       next(new AppError(400, error.message));
@@ -351,7 +363,9 @@ export class LoanController {
 
   async updateApplication(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const app = await loanService.updateApplication(paramStr(req.params.id), req.body);
+      const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanApplicationRepo.findById(id);
+      const app = await loanService.updateApplication(id, req.body);
       res.json({ success: true, data: app });
     } catch (error: any) {
       next(new AppError(400, error.message));
@@ -360,7 +374,9 @@ export class LoanController {
 
   async deleteApplication(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      await loanService.deleteApplication(paramStr(req.params.id));
+      const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanApplicationRepo.findById(id);
+      await loanService.deleteApplication(id);
       res.json({ success: true });
     } catch (error: any) {
       next(new AppError(400, error.message));
@@ -371,10 +387,38 @@ export class LoanController {
     try {
       const method = req.body.method || 'cash';
       const appId = paramStr(req.params.id);
+      (req as any).oldValues = await loanApplicationRepo.findById(appId);
 
       const myShift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
       if (!myShift) {
         throw new AppError(400, 'No open shift found. Please open a cashier shift before releasing a loan.');
+      }
+
+      // Estimate net proceeds before release for cash availability check
+      if (method === 'cash') {
+        const app = await loanApplicationRepo.findById(appId);
+        const principal = parseFloat(app?.principal_amount) || 0;
+        const charges = await loanProductChargeRepo.query(
+          `SELECT lpc.amount, c.computation_type, c.default_amount
+           FROM loan_product_charges lpc
+           JOIN charges c ON c.id = lpc.charge_id
+           WHERE lpc.loan_product_id = $1 AND c.is_active = true`,
+          [app?.loan_product_id || null]
+        );
+        let totalCharges = 0;
+        for (const ch of charges) {
+          const raw = parseFloat(ch.amount ?? ch.default_amount ?? 0);
+          totalCharges += ch.computation_type === 'percentage'
+            ? Math.round(principal * raw / 100 * 100) / 100
+            : raw;
+        }
+        const netProceeds = principal - totalCharges;
+        const expectedCash = parseFloat(myShift.expected_cash) || 0;
+        if (expectedCash < netProceeds) {
+          throw new AppError(400,
+            `Insufficient cash available (₱${expectedCash.toFixed(2)}) for disbursement of ₱${netProceeds.toFixed(2)}. Please replenish cash or use a non-cash method.`
+          );
+        }
       }
 
       const loan = await loanService.releaseLoan(appId, req.user!.userId, method, req.body.reference);
@@ -532,6 +576,7 @@ export class LoanController {
   async updateLoan(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanRepo.findById(id);
       const loan = await loanRepo.update(id, req.body);
       if (!loan) throw new Error('Loan not found');
       res.json({ success: true, data: loan });
@@ -543,6 +588,7 @@ export class LoanController {
   async restructureLoan(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanRepo.findById(id);
       const newLoan = await loanService.restructureLoan(id, req.user!.userId, req.body);
       res.status(201).json({ success: true, data: newLoan });
     } catch (error: any) {
@@ -580,6 +626,7 @@ export class LoanController {
       const loan = await loanRepo.findById(id);
       if (!loan) throw new Error('Loan not found');
       if (loan.status === 'paid' || loan.status === 'written-off' || loan.status === 'cancelled') throw new Error('Loan cannot be written off');
+      (req as any).oldValues = loan;
       const updated = await loanRepo.update(id, {
         status: 'written-off',
         write_off_reason: reason,
@@ -596,6 +643,7 @@ export class LoanController {
   async deleteLoan(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const id = paramStr(req.params.id);
+      (req as any).oldValues = await loanRepo.findById(id);
       const updated = await loanRepo.update(id, { status: 'cancelled' });
       if (!updated) throw new Error('Loan not found');
       res.json({ success: true, message: 'Loan cancelled' });

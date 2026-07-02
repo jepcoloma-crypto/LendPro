@@ -160,10 +160,16 @@ export const BorrowersPage = () => {
         toaster.push(<Message type="success">Borrower updated</Message>, { placement: 'topEnd' });
       } else {
         const { data } = await borrowersApi.create(payload);
-        if (photoFile && data.data?.id) {
-          const fd = new FormData();
-          fd.append('photo', photoFile);
-          await borrowersApi.uploadPhoto(data.data.id, fd);
+        const borrowerId = data.data?.id;
+        if (borrowerId) {
+          if (editPin) {
+            await borrowersApi.setPin(borrowerId, editPin, payload.whatsapp_phone || undefined);
+          }
+          if (photoFile) {
+            const fd = new FormData();
+            fd.append('photo', photoFile);
+            await borrowersApi.uploadPhoto(borrowerId, fd);
+          }
         }
         toaster.push(<Message type="success">Borrower created</Message>, { placement: 'topEnd' });
       }
@@ -448,22 +454,16 @@ export const BorrowersPage = () => {
                   <Form.ControlLabel>Email</Form.ControlLabel>
                   <Form.Control name="email" type="email" />
                 </Form.Group>
-                {editId && (
-                  <>
-                    <Form.Group>
-                      <Form.ControlLabel>WhatsApp Number (for alerts)</Form.ControlLabel>
-                      <Form.Control name="whatsapp_phone" placeholder="Same as mobile or different number" />
-                    </Form.Group>
-                    <Form.Group>
-                      <Form.ControlLabel>PIN (4-8 digits)</Form.ControlLabel>
-                      <Input type="password" pattern="[0-9]*" inputMode="numeric" maxLength={8} value={editPin} onChange={(v: string) => setEditPin(v.replace(/\D/g, '').slice(0, 8))} placeholder="Leave blank to keep current" />
-                    </Form.Group>
-                  </>
-                )}
+                <Form.Group>
+                  <Form.ControlLabel>WhatsApp Number (for alerts)</Form.ControlLabel>
+                  <Form.Control name="whatsapp_phone" placeholder="Same as mobile or different number" />
+                </Form.Group>
+                <Form.Group>
+                  <Form.ControlLabel>PIN (4-8 digits)</Form.ControlLabel>
+                  <Input type="password" pattern="[0-9]*" inputMode="numeric" maxLength={8} value={editPin} onChange={(v: string) => setEditPin(v.replace(/\D/g, '').slice(0, 8))} placeholder={editId ? "Leave blank to keep current" : "Set a 4-8 digit PIN"} />
+                </Form.Group>
               </div>
-              {editId && (
-                <p className="text-xs text-gray-400 mt-2">PIN is used for SMS/WhatsApp balance inquiry. Borrowers text: BAL &lt;code&gt; &lt;pin&gt; to the Twilio number.</p>
-              )}
+              <p className="text-xs text-gray-400 mt-2">PIN is used for SMS/WhatsApp balance inquiry. Borrowers text: BAL &lt;code&gt; &lt;pin&gt; to the Twilio number.</p>
             </Panel>
 
             {/* Present Address + Coordinates */}

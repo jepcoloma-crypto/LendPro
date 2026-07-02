@@ -81,6 +81,7 @@ export class UserController {
       if (req.body.isActive !== undefined) data.is_active = req.body.isActive;
       if (req.body.password) data.password_hash = await bcrypt.hash(req.body.password, 12);
       const id = paramStr(req.params.id);
+      (req as any).oldValues = await userRepo.findById(id);
       const user = await userRepo.update(id, data);
       if (!user) throw new Error('User not found');
       const { password_hash, refresh_token, ...userData } = user;
@@ -92,7 +93,9 @@ export class UserController {
 
   async delete(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      await userRepo.update(paramStr(req.params.id), { is_active: false });
+      const id = paramStr(req.params.id);
+      (req as any).oldValues = await userRepo.findById(id);
+      await userRepo.update(id, { is_active: false });
       res.json({ success: true, message: 'User deactivated' });
     } catch (error: any) {
       next(new AppError(400, error.message));

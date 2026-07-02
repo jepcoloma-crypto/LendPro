@@ -114,6 +114,7 @@ export class BorrowerController {
   async update(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const id = paramStr(req.params.id);
+      (req as any).oldValues = await borrowerRepo.findById(id);
       const borrower = await borrowerRepo.update(id, req.body);
       if (!borrower) throw new Error('Borrower not found');
       res.json({ success: true, data: borrower });
@@ -157,6 +158,7 @@ export class BorrowerController {
 
   async delete(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      (req as any).oldValues = await borrowerRepo.findById(paramStr(req.params.id));
       await borrowerRepo.delete(paramStr(req.params.id));
       res.json({ success: true, message: 'Borrower deleted' });
     } catch (error: any) {

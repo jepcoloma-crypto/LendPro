@@ -317,6 +317,7 @@ export class LoanService {
 
     const netProceeds = parseFloat(app.principal_amount) - totalCharges;
     await loanRepo.update(loan.id, { net_proceeds: netProceeds });
+    loan.net_proceeds = netProceeds;
 
     await loanApplicationRepo.query(
       `INSERT INTO loan_disbursements (loan_id, disbursement_method, amount, reference_number, disbursed_by)

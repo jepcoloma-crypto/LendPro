@@ -50,67 +50,67 @@ router.post('/auth/logout', authenticate, authController.logout.bind(authControl
 
 // Users (super-admin only)
 router.get('/users', authenticate, authorize('super-admin'), userController.getAll.bind(userController));
-router.post('/users', authenticate, authorize('super-admin'), userController.create.bind(userController));
+router.post('/users', authenticate, authorize('super-admin'), auditLog('create', 'user'), userController.create.bind(userController));
 router.get('/users/collectors', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer', 'credit-investigator'), userController.getCollectors.bind(userController));
 router.get('/users/:id', authenticate, authorize('super-admin'), userController.getById.bind(userController));
-router.put('/users/:id', authenticate, authorize('super-admin'), userController.update.bind(userController));
-router.delete('/users/:id', authenticate, authorize('super-admin'), userController.delete.bind(userController));
+router.put('/users/:id', authenticate, authorize('super-admin'), auditLog('update', 'user'), userController.update.bind(userController));
+router.delete('/users/:id', authenticate, authorize('super-admin'), auditLog('delete', 'user'), userController.delete.bind(userController));
 
 // Roles
 router.get('/roles', authenticate, roleController.getAll.bind(roleController));
 
 // Branches
 router.get('/branches', authenticate, authorize('super-admin', 'admin'), branchController.getAll.bind(branchController));
-router.post('/branches', authenticate, authorize('super-admin', 'admin'), branchController.create.bind(branchController));
-router.put('/branches/:id', authenticate, authorize('super-admin', 'admin'), branchController.update.bind(branchController));
+router.post('/branches', authenticate, authorize('super-admin', 'admin'), auditLog('create', 'branch'), branchController.create.bind(branchController));
+router.put('/branches/:id', authenticate, authorize('super-admin', 'admin'), auditLog('update', 'branch'), branchController.update.bind(branchController));
 
 // Borrowers
 router.get('/borrowers', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer', 'credit-investigator'), borrowerController.getAll.bind(borrowerController));
-router.post('/borrowers', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), borrowerController.create.bind(borrowerController));
+router.post('/borrowers', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), auditLog('create', 'borrower'), borrowerController.create.bind(borrowerController));
 router.get('/borrowers/:id', authenticate, borrowerController.getById.bind(borrowerController));
-router.put('/borrowers/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), borrowerController.update.bind(borrowerController));
-router.delete('/borrowers/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager'), borrowerController.delete.bind(borrowerController));
-router.post('/borrowers/:id/photo', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), borrowerController.uploadPhotoHandler.bind(borrowerController));
-router.post('/borrowers/:id/documents', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), uploadDoc, borrowerController.uploadDocument.bind(borrowerController));
-router.post('/borrowers/:id/co-makers', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), borrowerController.addCoMaker.bind(borrowerController));
+router.put('/borrowers/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), auditLog('update', 'borrower'), borrowerController.update.bind(borrowerController));
+router.delete('/borrowers/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager'), auditLog('delete', 'borrower'), borrowerController.delete.bind(borrowerController));
+router.post('/borrowers/:id/photo', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), auditLog('update', 'borrower'), borrowerController.uploadPhotoHandler.bind(borrowerController));
+router.post('/borrowers/:id/documents', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), uploadDoc, auditLog('update', 'borrower'), borrowerController.uploadDocument.bind(borrowerController));
+router.post('/borrowers/:id/co-makers', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'loan-officer'), auditLog('update', 'borrower'), borrowerController.addCoMaker.bind(borrowerController));
 router.get('/borrowers/:id/payments', authenticate, borrowerController.getPayments.bind(borrowerController));
-router.put('/borrowers/:id/pin', authenticate, authorize('super-admin', 'admin', 'branch-manager'), setBorrowerPin);
+router.put('/borrowers/:id/pin', authenticate, authorize('super-admin', 'admin', 'branch-manager'), auditLog('update', 'borrower'), setBorrowerPin);
 
 // Loan Products
 router.get('/loan-products', authenticate, loanController.getProducts.bind(loanController));
-router.post('/loan-products', authenticate, authorize('super-admin', 'admin'), loanController.createProduct.bind(loanController));
-router.put('/loan-products/:id', authenticate, authorize('super-admin', 'admin'), loanController.updateProduct.bind(loanController));
+router.post('/loan-products', authenticate, authorize('super-admin', 'admin'), auditLog('create', 'loan_product'), loanController.createProduct.bind(loanController));
+router.put('/loan-products/:id', authenticate, authorize('super-admin', 'admin'), auditLog('update', 'loan_product'), loanController.updateProduct.bind(loanController));
 
 // Loan Applications
 router.get('/applications', authenticate, loanController.getApplications.bind(loanController));
-router.post('/applications', authenticate, loanController.createApplication.bind(loanController));
-router.put('/applications/:id', authenticate, loanController.updateApplication.bind(loanController));
-router.delete('/applications/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager'), loanController.deleteApplication.bind(loanController));
+router.post('/applications', authenticate, auditLog('create', 'application'), loanController.createApplication.bind(loanController));
+router.put('/applications/:id', authenticate, auditLog('update', 'application'), loanController.updateApplication.bind(loanController));
+router.delete('/applications/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager'), auditLog('delete', 'application'), loanController.deleteApplication.bind(loanController));
 router.get('/applications/:id', authenticate, loanController.getApplicationById.bind(loanController));
 router.get('/applications/:id/amortization', authenticate, loanController.getTempAmortization.bind(loanController));
 router.get('/applications/:id/print-document', authenticate, loanController.getPrintDocument.bind(loanController));
-router.post('/applications/:id/submit', authenticate, loanController.submitApplication.bind(loanController));
-router.post('/applications/:id/review', authenticate, loanController.reviewApplication.bind(loanController));
-router.post('/applications/:id/investigate', authenticate, loanController.investigateApplication.bind(loanController));
-router.post('/applications/:id/assess', authenticate, loanController.assessApplication.bind(loanController));
-router.post('/applications/:id/approve', authenticate, loanController.approveApplication.bind(loanController));
-router.post('/applications/:id/reject', authenticate, loanController.rejectApplication.bind(loanController));
-router.post('/applications/:id/release', authenticate, loanController.releaseLoan.bind(loanController));
-router.post('/applications/:id/documents', authenticate, loanController.uploadDocuments.bind(loanController));
+router.post('/applications/:id/submit', authenticate, auditLog('submit', 'application'), loanController.submitApplication.bind(loanController));
+router.post('/applications/:id/review', authenticate, auditLog('review', 'application'), loanController.reviewApplication.bind(loanController));
+router.post('/applications/:id/investigate', authenticate, auditLog('investigate', 'application'), loanController.investigateApplication.bind(loanController));
+router.post('/applications/:id/assess', authenticate, auditLog('assess', 'application'), loanController.assessApplication.bind(loanController));
+router.post('/applications/:id/approve', authenticate, auditLog('approve', 'application'), loanController.approveApplication.bind(loanController));
+router.post('/applications/:id/reject', authenticate, auditLog('reject', 'application'), loanController.rejectApplication.bind(loanController));
+router.post('/applications/:id/release', authenticate, auditLog('release', 'application'), loanController.releaseLoan.bind(loanController));
+router.post('/applications/:id/documents', authenticate, auditLog('update', 'application'), loanController.uploadDocuments.bind(loanController));
 router.get('/applications/:id/documents', authenticate, loanController.getDocuments.bind(loanController));
 router.get('/applications/:id/documents/:docId/download', authenticate, loanController.downloadDocument.bind(loanController));
-router.delete('/applications/:id/documents/:docId', authenticate, loanController.deleteDocument.bind(loanController));
+router.delete('/applications/:id/documents/:docId', authenticate, auditLog('delete', 'document'), loanController.deleteDocument.bind(loanController));
 
 // Loans
 router.get('/loans', authenticate, loanController.getLoans.bind(loanController));
 router.get('/loans/dashboard', authenticate, loanController.getDashboardStats.bind(loanController));
 router.get('/loans/:id', authenticate, loanController.getLoanById.bind(loanController));
 router.get('/loans/:id/schedule', authenticate, loanController.getLoanSchedule.bind(loanController));
-router.put('/loans/:id', authenticate, loanController.updateLoan.bind(loanController));
-router.post('/loans/:id/write-off', authenticate, authorize('super-admin', 'admin'), loanController.writeOffLoan.bind(loanController));
+router.put('/loans/:id', authenticate, auditLog('update', 'loan'), loanController.updateLoan.bind(loanController));
+router.post('/loans/:id/write-off', authenticate, authorize('super-admin', 'admin'), auditLog('write-off', 'loan'), loanController.writeOffLoan.bind(loanController));
 router.post('/loans/preview-restructure', authenticate, authorize('super-admin', 'admin'), loanController.previewRestructure.bind(loanController));
-router.post('/loans/:id/restructure', authenticate, authorize('super-admin', 'admin'), loanController.restructureLoan.bind(loanController));
-router.delete('/loans/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager'), loanController.deleteLoan.bind(loanController));
+router.post('/loans/:id/restructure', authenticate, authorize('super-admin', 'admin'), auditLog('restructure', 'loan'), loanController.restructureLoan.bind(loanController));
+router.delete('/loans/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager'), auditLog('delete', 'loan'), loanController.deleteLoan.bind(loanController));
 
 // Payments
 router.get('/payments', authenticate, paymentController.getPayments.bind(paymentController));
@@ -123,32 +123,32 @@ router.put('/payments/:id', authenticate, auditLog('update', 'payment'), payment
 router.put('/payments/:id/cancel', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('cancel', 'payment'), paymentController.cancelPayment.bind(paymentController));
 router.delete('/payments/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('delete', 'payment'), paymentController.deletePayment.bind(paymentController));
 // Cancellation approval workflow
-router.post('/payments/:id/cancel-request', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cancellationController.requestCancel.bind(cancellationController));
-router.post('/payments/:id/void-repay-request', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cancellationController.requestVoidRepay.bind(cancellationController));
+router.post('/payments/:id/cancel-request', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('cancel-request', 'payment'), cancellationController.requestCancel.bind(cancellationController));
+router.post('/payments/:id/void-repay-request', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('void-repay-request', 'payment'), cancellationController.requestVoidRepay.bind(cancellationController));
 router.get('/cancellation-requests', authenticate, authorize('super-admin', 'admin'), cancellationController.list.bind(cancellationController));
 router.get('/cancellation-requests/pending-count', authenticate, cancellationController.pendingCount.bind(cancellationController));
-router.put('/cancellation-requests/:id/approve', authenticate, authorize('super-admin', 'admin'), cancellationController.approve.bind(cancellationController));
-router.put('/cancellation-requests/:id/reject', authenticate, authorize('super-admin', 'admin'), cancellationController.reject.bind(cancellationController));
+router.put('/cancellation-requests/:id/approve', authenticate, authorize('super-admin', 'admin'), auditLog('approve', 'cancellation'), cancellationController.approve.bind(cancellationController));
+router.put('/cancellation-requests/:id/reject', authenticate, authorize('super-admin', 'admin'), auditLog('reject', 'cancellation'), cancellationController.reject.bind(cancellationController));
 // Cashier reconciliation v2
-router.post('/cashier-sessions/open', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.shiftOpen.bind(cashierController));
-router.put('/cashier-sessions/:id/close', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.shiftClose.bind(cashierController));
+router.post('/cashier-sessions/open', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('open', 'shift'), cashierController.shiftOpen.bind(cashierController));
+router.put('/cashier-sessions/:id/close', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('close', 'shift'), cashierController.shiftClose.bind(cashierController));
 router.get('/cashier-sessions', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.shiftList.bind(cashierController));
 router.get('/cashier-sessions/my-open', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.shiftMyOpen.bind(cashierController));
 router.get('/cashier-sessions/:id/details', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.shiftDetails.bind(cashierController));
 router.get('/cashier-sessions/dashboard/stats', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.dashboard.bind(cashierController));
 // Cash transactions
-router.post('/cash-transactions', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.recordTransaction.bind(cashierController));
+router.post('/cash-transactions', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('create', 'cash_transaction'), cashierController.recordTransaction.bind(cashierController));
 router.get('/cash-transactions', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.getTransactions.bind(cashierController));
 // Cash counts
-router.post('/cash-counts', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.recordCashCount.bind(cashierController));
+router.post('/cash-counts', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('create', 'cash_count'), cashierController.recordCashCount.bind(cashierController));
 router.get('/cash-counts', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.getCashCounts.bind(cashierController));
 // Reconciliations
-router.post('/cash-reconciliations', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), cashierController.submitReconciliation.bind(cashierController));
+router.post('/cash-reconciliations', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('create', 'reconciliation'), cashierController.submitReconciliation.bind(cashierController));
 router.get('/cash-reconciliations', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.getReconciliations.bind(cashierController));
 router.get('/cash-reconciliations/pending', authenticate, authorize('super-admin', 'admin'), cashierController.pendingReconciliations.bind(cashierController));
-router.put('/cash-reconciliations/:id/approve', authenticate, authorize('super-admin', 'admin'), cashierController.approveReconciliation.bind(cashierController));
-router.put('/cash-reconciliations/:id/reject', authenticate, authorize('super-admin', 'admin'), cashierController.rejectReconciliation.bind(cashierController));
-router.put('/cash-reconciliations/:id/request-recount', authenticate, authorize('super-admin', 'admin'), cashierController.requestRecount.bind(cashierController));
+router.put('/cash-reconciliations/:id/approve', authenticate, authorize('super-admin', 'admin'), auditLog('approve', 'reconciliation'), cashierController.approveReconciliation.bind(cashierController));
+router.put('/cash-reconciliations/:id/reject', authenticate, authorize('super-admin', 'admin'), auditLog('reject', 'reconciliation'), cashierController.rejectReconciliation.bind(cashierController));
+router.put('/cash-reconciliations/:id/request-recount', authenticate, authorize('super-admin', 'admin'), auditLog('request-recount', 'reconciliation'), cashierController.requestRecount.bind(cashierController));
 // Approval history
 router.get('/approval-history', authenticate, authorize('super-admin', 'admin'), cashierController.approvalHistory.bind(cashierController));
 // Cash management reports
@@ -163,8 +163,8 @@ router.get('/collections', authenticate, collectionController.getAll.bind(collec
 router.get('/collections/due-today', authenticate, collectionController.getDueToday.bind(collectionController));
 router.get('/collections/overdue', authenticate, collectionController.getOverdue.bind(collectionController));
 router.get('/collections/:id', authenticate, collectionController.getById.bind(collectionController));
-router.put('/collections/:id', authenticate, collectionController.update.bind(collectionController));
-router.post('/collections/:id/visits', authenticate, collectionController.updateVisit.bind(collectionController));
+router.put('/collections/:id', authenticate, auditLog('update', 'collection'), collectionController.update.bind(collectionController));
+router.post('/collections/:id/visits', authenticate, auditLog('visit', 'collection'), collectionController.updateVisit.bind(collectionController));
 
 // Reports
 router.get('/reports/aging', authenticate, reportController.getAgingReport.bind(reportController));

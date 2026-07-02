@@ -25,6 +25,7 @@ export class ChargesController {
 
   async update(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      (req as any).oldValues = await chargeRepo.findById(paramStr(req.params.id));
       const charge = await chargeRepo.update(paramStr(req.params.id), req.body);
       if (!charge) throw new Error('Charge not found');
       res.json({ success: true, data: charge });
@@ -35,6 +36,7 @@ export class ChargesController {
 
   async delete(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      (req as any).oldValues = await chargeRepo.findById(paramStr(req.params.id));
       await loanProductChargeRepo.query('DELETE FROM loan_product_charges WHERE charge_id = $1', [paramStr(req.params.id)]);
       await loanProductChargeRepo.query('DELETE FROM loan_charges WHERE charge_id = $1', [paramStr(req.params.id)]);
       const deleted = await chargeRepo.delete(paramStr(req.params.id));

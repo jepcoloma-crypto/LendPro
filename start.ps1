@@ -3,6 +3,7 @@ cd C:\Projects\LendingApp
 
 # Start processes
 pm2 restart lendpro-server 2>$null
+pm2 restart lendpro-server-prod 2>$null
 pm2 restart lendpro-tunnel 2>$null
 Start-Sleep -Seconds 3
 pm2 save
