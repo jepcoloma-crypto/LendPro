@@ -612,7 +612,8 @@ export class CashierController {
     try {
       const { startDate, endDate } = req.query;
       const rows = await cashierSessionRepo.query(
-        `SELECT b.name as branch_name, cs.opened_at::date as shift_date,
+        `SELECT COALESCE(b.name, 'Unassigned') as branch_name,
+                TO_CHAR((cs.opened_at AT TIME ZONE 'Asia/Manila')::date, 'YYYY-MM-DD') as shift_date,
                 COUNT(DISTINCT cs.id) as shift_count,
                 SUM(cs.opening_float) as total_float,
                 SUM(cs.cash_collected) as total_cash_in,
@@ -621,12 +622,12 @@ export class CashierController {
                 SUM(cs.expected_cash) as total_expected,
                 SUM(cs.over_short) as total_variance
          FROM cashier_sessions cs
-         JOIN branches b ON b.id = cs.branch_id
+         LEFT JOIN branches b ON b.id = cs.branch_id
          WHERE cs.status IN ('closed', 'approved')
-           AND ($1::date IS NULL OR cs.opened_at::date >= $1)
-           AND ($2::date IS NULL OR cs.opened_at::date <= $2)
-         GROUP BY b.name, cs.opened_at::date
-         ORDER BY shift_date DESC, b.name`,
+           AND (($1::date IS NULL) OR (cs.opened_at AT TIME ZONE 'Asia/Manila')::date >= $1::date)
+           AND (($2::date IS NULL) OR (cs.opened_at AT TIME ZONE 'Asia/Manila')::date <= $2::date)
+         GROUP BY 1, 2
+         ORDER BY shift_date DESC, branch_name`,
         [startDate || null, endDate || null]
       );
       res.json({ success: true, data: rows });
@@ -669,7 +670,7 @@ export class CashierController {
            FROM cashier_sessions cs
            JOIN users u ON u.id = cs.user_id
            LEFT JOIN branches b ON b.id = cs.branch_id
-           WHERE cs.created_at::date = $1::date
+           WHERE (cs.created_at AT TIME ZONE 'Asia/Manila')::date = $1::date
          ),
          txn_data AS (
            SELECT ct.shift_id,
@@ -680,7 +681,7 @@ export class CashierController {
                   COALESCE(SUM(ct.amount) FILTER (WHERE ct.direction = 'out' AND ct.transaction_type IN ('withdrawal', 'other')), 0) as withdrawals,
                   COUNT(*) as txn_count
            FROM cash_transactions ct
-           WHERE ct.created_at::date = $1::date
+           WHERE (ct.created_at AT TIME ZONE 'Asia/Manila')::date = $1::date
            GROUP BY ct.shift_id
          )
          SELECT sd.*,

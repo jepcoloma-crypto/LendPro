@@ -77,6 +77,7 @@ export const CashierReconciliationPage = () => {
 
   // Report filters
   const [reportDateRange, setReportDateRange] = useState<[Date, Date]>([new Date(Date.now() - 30*86400000), new Date()]);
+  const [reportSingleDate, setReportSingleDate] = useState(new Date());
   const [reportData, setReportData] = useState<any[]>([]);
   const [reportType, setReportType] = useState('collection-summary');
 
@@ -154,17 +155,19 @@ export const CashierReconciliationPage = () => {
     try { const { data } = await api.get('/cash-reports/daily-chart', { params: { days: 7 } }); setChartData(data.data || []); } catch {}
   }, []);
 
+  const fmtDate = (d: Date) => d.toLocaleDateString('en-CA');
+
   const fetchReport = useCallback(async () => {
     setLoading(true);
     try {
       const params: any = reportType === 'daily-cash-position'
-        ? { date: reportDateRange[0].toISOString().split('T')[0] }
-        : { startDate: reportDateRange[0].toISOString().split('T')[0], endDate: reportDateRange[1].toISOString().split('T')[0] };
+        ? { date: fmtDate(reportSingleDate) }
+        : { startDate: fmtDate(reportDateRange[0]), endDate: fmtDate(reportDateRange[1]) };
       const { data } = await api.get(`/cash-reports/${reportType}`, { params });
       setReportData(data.data || []);
     } catch { setReportData([]); }
     finally { setLoading(false); }
-  }, [reportType, reportDateRange]);
+  }, [reportType, reportDateRange, reportSingleDate]);
 
   useEffect(() => { if (activeTab === 'reports') fetchReport(); }, [activeTab, reportType, reportDateRange, fetchReport]);
   useEffect(() => { fetchDashStats(); fetchChart(); }, [fetchDashStats, fetchChart]);
@@ -809,10 +812,16 @@ ${transactions.map((t: any, i: number) => `<tr>
                 { label: 'Payment Method Summary', value: 'method-summary' },
                 { label: 'Branch Daily Report', value: 'branch-daily' },
                 { label: 'Daily Cash Position', value: 'daily-cash-position' },
-              ]} placeholder="Report type" searchable cleanable value={reportType} onChange={(v:any) => setReportType(v||'collection-summary')} style={{width:'100%'}} />
+              ]} placeholder="Report type" searchable cleanable value={reportType} onChange={(v:any) => { setReportType(v||'collection-summary'); if (v==='daily-cash-position') setReportSingleDate(new Date()); }} style={{width:'100%'}} />
             </div>
-            <DatePicker value={reportDateRange[0]} onChange={(v:any) => v && setReportDateRange([v, reportDateRange[1]])} placeholder="Start date" />
-            <DatePicker value={reportDateRange[1]} onChange={(v:any) => v && setReportDateRange([reportDateRange[0], v])} placeholder="End date" />
+            {reportType === 'daily-cash-position' ? (
+              <DatePicker value={reportSingleDate} onChange={(v:any) => v && setReportSingleDate(v)} placeholder="Select date" />
+            ) : (
+              <>
+                <DatePicker value={reportDateRange[0]} onChange={(v:any) => v && setReportDateRange([v, reportDateRange[1]])} placeholder="Start date" />
+                <DatePicker value={reportDateRange[1]} onChange={(v:any) => v && setReportDateRange([reportDateRange[0], v])} placeholder="End date" />
+              </>
+            )}
           </div>
           <Table data={reportData} virtualized height={400} rowHeight={45} loading={loading}>
             {reportType === 'collection-summary' && <>
