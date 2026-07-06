@@ -62,6 +62,7 @@ export const PaymentsPage = () => {
   const [payReference, setPayReference] = useState('');
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payLoanId, setPayLoanId] = useState<string | null>(null);
+  const [payCollectorId, setPayCollectorId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const limit = 20;
 
@@ -217,6 +218,7 @@ export const PaymentsPage = () => {
       setPayMethod('cash');
       setPayDate(new Date());
       setPayReference('');
+      setPayCollectorId(loan.collector_id || null);
       setInstModalOpen(true);
     } catch { toaster.push(<Message type="error">Failed to load loan schedule</Message>, { placement: 'topEnd' }); }
   };
@@ -243,7 +245,7 @@ export const PaymentsPage = () => {
         paymentDate: toDateString(payDate),
         referenceNumber: payReference || undefined,
         penaltyAmount: penaltyTotal,
-        collectorId: payLoan.collector_id || null,
+        collectorId: payCollectorId,
         allocations,
       });
       setInstModalOpen(false);
@@ -437,10 +439,12 @@ export const PaymentsPage = () => {
                 value: l.id,
               }))} value={formValue.loanId} onChange={(v) => { const sl = loans.find(l => l.id === v); setFormValue({ ...formValue, loanId: v, collectorId: sl?.collector_id || null }); }} style={{ width: '100%' }} />
             </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Collector (leave empty if payment is direct)</Form.ControlLabel>
-              <SelectPicker data={collectors.map((c: any) => ({ label: `${c.first_name} ${c.last_name}`, value: c.id }))} value={formValue.collectorId} onChange={(v) => setFormValue({ ...formValue, collectorId: v })} style={{ width: '100%' }} block cleanable placeholder="Direct payment (no collector)" />
-            </Form.Group>
+            {!isCollector && (
+              <Form.Group>
+                <Form.ControlLabel>Collector (leave empty if direct payment)</Form.ControlLabel>
+                <SelectPicker data={collectors.map((c: any) => ({ label: `${c.first_name} ${c.last_name}`, value: c.id }))} value={formValue.collectorId} onChange={(v) => setFormValue({ ...formValue, collectorId: v })} style={{ width: '100%' }} block cleanable placeholder="Direct payment" />
+              </Form.Group>
+            )}
             <Form.Group>
               <Form.ControlLabel>Amount *</Form.ControlLabel>
               <InputNumber value={formValue.amount} onChange={(v) => setFormValue({ ...formValue, amount: v })} style={{ width: '100%' }} min={0} step={0.01} />
@@ -529,7 +533,7 @@ export const PaymentsPage = () => {
               </Table>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Payment Method</label>
                 <SelectPicker data={[
@@ -545,6 +549,12 @@ export const PaymentsPage = () => {
                 <label className="text-xs text-gray-500 block mb-1">Reference #</label>
                 <input className="rs-input w-full" value={payReference} onChange={(e) => setPayReference(e.target.value)} />
               </div>
+              {!isCollector && (
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Collector (leave empty if direct)</label>
+                  <SelectPicker data={collectors.map((c: any) => ({ label: `${c.first_name} ${c.last_name}`, value: c.id }))} value={payCollectorId} onChange={(v) => setPayCollectorId(v)} style={{ width: '100%' }} block cleanable placeholder="Direct payment" />
+                </div>
+              )}
             </div>
 
             <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700">
