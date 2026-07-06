@@ -111,7 +111,7 @@ export const PaymentsPage = () => {
   useEffect(() => {
     if (formValue.loanId && loans.length) {
       const sl = loans.find(l => l.id === formValue.loanId);
-      if (sl) setFormValue((prev: any) => ({ ...prev, collectorId: sl.collector_id || null }));
+      if (sl) setFormValue((prev: any) => ({ ...prev, collectorId: isCollector ? sl.collector_id || null : null }));
     }
   }, [formValue.loanId, loans]);
 
