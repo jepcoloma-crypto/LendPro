@@ -247,6 +247,13 @@ const runMigrations = async () => {
           );
           CREATE INDEX IF NOT EXISTS idx_ah_shift ON approval_history(shift_id);
         END IF;
+        -- Add updated_at to tables created without it (BaseRepository.update requires it)
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='cash_reconciliations' AND column_name='updated_at') THEN
+          ALTER TABLE cash_reconciliations ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='approval_history' AND column_name='updated_at') THEN
+          ALTER TABLE approval_history ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+        END IF;
         -- Cash variance threshold setting
         INSERT INTO system_settings (key, value, description) VALUES ('cash_variance_threshold', '500', 'Auto-approve variances within this amount (PHP)')
         ON CONFLICT (key) DO NOTHING;
