@@ -82,12 +82,12 @@ export class LoanController {
       const status = paramStr(req.query.status);
       const search = paramStr(req.query.search);
       const borrowerId = paramStr(req.query.borrowerId);
-      let where = '';
+      let where = 'WHERE la.deleted_at IS NULL';
       const values: any[] = [];
       let idx = 1;
-      if (status) { where += `${where ? ' AND ' : 'WHERE '} la.status = $${idx++}`; values.push(status); }
-      if (borrowerId) { where += `${where ? ' AND ' : 'WHERE '} la.borrower_id = $${idx++}`; values.push(borrowerId); }
-      if (search) { where += `${where ? ' AND ' : 'WHERE '} (b.first_name ILIKE $${idx} OR b.last_name ILIKE $${idx} OR b.borrower_code ILIKE $${idx})`; values.push(`%${search}%`); idx++; }
+      if (status) { where += ` AND la.status = $${idx++}`; values.push(status); }
+      if (borrowerId) { where += ` AND la.borrower_id = $${idx++}`; values.push(borrowerId); }
+      if (search) { where += ` AND (b.first_name ILIKE $${idx} OR b.last_name ILIKE $${idx} OR b.borrower_code ILIKE $${idx})`; values.push(`%${search}%`); idx++; }
       const countResult = await loanApplicationRepo.query(
         `SELECT COUNT(*) FROM loan_applications la JOIN borrowers b ON la.borrower_id = b.id ${where}`, values
       );
@@ -123,7 +123,7 @@ export class LoanController {
          JOIN borrowers b ON la.borrower_id = b.id
          JOIN loan_products lp ON la.loan_product_id = lp.id
          LEFT JOIN users u ON la.assigned_officer_id = u.id
-         WHERE la.id = $1`,
+         WHERE la.id = $1 AND la.deleted_at IS NULL`,
         [id]
       );
       if (!apps.length) throw new Error('Application not found');
@@ -146,9 +146,8 @@ export class LoanController {
     try {
       const id = paramStr(req.params.id);
       const apps = await loanApplicationRepo.query(
-        `SELECT la.principal_amount, la.term_months, la.interest_rate, la.interest_type, la.payment_frequency,
-                b.first_name || ' ' || b.last_name as borrower_name, la.application_number
-         FROM loan_applications la JOIN borrowers b ON la.borrower_id = b.id WHERE la.id = $1`,
+        `SELECT la.*, b.first_name || ' ' || b.last_name as borrower_name
+         FROM loan_applications la JOIN borrowers b ON la.borrower_id = b.id WHERE la.id = $1 AND la.deleted_at IS NULL`,
         [id]
       );
       if (!apps.length) throw new Error('Application not found');
@@ -159,6 +158,36 @@ export class LoanController {
         app.term_type || 'months',
         app.installment_count || undefined
       );
+
+      let charges: any[] = [];
+      const productCharges = await loanApplicationRepo.query(
+        `SELECT c.name, lpc.amount, c.default_amount, c.computation_type
+         FROM loan_product_charges lpc JOIN charges c ON c.id = lpc.charge_id
+         WHERE lpc.loan_product_id = $1 AND c.is_active = true`,
+        [app.loan_product_id]
+      );
+      if (productCharges.length === 0) {
+        const allCharges = await loanApplicationRepo.query(
+          `SELECT name, default_amount, computation_type FROM charges WHERE is_active = true ORDER BY name`
+        );
+        charges = allCharges.map((c: any) => ({
+          charge_name: c.name,
+          amount: c.computation_type === 'percentage'
+            ? Math.round(parseFloat(app.principal_amount) * parseFloat(c.default_amount || 0) / 100 * 100) / 100
+            : parseFloat(c.default_amount || 0),
+        }));
+      } else {
+        charges = productCharges.map((pc: any) => ({
+          charge_name: pc.name,
+          amount: pc.computation_type === 'percentage'
+            ? Math.round(parseFloat(app.principal_amount) * parseFloat(pc.amount || pc.default_amount || 0) / 100 * 100) / 100
+            : parseFloat(pc.amount || pc.default_amount || 0),
+        }));
+      }
+      const totalCharges = charges.reduce((sum: number, c: any) => sum + c.amount, 0);
+      const prevBalance = parseFloat(app.previous_balance) || 0;
+      const netProceeds = Math.max(0, parseFloat(app.principal_amount) - totalCharges - prevBalance);
+
       res.json({
         success: true,
         data: {
@@ -170,6 +199,10 @@ export class LoanController {
           term_type: app.term_type || 'months',
           term_months: app.term_months,
           payment_frequency: app.payment_frequency,
+          previous_balance: prevBalance,
+          charges,
+          total_charges: totalCharges,
+          net_proceeds: netProceeds,
           totalInterest, totalAmount,
           schedule: schedule.map(s => ({ ...s, dueDate: s.dueDate.toISOString().split('T')[0] })),
         },
@@ -194,7 +227,7 @@ export class LoanController {
          JOIN borrowers b ON la.borrower_id = b.id
          JOIN loan_products lp ON la.loan_product_id = lp.id
          LEFT JOIN users u ON la.assigned_officer_id = u.id
-         WHERE la.id = $1`,
+         WHERE la.id = $1 AND la.deleted_at IS NULL`,
         [id]
       );
       if (!apps.length) throw new Error('Application not found');
@@ -260,7 +293,8 @@ export class LoanController {
         }));
       }
       const totalCharges = charges.reduce((sum: number, c: any) => sum + parseFloat(c.amount) || 0, 0);
-      const netProceeds = Math.max(0, parseFloat(app.principal_amount) - totalCharges);
+      const prevBalance = parseFloat(app.previous_balance) || 0;
+      const netProceeds = Math.max(0, parseFloat(app.principal_amount) - totalCharges - prevBalance);
 
       res.json({
         success: true,
@@ -268,6 +302,7 @@ export class LoanController {
           application: {
             number: app.application_number,
             principal_amount: parseFloat(app.principal_amount),
+            previous_balance: parseFloat(app.previous_balance) || 0,
             term_months: app.term_months,
             interest_rate: parseFloat(app.interest_rate),
             interest_type: app.interest_type,
@@ -277,6 +312,9 @@ export class LoanController {
             submitted_at: app.submitted_at,
             created_at: app.created_at,
           },
+          previous_balance: parseFloat(app.previous_balance) || 0,
+          total_charges: totalCharges,
+          net_proceeds: netProceeds,
           borrower: {
             name: app.borrower_name,
             code: app.borrower_code,
@@ -318,8 +356,6 @@ export class LoanController {
             decided_at: a.decided_at,
           })),
           charges,
-          total_charges: totalCharges,
-          net_proceeds: netProceeds,
           amortization: {
             total_interest: totalInterest,
             total_amount: totalAmount,
@@ -383,6 +419,55 @@ export class LoanController {
     }
   }
 
+  async permanentDeleteApplication(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      await loanService.permanentDeleteApplication(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
+  async emptyTrash(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const count = await loanService.emptyTrash();
+      res.json({ success: true, data: { deleted: count } });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
+  async restoreApplication(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const app = await loanService.restoreApplication(id);
+      res.json({ success: true, data: app, message: 'Application restored successfully' });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
+  async getDeletedApplications(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const pagination = parsePagination(req.query);
+      const { rows, total } = await loanApplicationRepo.findDeleted({
+        select: `la.*, b.first_name || ' ' || b.last_name as borrower_name, b.borrower_code, lp.name as product_name`,
+        joins: `la LEFT JOIN borrowers b ON la.borrower_id = b.id LEFT JOIN loan_products lp ON la.loan_product_id = lp.id`,
+        orderBy: 'la.deleted_at DESC',
+        limit: pagination.limit,
+        offset: pagination.offset,
+      });
+      res.json({
+        success: true,
+        data: rows,
+        pagination: { ...pagination, total, totalPages: Math.ceil(total / pagination.limit) },
+      });
+    } catch (error: any) {
+      next(new AppError(500, error.message));
+    }
+  }
+
   async releaseLoan(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const method = req.body.method || 'cash';
@@ -412,7 +497,8 @@ export class LoanController {
             ? Math.round(principal * raw / 100 * 100) / 100
             : raw;
         }
-        const netProceeds = principal - totalCharges;
+        const prevBalance = parseFloat(app?.previous_balance) || 0;
+        const netProceeds = principal - totalCharges - prevBalance;
         const expectedCash = parseFloat(myShift.expected_cash) || 0;
         if (expectedCash < netProceeds) {
           throw new AppError(400,
@@ -440,6 +526,15 @@ export class LoanController {
     }
   }
 
+  async createHistoricalLoan(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const loan = await loanService.createHistoricalLoan(req.user!.userId, req.body);
+      res.status(201).json({ success: true, data: loan, message: 'Historical loan recorded successfully' });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
   async getLoans(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const pagination = parsePagination(req.query);
@@ -459,10 +554,12 @@ export class LoanController {
       const total = parseInt(countResult[0]?.count || '0', 10);
       values.push(pagination.limit, pagination.offset);
       const rows = await loanRepo.query(
-        `SELECT l.*, b.first_name || ' ' || b.last_name as borrower_name, b.borrower_code, b.mobile, lp.name as product_name
+        `SELECT l.*, b.first_name || ' ' || b.last_name as borrower_name, b.borrower_code, b.mobile, lp.name as product_name,
+                COALESCE(la.previous_balance, 0) as previous_balance
          FROM loans l
          JOIN borrowers b ON l.borrower_id = b.id
          JOIN loan_products lp ON l.product_id = lp.id
+         LEFT JOIN loan_applications la ON l.application_id = la.id
          ${where}
          ORDER BY ${pagination.sortBy} ${pagination.sortOrder} LIMIT $${idx++} OFFSET $${idx}`,
         values

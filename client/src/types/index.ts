@@ -148,6 +148,8 @@ export interface LoanApplication {
   created_at: string;
   submitted_at?: string;
   application_type?: string;
+  deleted_at?: string;
+  previous_balance?: number;
 }
 
 export interface Loan {
@@ -175,6 +177,9 @@ export interface Loan {
   maturity_date?: string;
   next_payment_date?: string;
   processing_fee: number;
+  collector_id?: string;
+  collector_name?: string;
+  previous_balance?: number;
   schedule?: AmortizationSchedule[];
   payments?: Payment[];
 }
@@ -211,6 +216,11 @@ export interface Payment {
   receipt_number?: string;
   notes?: string;
   status: string;
+  collector_id?: string;
+  remittance_status?: string;
+  remitted_at?: string;
+  pickup_id?: string;
+  cancellation_reason?: string;
 }
 
 export interface Collection {

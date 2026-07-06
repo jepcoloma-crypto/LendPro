@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Table, Button, Panel, Tag, Modal, Form, toaster, Message, Pagination, SelectPicker, Steps, Whisper, Tooltip } from 'rsuite';
-import api, { applicationsApi, borrowersApi, loanProductsApi, usersApi } from '../../services/api';
+import api, { applicationsApi, borrowersApi, loanProductsApi, usersApi, loansApi } from '../../services/api';
 import { LoanApplication, Borrower, LoanProduct } from '../../types';
-import { Plus, Eye, CheckCircle, XCircle, Send, DollarSign, Building2, User, Hash, Briefcase, Clock, CircleDollarSign, CalendarDays, ShieldCheck, SearchCheck, ClipboardList, FileText, Trash2, Download, Printer, Pencil } from 'lucide-react';
+import { Plus, Eye, CheckCircle, XCircle, Send, DollarSign, Building2, User, Hash, Briefcase, Clock, CircleDollarSign, CalendarDays, ShieldCheck, SearchCheck, ClipboardList, FileText, Trash2, Download, Printer, Pencil, RotateCcw } from 'lucide-react';
 import { ReleaseModal } from '../../components/ReleaseModal';
+import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency, statusColor } from '../../utils/format';
 import { getCompanySettings } from '../../utils/companySettings';
 
 const { Column, HeaderCell, Cell } = Table;
 
 export const ApplicationsPage = () => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role_slug === 'super-admin';
+  const [searchParams] = useSearchParams();
   const [applications, setApplications] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -50,6 +55,11 @@ const [collectors, setCollectors] = useState<any[]>([]);
   const [creditLimitOpen, setCreditLimitOpen] = useState(false);
   const [creditLimitMsg, setCreditLimitMsg] = useState('');
   const limit = 20;
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [deletedApps, setDeletedApps] = useState<any[]>([]);
+  const [deletedTotal, setDeletedTotal] = useState(0);
+  const [deletedPage, setDeletedPage] = useState(1);
+  const [deletedLoading, setDeletedLoading] = useState(false);
 
   const openDocumentPreview = async (appId: string, doc: any) => {
     try {
@@ -86,8 +96,76 @@ const [collectors, setCollectors] = useState<any[]>([]);
     finally { setLoading(false); }
   };
 
+  const fetchDeletedApps = async () => {
+    setDeletedLoading(true);
+    try {
+      const { data } = await applicationsApi.getDeleted({ page: deletedPage, limit });
+      setDeletedApps(data.data);
+      setDeletedTotal(data.pagination?.total || 0);
+    } catch { toaster.push(<Message type="error">Failed to load deleted applications</Message>, { placement: 'topEnd' }); }
+    finally { setDeletedLoading(false); }
+  };
+
+  const handleRestore = async (id: string) => {
+    try {
+      await applicationsApi.restore(id);
+      toaster.push(<Message type="success">Application restored</Message>, { placement: 'topEnd' });
+      fetchDeletedApps();
+      fetchData();
+    } catch (err: any) {
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Restore failed'}</Message>, { placement: 'topEnd' });
+    }
+  };
+
+  const [permDeleteTarget, setPermDeleteTarget] = useState<string | null>(null);
+
+  const handlePermanentDelete = async () => {
+    if (!permDeleteTarget) return;
+    try {
+      await applicationsApi.permanentDelete(permDeleteTarget);
+      toaster.push(<Message type="success">Application permanently deleted</Message>, { placement: 'topEnd' });
+      setPermDeleteTarget(null);
+      fetchDeletedApps();
+      fetchData();
+    } catch (err: any) {
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Delete failed'}</Message>, { placement: 'topEnd' });
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    try {
+      const { data } = await applicationsApi.emptyTrash();
+      toaster.push(<Message type="success">{data?.data?.deleted || 0} application(s) permanently deleted</Message>, { placement: 'topEnd' });
+      fetchDeletedApps();
+      fetchData();
+    } catch (err: any) {
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Empty trash failed'}</Message>, { placement: 'topEnd' });
+    }
+  };
+
+  // Auto-open create form when coming from Renew button
+  useEffect(() => {
+    if (searchParams.get('autoOpen') === 'true') {
+      openCreate();
+    }
+  }, []);
+
   useEffect(() => { fetchData(); }, [page, search, statusFilter]);
+  useEffect(() => { if (trashOpen) fetchDeletedApps(); }, [deletedPage, trashOpen]);
   useEffect(() => { getCompanySettings().then(setCompanyInfo); }, []);
+
+  // Auto-populate previous balance when Renewal type + borrower selected
+  useEffect(() => {
+    if (formValue.applicationType === 'Renewal' && formValue.borrowerId) {
+      loansApi.getAll({ borrowerId: formValue.borrowerId, status: 'active', limit: 10 }).then(({ data }) => {
+        const loans = data.data || [];
+        const totalOutstanding = loans.reduce((sum: number, l: any) => sum + (Number(l.outstanding_balance) || 0), 0);
+        if (totalOutstanding > 0) {
+          setFormValue((prev: any) => ({ ...prev, previousBalance: totalOutstanding }));
+        }
+      }).catch(() => {});
+    }
+  }, [formValue.applicationType, formValue.borrowerId]);
 
   const openCreate = async () => {
     setFormLoading(true);
@@ -101,7 +179,13 @@ const [collectors, setCollectors] = useState<any[]>([]);
       } catch {
         setCollectors([]);
       }
-      setFormValue({ paymentFrequency: 'monthly' });
+      const urlBorrowerId = searchParams.get('borrowerId');
+      const urlType = searchParams.get('type');
+      setFormValue({
+        paymentFrequency: 'monthly',
+        borrowerId: urlBorrowerId || '',
+        applicationType: urlType || 'New',
+      });
       setCurrentStep(0);
       setSelectedFiles([]);
       setModalOpen(true);
@@ -124,6 +208,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
       purpose: formValue.purpose || '',
       collectorId: formValue.collectorId || null,
       applicationType: formValue.applicationType || 'New',
+      previousBalance: Number(formValue.previousBalance) || 0,
     };
     if (!payload.borrowerId || !payload.loanProductId || !payload.principalAmount || !payload.termMonths || !payload.collectorId || isNaN(payload.principalAmount) || isNaN(payload.termMonths)) {
       toaster.push(<Message type="warning">Please fill in all required fields with valid values</Message>, { placement: 'topEnd' });
@@ -173,6 +258,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
       purpose: app.purpose || '',
       collectorId: app.collector_id || null,
       applicationType: app.application_type || 'New',
+      previousBalance: app.previous_balance || '',
     });
     setEditSelectedFiles([]);
     try {
@@ -206,6 +292,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
     if (editFormValue.purpose !== undefined) payload.purpose = editFormValue.purpose;
     if (editFormValue.collectorId !== undefined) payload.collectorId = editFormValue.collectorId || null;
     if (editFormValue.applicationType !== undefined) payload.applicationType = editFormValue.applicationType || 'New';
+    if (editFormValue.previousBalance !== undefined) payload.previousBalance = Number(editFormValue.previousBalance) || 0;
     if (!payload.borrowerId || !payload.loanProductId || !payload.principalAmount || !payload.termMonths || !payload.collectorId || isNaN(payload.principalAmount) || isNaN(payload.termMonths)) {
       toaster.push(<Message type="warning">Please fill in all required fields with valid values</Message>, { placement: 'topEnd' });
       return;
@@ -275,7 +362,8 @@ const [collectors, setCollectors] = useState<any[]>([]);
     const totalDue = d.amortization.schedule?.reduce((a: number, r: any) => a + r.total_due, 0) || 0;
     const charges = d.charges || [];
     const totalCharges = charges.reduce((a: number, c: any) => a + Number(c.amount), 0);
-    const netProceeds = d.net_proceeds ?? d.application.principal_amount;
+    const prevBal = parseFloat(d.application.previous_balance) || 0;
+    const netProceeds = d.net_proceeds ?? (Number(d.application.principal_amount) - totalCharges - prevBal);
     const chargesRows = charges.map((c: any) =>
       `<tr>
         <td style="padding:4px 8px;border:1px solid #d1d5db">${c.charge_name}</td>
@@ -373,13 +461,14 @@ const [collectors, setCollectors] = useState<any[]>([]);
         </div>
         <table style="margin-bottom:12px">
           <thead><tr><th>Charge</th><th style="text-align:right">Amount</th></tr></thead>
-          <tbody>${chargesRows}</tbody>
+          <tbody>${chargesRows}${prevBal > 0 ? `<tr><td style="padding:4px 8px;border:1px solid #d1d5db">Previous Balance</td><td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;color:#dc2626">${formatCurrency(prevBal)}</td></tr>` : ''}</tbody>
           <tfoot>
             <tr><td style="font-weight:700">Total Charges</td><td style="text-align:right;font-weight:700;color:#dc2626">${formatCurrency(totalCharges)}</td></tr>
           </tfoot>
         </table>
         <div class="summary-grid">
           <div><p>Principal Amount</p><p>${formatCurrency(d.application.principal_amount)}</p></div>
+          <div><p style="white-space:nowrap">Previous Balance</p><p style="color:#dc2626">${prevBal > 0 ? formatCurrency(prevBal) : '-'}</p></div>
           <div><p>Total Charges</p><p style="color:#dc2626">${formatCurrency(totalCharges)}</p></div>
           <div><p style="font-weight:700">Net Proceeds (Amount Released)</p><p style="font-weight:700;color:#059669;font-size:16px">${formatCurrency(netProceeds)}</p></div>
         </div>
@@ -513,9 +602,16 @@ const [collectors, setCollectors] = useState<any[]>([]);
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Loan Applications</h1>
           <p className="text-gray-500 dark:text-gray-400">Process loan applications</p>
         </div>
-        <Button appearance="primary" onClick={openCreate} loading={formLoading} startIcon={<Plus className="w-4 h-4" />}>
-          {formLoading ? 'Loading...' : 'New Application'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {isSuperAdmin && (
+            <Button appearance="subtle" color="red" onClick={() => { setTrashOpen(true); fetchDeletedApps(); }} startIcon={<Trash2 className="w-4 h-4" />}>
+              Trash
+            </Button>
+          )}
+          <Button appearance="primary" onClick={openCreate} loading={formLoading} startIcon={<Plus className="w-4 h-4" />}>
+            {formLoading ? 'Loading...' : 'New Application'}
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
@@ -537,6 +633,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
           <Column width={200}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
           <Column width={170}><HeaderCell>Product</HeaderCell><Cell dataKey="product_name" /></Column>
           <Column width={130}><HeaderCell>Amount</HeaderCell><Cell>{(r: LoanApplication) => formatCurrency(r.principal_amount)}</Cell></Column>
+          <Column width={100}><HeaderCell>Prev Bal</HeaderCell><Cell>{(r: any) => Number(r.previous_balance) > 0 ? formatCurrency(r.previous_balance) : '-'}</Cell></Column>
           <Column width={100}><HeaderCell>Term</HeaderCell><Cell>{(r: LoanApplication) => { const t = r.term_type || 'months'; return `${r.term_months}${t === 'days' ? 'd' : t === 'weeks' ? 'w' : 'm'}`; }}</Cell></Column>
           <Column width={110}><HeaderCell>Frequency</HeaderCell><Cell>{(r: LoanApplication) => <span className="capitalize">{r.payment_frequency}</span>}</Cell></Column>
           <Column width={100}><HeaderCell>Type</HeaderCell><Cell>{(r: any) => <Tag color={r.application_type === 'Renewal' ? 'orange' : 'blue'}>{r.application_type || 'New'}</Tag>}</Cell></Column>
@@ -555,10 +652,12 @@ const [collectors, setCollectors] = useState<any[]>([]);
                     <Whisper placement="top" trigger="hover" speaker={<Tooltip>Submit</Tooltip>}>
                       <Button size="sm" appearance="subtle" color="blue" onClick={() => handleAction(r.id, 'submit')} className="group"><Send className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Submit</span></Button>
                     </Whisper>
-                    <Whisper placement="top" trigger="hover" speaker={<Tooltip>Delete</Tooltip>}>
-                      <Button size="sm" appearance="subtle" color="red" onClick={() => setDeleteTarget(r.id)} className="group"><Trash2 className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Delete</span></Button>
-                    </Whisper>
                   </>
+                )}
+                {isSuperAdmin && r.status !== 'released' && (
+                  <Whisper placement="top" trigger="hover" speaker={<Tooltip>{['draft', 'approved'].includes(r.status) ? 'Delete' : 'Only Draft/Approved application can be deleted'}</Tooltip>}>
+                    <Button size="sm" appearance="subtle" color="red" onClick={() => { if (['draft', 'approved'].includes(r.status)) setDeleteTarget(r.id); else toaster.push(<Message type="warning">Only Draft or Approved application can be deleted.</Message>, { placement: 'topEnd' }); }} className="group"><Trash2 className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Delete</span></Button>
+                  </Whisper>
                 )}
                 {r.status === 'submitted' && (
                   <>
@@ -636,6 +735,10 @@ const [collectors, setCollectors] = useState<any[]>([]);
               <div>
                 <label className="rs-form-control-label">Principal Amount *</label>
                 <input type="number" className="rs-input w-full" min={0} step={1000} value={formValue.principalAmount || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, principalAmount: e.target.value }))} placeholder="0.00" />
+              </div>
+              <div>
+                <label className="rs-form-control-label">Previous Balance (deducted from proceeds)</label>
+                <input type="number" className="rs-input w-full" min={0} step={0.01} value={formValue.previousBalance || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, previousBalance: e.target.value }))} placeholder="0.00" readOnly={formValue.applicationType === 'Renewal'} />
               </div>
               <div>
                 <label className="rs-form-control-label">Term ({formValue.termType || 'months'}) *</label>
@@ -737,6 +840,10 @@ const [collectors, setCollectors] = useState<any[]>([]);
               <input type="number" className="rs-input w-full" min={0} step={1000} value={editFormValue.principalAmount || ''} onChange={(e) => setEditFormValue((prev: any) => ({ ...prev, principalAmount: e.target.value }))} placeholder="0.00" />
             </div>
             <div>
+              <label className="rs-form-control-label">Previous Balance (deducted from proceeds)</label>
+              <input type="number" className="rs-input w-full" min={0} step={0.01} value={editFormValue.previousBalance || ''} onChange={(e) => setEditFormValue((prev: any) => ({ ...prev, previousBalance: e.target.value }))} placeholder="0.00" readOnly={editFormValue.applicationType === 'Renewal'} />
+            </div>
+            <div>
               <label className="rs-form-control-label">Term ({editFormValue.termType || 'months'}) *</label>
               <input type="number" className="rs-input w-full" min={1} max={999} value={editFormValue.termMonths || ''} onChange={(e) => setEditFormValue((prev: any) => ({ ...prev, termMonths: e.target.value }))} placeholder="e.g. 12" />
             </div>
@@ -806,11 +913,58 @@ const [collectors, setCollectors] = useState<any[]>([]);
       <Modal open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} size="xs">
         <Modal.Header><Modal.Title>Delete Application</Modal.Title></Modal.Header>
         <Modal.Body>
-          <p className="text-gray-600 dark:text-gray-300">Are you sure you want to delete this application? This action cannot be undone.</p>
+          <p className="text-gray-600 dark:text-gray-300">Are you sure you want to delete this application? It will be moved to trash and can be restored later by a super-admin.</p>
         </Modal.Body>
         <Modal.Footer>
           <Button onClick={() => deleteTarget && handleDelete(deleteTarget)} appearance="primary" color="red">Delete</Button>
           <Button onClick={() => setDeleteTarget(null)} appearance="subtle">Cancel</Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal open={trashOpen} onClose={() => { setTrashOpen(false); setDeletedPage(1); }} size="lg">
+        <Modal.Header>
+          <div className="flex items-center justify-between">
+            <Modal.Title>Deleted Applications</Modal.Title>
+            {deletedApps.length > 0 && (
+              <Button color="red" appearance="ghost" size="sm" onClick={() => { if (window.confirm('Permanently delete all ' + deletedApps.length + ' trashed applications? This cannot be undone.')) handleEmptyTrash(); }} startIcon={<Trash2 className="w-3 h-3" />}>Empty Trash</Button>
+            )}
+          </div>
+        </Modal.Header>
+        <Modal.Body>
+          <Table data={deletedApps} loading={deletedLoading} height={400} rowHeight={50} bordered>
+            <Column width={140}><HeaderCell>App #</HeaderCell><Cell dataKey="application_number" /></Column>
+            <Column width={200}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+            <Column width={170}><HeaderCell>Product</HeaderCell><Cell dataKey="product_name" /></Column>
+            <Column width={100}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={statusColor(r.status)}>{r.status}</Tag>}</Cell></Column>
+            <Column width={150}><HeaderCell>Deleted At</HeaderCell><Cell>{(r: any) => r.deleted_at ? new Date(r.deleted_at).toLocaleDateString() : '-'}</Cell></Column>
+            <Column width={180} align="center"><HeaderCell>Actions</HeaderCell>
+              <Cell>{(r: any) => (
+                <div className="flex gap-1 justify-center">
+                  <Button size="sm" appearance="subtle" color="green" onClick={() => handleRestore(r.id)} className="group"><RotateCcw className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Restore</span></Button>
+                  <Button size="sm" appearance="subtle" color="red" onClick={() => { setPermDeleteTarget(r.id); }} className="group"><Trash2 className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Delete Permanently</span></Button>
+                </div>
+              )}</Cell>
+            </Column>
+          </Table>
+          {deletedTotal > limit && (
+            <div className="flex justify-center mt-4">
+              <Pagination prev next first last size="sm" layout={['-', 'pager', '-']} total={deletedTotal} limit={limit} activePage={deletedPage} onChangePage={(p) => { setDeletedPage(p); }} />
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button onClick={() => { setTrashOpen(false); setDeletedPage(1); }} appearance="subtle">Close</Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal open={!!permDeleteTarget} onClose={() => setPermDeleteTarget(null)} size="sm">
+        <Modal.Header><Modal.Title>Permanently Delete</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <p className="text-gray-600 dark:text-gray-300">Are you sure you want to permanently delete this application? This action <strong>cannot be undone</strong>.</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button color="red" appearance="primary" onClick={handlePermanentDelete}>Delete Permanently</Button>
+          <Button appearance="subtle" onClick={() => setPermDeleteTarget(null)}>Cancel</Button>
         </Modal.Footer>
       </Modal>
 
@@ -876,6 +1030,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Panel header={<div className="text-sm font-semibold text-gray-700 dark:text-gray-200">Loan Details</div>} bordered className="bg-white dark:bg-gray-800">
                   <DetailField icon={<DollarSign className="w-4 h-4" />} label="Principal Amount" value={formatCurrency(viewApp.principal_amount)} />
+                  {Number(viewApp.previous_balance) > 0 && <DetailField icon={<DollarSign className="w-4 h-4" />} label="Previous Balance" value={formatCurrency(viewApp.previous_balance)} />}
                   {viewApp.net_proceeds != null && <DetailField icon={<DollarSign className="w-4 h-4" />} label="Net Proceeds" value={formatCurrency(viewApp.net_proceeds)} />}
                   <div className="flex items-center gap-2 py-1.5">
                     <FileText className="w-4 h-4 text-gray-400" />
@@ -942,10 +1097,12 @@ const [collectors, setCollectors] = useState<any[]>([]);
                     <Button color="blue" appearance="primary" onClick={() => handleAction(viewApp.id, 'submit')} startIcon={<Send className="w-4 h-4" />}>
                       Submit Application
                     </Button>
-                    <Button color="red" appearance="primary" onClick={() => { setViewOpen(false); setDeleteTarget(viewApp.id); }} startIcon={<Trash2 className="w-4 h-4" />}>
-                      Delete
-                    </Button>
                   </>
+                )}
+                {isSuperAdmin && viewApp.status !== 'released' && (
+                  <Button color="red" appearance="primary" onClick={() => { if (['draft', 'approved'].includes(viewApp.status)) { setViewOpen(false); setDeleteTarget(viewApp.id); } else { toaster.push(<Message type="warning">Only Draft or Approved application can be deleted.</Message>, { placement: 'topEnd' }); } }} startIcon={<Trash2 className="w-4 h-4" />}>
+                    Delete
+                  </Button>
                 )}
                 {viewApp.status === 'submitted' && (
                   <>
@@ -981,6 +1138,11 @@ const [collectors, setCollectors] = useState<any[]>([]);
                       Print Amortization Schedule
                     </Button>
                   </>
+                )}
+                {!['draft', 'approved'].includes(viewApp.status) && (
+                  <Button color="green" appearance="ghost" onClick={() => viewPrintDocument(viewApp.id)} startIcon={<Printer className="w-4 h-4" />}>
+                    Print Amortization Schedule
+                  </Button>
                 )}
               </div>
             </div>
@@ -1040,15 +1202,16 @@ const [collectors, setCollectors] = useState<any[]>([]);
       </Modal>
 
       {/* Release Modal */}
-      <ReleaseModal
-        open={releaseOpen}
-        applicationId={viewApp?.id}
-        productId={viewApp?.loan_product_id}
-        principal={parseFloat(viewApp?.principal_amount || 0)}
-        onClose={() => setReleaseOpen(false)}
-        onSuccess={() => { setViewApp(null); setViewOpen(false); fetchData(); }}
-        onError={(msg) => { setCreditLimitMsg(msg); setCreditLimitOpen(true); }}
-      />
+        <ReleaseModal
+          open={releaseOpen}
+          applicationId={viewApp?.id}
+          productId={viewApp?.loan_product_id}
+          principal={parseFloat(viewApp?.principal_amount || 0)}
+          previousBalance={parseFloat(viewApp?.previous_balance || 0)}
+          onClose={() => setReleaseOpen(false)}
+          onSuccess={() => { setViewApp(null); setViewOpen(false); fetchData(); }}
+          onError={(msg) => { setCreditLimitMsg(msg); setCreditLimitOpen(true); }}
+        />
 
       {/* Print Document Modal */}
       <Modal open={printOpen} onClose={() => setPrintOpen(false)} size="full">
@@ -1136,11 +1299,12 @@ const [collectors, setCollectors] = useState<any[]>([]);
                       </tfoot>
                     </table>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded">
-                    <div><p className="text-gray-500">Principal Amount</p><p className="font-semibold">{formatCurrency(printData.application.principal_amount)}</p></div>
-                    <div><p className="text-gray-500">Total Charges</p><p className="font-semibold text-red-600">{formatCurrency(printData.total_charges)}</p></div>
-                    <div><p className="font-semibold text-gray-700 dark:text-gray-200">Net Proceeds (Amount Released)</p><p className="font-semibold text-green-600 text-lg">{formatCurrency(printData.net_proceeds)}</p></div>
-                  </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded">
+                      <div><p className="text-gray-500">Principal Amount</p><p className="font-semibold">{formatCurrency(printData.application.principal_amount)}</p></div>
+                      <div><p className="text-gray-500">Previous Balance</p><p className="font-semibold text-red-600">{Number(printData.application.previous_balance) > 0 ? formatCurrency(printData.application.previous_balance) : '-'}</p></div>
+                      <div><p className="text-gray-500">Total Charges</p><p className="font-semibold text-red-600">{formatCurrency(printData.total_charges)}</p></div>
+                      <div><p className="font-semibold text-gray-700 dark:text-gray-200">Net Proceeds (Amount Released)</p><p className="font-semibold text-green-600 text-lg">{formatCurrency(printData.net_proceeds)}</p></div>
+                    </div>
                 </section>
               )}
 
@@ -1271,6 +1435,9 @@ const [collectors, setCollectors] = useState<any[]>([]);
                 <div><p className="text-gray-500">Principal</p><p className="font-medium">{formatCurrency(amortData.principal_amount)}</p></div>
                 <div><p className="text-gray-500">Interest</p><p className="font-medium">{amortData.interest_rate}% ({amortData.interest_type})</p></div>
                 <div><p className="text-gray-500">Term</p><p className="font-medium">{amortData.term_months} {amortData.term_type || 'months'} / {amortData.payment_frequency}</p></div>
+                <div><p className="text-gray-500">Previous Balance</p><p className="font-medium text-red-600">{Number(amortData.previous_balance) > 0 ? formatCurrency(amortData.previous_balance) : '-'}</p></div>
+                <div><p className="text-gray-500">Total Charges</p><p className="font-medium text-red-600">{formatCurrency(amortData.total_charges)}</p></div>
+                <div><p className="text-gray-500 font-semibold">Net Proceeds</p><p className="font-semibold text-green-600">{formatCurrency(amortData.net_proceeds)}</p></div>
                 <div><p className="text-gray-500">Total Interest</p><p className="font-medium">{formatCurrency(amortData.totalInterest)}</p></div>
                 <div><p className="text-gray-500">Total Amount Due</p><p className="font-medium">{formatCurrency(amortData.totalAmount)}</p></div>
               </div>

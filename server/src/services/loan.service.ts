@@ -3,12 +3,14 @@ import {
   loanApplicationRepo,
   amortizationScheduleRepo,
   paymentRepo,
+  paymentAllocationRepo,
   collectionRepo,
   loanProductRepo,
   borrowerRepo,
   loanProductChargeRepo,
   loanChargeRepo,
 } from '../repositories';
+import { pool, query } from '../database/connection';
 import { calculateAmortization, generateLoanNumber, generateApplicationNumber, generatePaymentNumber } from '../utils/helpers';
 
 export class LoanService {
@@ -40,6 +42,7 @@ export class LoanService {
       purpose: data.purpose || null,
       payment_frequency: data.paymentFrequency || 'monthly',
       co_maker_id: data.coMakerId || null,
+      previous_balance: data.previousBalance || 0,
       collector_id: data.collectorId || null,
       assigned_officer_id: userId,
       created_by: userId,
@@ -205,6 +208,7 @@ export class LoanService {
     if (data.purpose !== undefined) fields.purpose = data.purpose;
     if (data.collectorId !== undefined) fields.collector_id = data.collectorId;
     if (data.applicationType !== undefined) fields.application_type = data.applicationType || 'New';
+    if (data.previousBalance !== undefined) fields.previous_balance = data.previousBalance;
     if (Object.keys(fields).length === 0) throw new Error('No fields to update');
     return loanApplicationRepo.update(id, fields);
   }
@@ -212,8 +216,45 @@ export class LoanService {
   async deleteApplication(id: string) {
     const app = await loanApplicationRepo.findById(id);
     if (!app) throw new Error('Application not found');
-    if (app.status !== 'draft') throw new Error('Only draft applications can be deleted');
-    return loanApplicationRepo.delete(id);
+    if (!['draft', 'approved'].includes(app.status)) throw new Error('Only draft or approved applications can be deleted');
+    const client = await pool.connect();
+    try {
+      await client.query('SET search_path TO public');
+      await client.query('BEGIN');
+      await client.query('DELETE FROM loan_approvals WHERE application_id = $1', [id]);
+      await client.query('DELETE FROM application_documents WHERE application_id = $1', [id]);
+      await loanApplicationRepo.softDelete(id);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async restoreApplication(id: string) {
+    const app = await loanApplicationRepo.restore(id);
+    if (!app) throw new Error('Application not found or not deleted');
+    return app;
+  }
+
+  async permanentDeleteApplication(id: string) {
+    const deleted = await query(`SELECT id FROM loan_applications WHERE id = $1 AND deleted_at IS NOT NULL`, [id]);
+    if (!deleted.rows.length) throw new Error('Application not found in trash');
+    await query(`DELETE FROM loan_approvals WHERE application_id = $1`, [id]);
+    await query(`DELETE FROM application_documents WHERE application_id = $1`, [id]);
+    await loanApplicationRepo.delete(id);
+  }
+
+  async emptyTrash() {
+    const deleted = await loanApplicationRepo.findDeleted({ limit: 10000 });
+    const ids = deleted.rows.map((a: any) => a.id);
+    if (!ids.length) return 0;
+    await query(`DELETE FROM loan_approvals WHERE application_id = ANY($1::uuid[])`, [ids]);
+    await query(`DELETE FROM application_documents WHERE application_id = ANY($1::uuid[])`, [ids]);
+    await query(`DELETE FROM loan_applications WHERE id = ANY($1::uuid[]) AND deleted_at IS NOT NULL`, [ids]);
+    return ids.length;
   }
 
   async releaseLoan(applicationId: string, userId: string, method: string = 'cash', reference?: string) {
@@ -315,7 +356,8 @@ export class LoanService {
       await loanChargeRepo.create(cr);
     }
 
-    const netProceeds = parseFloat(app.principal_amount) - totalCharges;
+    const prevBalance = parseFloat(app.previous_balance) || 0;
+    const netProceeds = parseFloat(app.principal_amount) - totalCharges - prevBalance;
     await loanRepo.update(loan.id, { net_proceeds: netProceeds });
     loan.net_proceeds = netProceeds;
 
@@ -448,11 +490,13 @@ export class LoanService {
     const loans = await loanRepo.query(
       `SELECT l.*, b.first_name || ' ' || b.last_name as borrower_name, b.borrower_code, b.mobile,
               lp.name as product_name, lp.penalty_type, lp.penalty_value, lp.penalty_grace_period, lp.penalty_matured_value, lp.late_payment_fee,
-              u.first_name || ' ' || u.last_name as released_by_name
+              u.first_name || ' ' || u.last_name as released_by_name,
+              COALESCE(la.previous_balance, 0) as previous_balance
        FROM loans l
        JOIN borrowers b ON l.borrower_id = b.id
        JOIN loan_products lp ON l.product_id = lp.id
        LEFT JOIN users u ON l.released_by = u.id
+       LEFT JOIN loan_applications la ON l.application_id = la.id
        WHERE l.id = $1`,
       [id]
     );
@@ -727,6 +771,137 @@ export class LoanService {
         borrowerName: r.borrower_name,
       })),
     };
+  }
+  async createHistoricalLoan(userId: string, data: any) {
+    const borrower = await borrowerRepo.findById(data.borrowerId);
+    if (!borrower) throw new Error('Borrower not found');
+
+    const product = data.loanProductId ? await loanProductRepo.findById(data.loanProductId) : null;
+    const principal = Number(data.principalAmount) || 0;
+    const interestRate = Number(data.interestRate) || 0;
+    const interestType = data.interestType || product?.interest_type || 'flat-rate';
+    const termMonths = Number(data.termMonths) || 0;
+    const termType = data.termType || 'months';
+    const paymentFrequency = data.paymentFrequency || 'monthly';
+    const installmentCount = data.installmentCount ? Number(data.installmentCount) : undefined;
+
+    // If no manual schedule, generate via calculateAmortization
+    let scheduleItems: any[];
+    if (data.schedule && data.schedule.length > 0) {
+      scheduleItems = data.schedule;
+    } else {
+      const { schedule, totalInterest, totalAmount } = calculateAmortization(
+        principal, interestRate, termMonths, interestType, paymentFrequency,
+        data.releaseDate ? new Date(data.releaseDate) : new Date(),
+        termType, installmentCount
+      );
+      const totalPaid = Number(data.totalPaid) || 0;
+      const paidUpToDate = data.paidUpToDate ? new Date(data.paidUpToDate) : null;
+
+      let remaining = totalPaid;
+      scheduleItems = schedule.map((s: any) => {
+        const isPaid = remaining > 0 && (!paidUpToDate || s.dueDate <= paidUpToDate);
+        let paidAmount = 0;
+        let status = 'pending';
+        if (isPaid) {
+          paidAmount = Math.min(remaining, s.totalDue);
+          remaining -= paidAmount;
+          status = paidAmount >= s.totalDue ? 'paid' : 'partial';
+        }
+        return {
+          installmentNo: s.installmentNo,
+          dueDate: s.dueDate.toISOString().split('T')[0],
+          principal: s.principal,
+          interest: s.interest,
+          total_due: s.totalDue,
+          balance: s.balance,
+          paidAmount,
+          status,
+          paidAt: paidUpToDate ? paidUpToDate.toISOString() : null,
+        };
+      });
+    }
+
+    const totalInterest = scheduleItems.reduce((s: number, item: any) => s + Number(item.interest || 0), 0);
+    const totalAmount = scheduleItems.reduce((s: number, item: any) => s + Number(item.total_due || 0), 0);
+    const loanNumber = generateLoanNumber();
+
+    const maturityDate = scheduleItems.length > 0
+      ? new Date(scheduleItems[scheduleItems.length - 1].dueDate)
+      : null;
+
+    const loan = await loanRepo.create({
+      loan_number: loanNumber,
+      borrower_id: data.borrowerId,
+      product_id: data.loanProductId || null,
+      principal_amount: principal,
+      interest_amount: totalInterest,
+      total_amount: totalAmount,
+      outstanding_balance: totalAmount - (Number(data.totalPaid) || 0),
+      interest_rate: interestRate,
+      interest_type: interestType,
+      term_months: termMonths,
+      term_type: termType,
+      installment_count: scheduleItems.length,
+      payment_frequency: paymentFrequency,
+      status: data.status || 'paid',
+      release_date: data.releaseDate ? new Date(data.releaseDate) : null,
+      next_payment_date: null,
+      maturity_date: maturityDate,
+      late_payment_fee: 0,
+      net_proceeds: principal - (Number(data.previousBalance) || 0),
+      released_by: userId,
+    });
+
+    const paidSchedules: { scheduleId: string; amount: number; paidAt: Date | null }[] = [];
+
+    for (const item of scheduleItems) {
+      const created = await amortizationScheduleRepo.create({
+        loan_id: loan.id,
+        installment_no: item.installmentNo,
+        due_date: new Date(item.dueDate),
+        principal: Number(item.principal) || 0,
+        interest: Number(item.interest) || 0,
+        total_due: Number(item.total_due) || 0,
+        balance: Number(item.balance) || 0,
+        paid_amount: Number(item.paidAmount) || 0,
+        status: item.status || 'pending',
+        paid_at: item.paidAt ? new Date(item.paidAt) : null,
+      });
+      if (Number(item.paidAmount) > 0) {
+        paidSchedules.push({ scheduleId: created.id, amount: Number(item.paidAmount), paidAt: item.paidAt ? new Date(item.paidAt) : null });
+      }
+    }
+
+    // Create payment records for historical payments
+    const totalPaidAmount = paidSchedules.reduce((s, p) => s + p.amount, 0);
+    if (totalPaidAmount > 0) {
+      const latestDate = paidSchedules.reduce((latest, p) => p.paidAt && p.paidAt > latest ? p.paidAt : latest, paidSchedules[0].paidAt || new Date());
+      const payment = await paymentRepo.create({
+        payment_number: 'HIST-' + loan.loan_number,
+        loan_id: loan.id,
+        borrower_id: data.borrowerId,
+        amount: totalPaidAmount,
+        principal_amount: totalPaidAmount,
+        interest_amount: 0,
+        payment_method: 'historical',
+        payment_date: latestDate,
+        received_by: userId,
+        receipt_number: 'HIST-' + loan.loan_number,
+        status: 'completed',
+      });
+
+      for (const ps of paidSchedules) {
+        await paymentAllocationRepo.create({
+          payment_id: payment.id,
+          schedule_id: ps.scheduleId,
+          amount: ps.amount,
+          allocated_to: 'principal',
+        });
+      }
+    }
+
+    return loan;
   }
 }
 

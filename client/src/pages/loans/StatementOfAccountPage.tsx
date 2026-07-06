@@ -73,6 +73,7 @@ export const StatementOfAccountPage = () => {
                   <tr><td className="text-gray-500 pr-4 py-0.5">Loan #:</td><td className="font-medium">{loan.loan_number}</td></tr>
                   <tr><td className="text-gray-500 pr-4 py-0.5">Product:</td><td>{loan.product_name}</td></tr>
                   <tr><td className="text-gray-500 pr-4 py-0.5">Principal:</td><td>{formatCurrency(loan.principal_amount)}</td></tr>
+                  <tr><td className="text-gray-500 pr-4 py-0.5">Previous Balance:</td><td className={Number(loan.previous_balance) > 0 ? 'text-red-600' : ''}>{Number(loan.previous_balance) > 0 ? formatCurrency(loan.previous_balance) : '-'}</td></tr>
                   <tr><td className="text-gray-500 pr-4 py-0.5">Interest Rate:</td><td>{loan.interest_rate}% ({loan.interest_type})</td></tr>
                   <tr><td className="text-gray-500 pr-4 py-0.5">Term:</td><td>{loan.term_months} {loan.term_type}</td></tr>
                   <tr><td className="text-gray-500 pr-4 py-0.5">Release Date:</td><td>{loan.release_date ? new Date(loan.release_date).toLocaleDateString() : '-'}</td></tr>

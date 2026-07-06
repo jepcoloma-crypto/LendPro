@@ -462,6 +462,7 @@ export const ReportsPage = () => {
             <tr><td>Loan #:</td><td>${loan.loan_number}</td></tr>
             <tr><td>Product:</td><td>${loan.product_name}</td></tr>
             <tr><td>Principal:</td><td>${formatCurrency(loan.principal_amount)}</td></tr>
+            <tr><td>Previous Balance:</td><td>${Number(loan.previous_balance) > 0 ? formatCurrency(loan.previous_balance) : '-'}</td></tr>
             <tr><td>Interest Rate:</td><td>${loan.interest_rate}% (${loan.interest_type})</td></tr>
             <tr><td>Term:</td><td>${loan.term_months} ${loan.term_type}</td></tr>
             <tr><td>Release:</td><td>${loan.release_date ? new Date(loan.release_date).toLocaleDateString() : '-'}</td></tr>
@@ -1180,7 +1181,9 @@ export const ReportsPage = () => {
       <div class="summary-cards" style="margin-bottom:4px">
         <div class="summary-card"><p class="label">Borrower</p><p class="value">${loan.borrower_name} (${loan.borrower_code})</p></div>
         <div class="summary-card"><p class="label">Loan</p><p class="value">${loan.loan_number}</p></div>
-        <div class="summary-card"><p class="label">Balance</p><p class="value">${formatCurrency(loan.outstanding_balance)}</p></div>
+        <div class="summary-card"><p class="label">Net Proceeds</p><p class="value">${formatCurrency(loan.effective_net_proceeds)}</p></div>
+        <div class="summary-card"><p class="label">Prev Balance</p><p class="value">${Number(loan.previous_balance) > 0 ? formatCurrency(loan.previous_balance) : '-'}</p></div>
+        <div class="summary-card"><p class="label">Outstanding</p><p class="value">${formatCurrency(loan.outstanding_balance)}</p></div>
       </div>
     <table>
       <thead><tr>
@@ -1223,8 +1226,10 @@ export const ReportsPage = () => {
           ) : (
             amortData.map((loan: any) => (
               <Panel key={loan.loan_id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-4" bordered
-                header={<div className="flex items-center justify-between w-full pr-2"><span>{loan.borrower_name} ({loan.borrower_code}) — {loan.loan_number} — {formatCurrency(loan.outstanding_balance)}</span><Button size="sm" appearance="primary" startIcon={<Printer className="w-3.5 h-3.5" />} onClick={() => printSOA(loan.loan_id)}>Print SOA</Button></div>}>
-                <div className="flex gap-4 mb-3 text-sm">
+                header={<div className="flex items-center justify-between w-full pr-2"><span><strong>{loan.borrower_name}</strong> ({loan.borrower_code}) — {loan.loan_number} — <span className="text-green-600 font-semibold">{formatCurrency(loan.outstanding_balance)}</span></span><Button size="sm" appearance="primary" startIcon={<Printer className="w-3.5 h-3.5" />} onClick={() => printSOA(loan.loan_id)}>Print SOA</Button></div>}>
+                <div className="flex gap-4 mb-3 text-sm flex-wrap">
+                  <span>Net Proceeds: <strong className="text-green-600 font-semibold">{formatCurrency(loan.effective_net_proceeds)}</strong></span>
+                  <span>Previous Balance: <strong className="text-red-600 font-semibold">{Number(loan.previous_balance) > 0 ? formatCurrency(loan.previous_balance) : '-'}</strong></span>
                   <span>Paid: <strong className="text-green-600">{loan.paid}</strong></span>
                   <span>Partial: <strong className="text-blue-600">{loan.partial}</strong></span>
                   <span>Unpaid: <strong className="text-orange-600">{loan.unpaid}</strong></span>
@@ -1397,6 +1402,7 @@ export const ReportsPage = () => {
                 { key: 'borrower_name', label: 'Borrower' },
                 { key: 'application_type', label: 'Type' },
                 { key: 'principal_amount', label: 'Loan Amount', format: (v) => formatCurrency(v) },
+                { key: 'previous_balance', label: 'Prev Balance', format: (v) => v > 0 ? formatCurrency(v) : '-' },
                 { key: 'total_charges', label: 'Total Charges', format: (v) => formatCurrency(v) },
                 { key: 'net_proceeds', label: 'Net Proceeds', format: (v) => formatCurrency(v) },
                 { key: 'term_months', label: 'Term (mos)' },
@@ -1412,6 +1418,7 @@ export const ReportsPage = () => {
                 { key: 'application_type', label: 'Type' },
                 { key: 'present_address', label: 'Address' },
                 { key: 'principal_amount', label: 'Loan Amount', format: (v) => formatCurrency(v) },
+                { key: 'previous_balance', label: 'Prev Balance', format: (v) => v > 0 ? formatCurrency(v) : '-' },
                 { key: 'interest_amount', label: 'Interest', format: (v) => formatCurrency(v) },
                 { key: 'paid_interest', label: 'Interest Income', format: (v) => formatCurrency(v) },
                 { key: 'total_charges', label: 'Total Charges', format: (v) => formatCurrency(v) },
@@ -1456,6 +1463,7 @@ export const ReportsPage = () => {
               <Column width={180}><HeaderCell>Address</HeaderCell><Cell>{(r: any) => `${r.present_address || ''}, ${r.present_city || ''}`}</Cell></Column>
               <Column width={120}><HeaderCell>Loan Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
               <Column width={120}><HeaderCell>Interest Income</HeaderCell><Cell>{(r: any) => formatCurrency(r.paid_interest)}</Cell></Column>
+              <Column width={100}><HeaderCell>Prev Bal</HeaderCell><Cell>{(r: any) => Number(r.previous_balance) > 0 ? <span className="text-red-500">{formatCurrency(r.previous_balance)}</span> : '-'}</Cell></Column>
               <Column width={100}><HeaderCell>Total Charges</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_charges)}</Cell></Column>
               <Column width={120}><HeaderCell>Net Proceeds</HeaderCell><Cell>{(r: any) => <span className="font-semibold text-green-600">{formatCurrency(r.net_proceeds)}</span>}</Cell></Column>
               <Column width={80}><HeaderCell>Term</HeaderCell><Cell>{(r: any) => `${r.term_months}mo`}</Cell></Column>

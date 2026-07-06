@@ -250,6 +250,57 @@ const runMigrations = async () => {
         -- Cash variance threshold setting
         INSERT INTO system_settings (key, value, description) VALUES ('cash_variance_threshold', '500', 'Auto-approve variances within this amount (PHP)')
         ON CONFLICT (key) DO NOTHING;
+        -- Soft delete for loan applications
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='loan_applications' AND column_name='deleted_at') THEN
+          ALTER TABLE loan_applications ADD COLUMN deleted_at TIMESTAMPTZ;
+        END IF;
+        -- Previous balance deduction on loan release
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='loan_applications' AND column_name='previous_balance') THEN
+          ALTER TABLE loan_applications ADD COLUMN previous_balance NUMERIC(15,2) DEFAULT 0;
+        END IF;
+        -- Cash Pick-up: collector remittance tracking
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='collector_id') THEN
+          ALTER TABLE payments ADD COLUMN collector_id UUID REFERENCES users(id);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='remittance_status') THEN
+          ALTER TABLE payments ADD COLUMN remittance_status VARCHAR(20) DEFAULT 'direct';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='remitted_at') THEN
+          ALTER TABLE payments ADD COLUMN remitted_at TIMESTAMPTZ;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='collector_pickups') THEN
+          CREATE TABLE collector_pickups (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            pickup_number VARCHAR(20) NOT NULL,
+            collector_id UUID REFERENCES users(id) NOT NULL,
+            cashier_id UUID REFERENCES users(id) NOT NULL,
+            total_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
+            notes TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_cp_collector ON collector_pickups(collector_id);
+          CREATE INDEX IF NOT EXISTS idx_cp_cashier ON collector_pickups(cashier_id);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='pickup_denominations') THEN
+          CREATE TABLE pickup_denominations (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            pickup_id UUID REFERENCES collector_pickups(id) NOT NULL,
+            denomination NUMERIC(10,2) NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0,
+            amount NUMERIC(15,2) NOT NULL DEFAULT 0
+          );
+          CREATE INDEX IF NOT EXISTS idx_pd_pickup ON pickup_denominations(pickup_id);
+        END IF;
+      END $$;
+    `);
+
+    // Second block: pickup_id FK after collector_pickups table exists
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='pickup_id') THEN
+          ALTER TABLE payments ADD COLUMN pickup_id UUID REFERENCES collector_pickups(id);
+        END IF;
       END $$;
     `);
 

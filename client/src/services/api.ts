@@ -125,6 +125,10 @@ export const applicationsApi = {
   deleteDocument: (id: string, docId: string) => api.delete(`/applications/${id}/documents/${docId}`),
   getAmortization: (id: string) => api.get(`/applications/${id}/amortization`),
   getPrintDocument: (id: string) => api.get(`/applications/${id}/print-document`),
+  getDeleted: (params?: any) => api.get('/applications/deleted', { params }),
+  restore: (id: string) => api.post(`/applications/${id}/restore`),
+  permanentDelete: (id: string) => api.delete(`/applications/${id}/permanent`),
+  emptyTrash: () => api.delete('/applications/trash/empty'),
 };
 
 // Loans
@@ -134,6 +138,7 @@ export const loansApi = {
   getSchedule: (id: string) => api.get(`/loans/${id}/schedule`),
   getDashboard: () => api.get('/loans/dashboard'),
   update: (id: string, data: any) => api.put(`/loans/${id}`, data),
+  createHistorical: (data: any) => api.post('/loans/historical', data),
   delete: (id: string) => api.delete(`/loans/${id}`),
   writeOff: (id: string, data: any) => api.post(`/loans/${id}/write-off`, data),
   restructure: (id: string, data: any) => api.post(`/loans/${id}/restructure`, data),

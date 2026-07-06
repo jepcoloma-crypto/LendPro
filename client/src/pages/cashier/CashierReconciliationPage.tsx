@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button, Panel, Modal, Form, toaster, Message, Tag, Table, SelectPicker, InputNumber, Input, DatePicker } from 'rsuite';
 import api from '../../services/api';
 import { formatCurrency } from '../../utils/format';
-import { DollarSign, Plus, Check, X, Eye, Printer, Search, RotateCcw, TrendingUp, TrendingDown, Wallet, Clock, ShieldCheck, ArrowDownCircle, ArrowUpCircle, BarChart3, Download } from 'lucide-react';
+import { DollarSign, Plus, Check, X, Eye, Printer, Search, RotateCcw, TrendingUp, TrendingDown, Wallet, Clock, ShieldCheck, ArrowDownCircle, ArrowUpCircle, BarChart3, Download, Handshake } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { ExpensesPage } from '../expenses/ExpensesPage';
 import { printStyles, companyHeaderHtml, printWindow } from '../../utils/print';
@@ -33,6 +33,7 @@ const TABS = [
   { key: 'approvals', label: 'Variance Approval', icon: ShieldCheck },
   { key: 'close', label: 'Shift Closing', icon: Clock },
   { key: 'expenses', label: 'Expenses & Income', icon: ArrowDownCircle },
+  { key: 'pickup', label: 'Cash Pick-up', icon: Handshake },
   { key: 'reports', label: 'Reports', icon: BarChart3 },
   { key: 'audit', label: 'Audit Trail', icon: Eye },
 ];
@@ -58,6 +59,17 @@ export const CashierReconciliationPage = () => {
   const [chartData, setChartData] = useState<any[]>([]);
 
   // Modals
+  const [collectors, setCollectors] = useState<any[]>([]);
+  const [pickups, setPickups] = useState<any[]>([]);
+  const [unremittedPayments, setUnremittedPayments] = useState<any[]>([]);
+  const [collectorOutstanding, setCollectorOutstanding] = useState<any[]>([]);
+  const [selectedCollector, setSelectedCollector] = useState<string | null>(null);
+  const [pickupDenoms, setPickupDenoms] = useState<Record<number, number>>({});
+  const [pickupNotes, setPickupNotes] = useState('');
+  const [pickupView, setPickupView] = useState<any>(null);
+  const [pickupViewModal, setPickupViewModal] = useState(false);
+  const [pickupTab, setPickupTab] = useState<'new' | 'history' | 'outstanding'>('new');
+
   const [openShiftModal, setOpenShiftModal] = useState(false);
   const [openShiftForm, setOpenShiftForm] = useState({ opening_float: 0 });
   const [closeModal, setCloseModal] = useState(false);
@@ -151,6 +163,52 @@ export const CashierReconciliationPage = () => {
     try { const { data } = await api.get('/cashier-sessions/dashboard/stats'); setDashStats(data.data); } catch {}
   }, []);
 
+  const fetchCollectors = useCallback(async () => {
+    try { const { data } = await api.get('/users/collectors'); setCollectors(data.data || []); } catch {}
+  }, []);
+
+  const fetchUnremitted = useCallback(async (collectorId: string) => {
+    try { const { data } = await api.get('/pickups/unremitted-payments', { params: { collector_id: collectorId } }); setUnremittedPayments(data.data || []); } catch { setUnremittedPayments([]); }
+  }, []);
+
+  const fetchPickups = useCallback(async (collectorId?: string) => {
+    try {
+      const params: any = {};
+      if (collectorId) params.collector_id = collectorId;
+      const { data } = await api.get('/pickups', { params });
+      setPickups(data.data || []);
+    } catch { setPickups([]); }
+  }, []);
+
+  const fetchOutstanding = useCallback(async () => {
+    try { const { data } = await api.get('/pickups/collector-outstanding'); setCollectorOutstanding(data.data || []); } catch { setCollectorOutstanding([]); }
+  }, []);
+
+  const handleCreatePickup = async () => {
+    if (!selectedCollector) { toaster.push(<Message type="warning">Select a collector</Message>, { placement: 'topEnd' }); return; }
+    const denominations = Object.entries(pickupDenoms)
+      .filter(([_, count]) => (count as number) > 0)
+      .map(([denom, count]) => ({
+        denomination: parseFloat(denom),
+        count,
+        amount: parseFloat(denom) * (count as number),
+      }));
+    if (!denominations.length) { toaster.push(<Message type="warning">Enter at least one denomination count</Message>, { placement: 'topEnd' }); return; }
+    setLoading(true);
+    try {
+      await api.post('/pickups', { collector_id: selectedCollector, denominations, notes: pickupNotes });
+      toaster.push(<Message type="success">Cash pick-up recorded</Message>, { placement: 'topEnd' });
+      setPickupDenoms({});
+      setPickupNotes('');
+      setSelectedCollector(null);
+      setUnremittedPayments([]);
+      fetchPickups();
+      fetchOutstanding();
+      fetchMyShift();
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+    finally { setLoading(false); }
+  };
+
   const fetchChart = useCallback(async () => {
     try { const { data } = await api.get('/cash-reports/daily-chart', { params: { days: 7 } }); setChartData(data.data || []); } catch {}
   }, []);
@@ -171,6 +229,8 @@ export const CashierReconciliationPage = () => {
 
   useEffect(() => { if (activeTab === 'reports') fetchReport(); }, [activeTab, reportType, reportDateRange, fetchReport]);
   useEffect(() => { fetchDashStats(); fetchChart(); }, [fetchDashStats, fetchChart]);
+  useEffect(() => { if (activeTab === 'pickup') { fetchCollectors(); fetchPickups(); fetchOutstanding(); } }, [activeTab, fetchCollectors, fetchPickups, fetchOutstanding]);
+  useEffect(() => { if (selectedCollector) fetchUnremitted(selectedCollector); else setUnremittedPayments([]); }, [selectedCollector, fetchUnremitted]);
 
   // ========== SHIFT OPEN ==========
   const handleOpenShift = async () => {
@@ -798,6 +858,115 @@ ${transactions.map((t: any, i: number) => `<tr>
       {/* ===== TAB: Expenses & Income ===== */}
       {activeTab === 'expenses' && <ExpensesPage embedded />}
 
+      {/* ===== TAB: Cash Pick-up ===== */}
+      {activeTab === 'pickup' && (
+        <div className="space-y-4">
+          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+            <button onClick={() => setPickupTab('new')} className={`text-sm px-3 py-1.5 rounded-t font-medium transition-colors ${pickupTab==='new' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>New Pick-up</button>
+            <button onClick={() => setPickupTab('history')} className={`text-sm px-3 py-1.5 rounded-t font-medium transition-colors ${pickupTab==='history' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>History</button>
+            <button onClick={() => setPickupTab('outstanding')} className={`text-sm px-3 py-1.5 rounded-t font-medium transition-colors ${pickupTab==='outstanding' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>Outstanding</button>
+          </div>
+
+          {pickupTab === 'new' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Record Cash Pick-up">
+                {!myShift ? <p className="text-gray-400">Open a shift first</p> : (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Collector</label>
+                       <SelectPicker data={collectors.map((c: any) => ({ label: `${c.first_name} ${c.last_name}`, value: c.id }))}
+                        value={selectedCollector} onChange={(v: any) => setSelectedCollector(v)} placeholder="Select collector" searchable style={{ width: '100%' }} />
+                    </div>
+                    {selectedCollector && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Payments to Collect</label>
+                          {unremittedPayments.length === 0 ? (
+                            <p className="text-gray-400 text-sm">No unremitted payments</p>
+                          ) : (
+                            <Table data={unremittedPayments} virtualized height={180} rowHeight={40}>
+                              <Column width={130}><HeaderCell>Payment #</HeaderCell><Cell dataKey="payment_number" /></Column>
+                              <Column width={150}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+                              <Column width={130}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+                              <Column width={100}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.amount)}</Cell></Column>
+                              <Column width={120}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.created_at).toLocaleDateString()}</Cell></Column>
+                            </Table>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Denominations</label>
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {[1000, 500, 200, 100, 50, 20, 10, 5, 1].map(denom => (
+                              <div key={denom} className="flex items-center gap-3">
+                                <span className="w-16 font-medium">₱{denom}</span>
+                                <span className="text-gray-400">x</span>
+                                <input type="number" min={0} className="rs-input" style={{ width: 100 }}
+                                  value={pickupDenoms[denom] || 0}
+                                  onChange={(e: any) => setPickupDenoms(p => ({ ...p, [denom]: parseInt(e.target.value) || 0 }))} />
+                                <span className="text-gray-500 text-sm">= {formatCurrency(denom * (parseInt(String(pickupDenoms[denom])) || 0))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Notes</label>
+                          <Input as="textarea" rows={2} placeholder="Optional notes" value={pickupNotes} onChange={(v: any) => setPickupNotes(v)} />
+                        </div>
+                        <div className="pt-2 border-t flex justify-between items-center">
+                          <span className="font-bold">Total Unremitted: {formatCurrency(unremittedPayments.reduce((s: number, p: any) => s + parseFloat(p.amount), 0))}</span>
+                          <Button appearance="primary" onClick={handleCreatePickup} loading={loading} disabled={!selectedCollector || !unremittedPayments.length}>
+                            <Handshake className="w-4 h-4 mr-1" />Record Pick-up
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </Panel>
+              <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Collector Outstanding">
+                <Table data={collectorOutstanding} virtualized height={300} rowHeight={45}>
+                  <Column width={160}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
+                  <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+                  <Column width={120}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-amber-600 font-semibold">{formatCurrency(r.outstanding_amount)}</span>}</Cell></Column>
+                  <Column width={90}><HeaderCell>Pending</HeaderCell><Cell dataKey="pending_count" /></Column>
+                  <Column width={90}><HeaderCell>Remitted</HeaderCell><Cell dataKey="remitted_count" /></Column>
+                </Table>
+              </Panel>
+            </div>
+          )}
+
+          {pickupTab === 'history' && (
+            <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Pick-up History">
+              <Table data={pickups} virtualized height={400} rowHeight={45}>
+                <Column width={140}><HeaderCell>Pick-up #</HeaderCell><Cell dataKey="pickup_number" /></Column>
+                <Column width={140}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.created_at).toLocaleString()}</Cell></Column>
+                <Column width={150}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
+                <Column width={150}><HeaderCell>Cashier</HeaderCell><Cell dataKey="cashier_name" /></Column>
+                <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_amount)}</Cell></Column>
+                <Column width={200}><HeaderCell>Notes</HeaderCell><Cell dataKey="notes" /></Column>
+                <Column width={80} align="center"><HeaderCell>View</HeaderCell><Cell>{(r: any) => (
+                  <Button size="xs" appearance="ghost" onClick={async () => {
+                    try { const { data } = await api.get(`/pickups/${r.id}`); setPickupView(data.data); setPickupViewModal(true); } catch {}
+                  }}><Eye className="w-3.5 h-3.5" /></Button>
+                )}</Cell></Column>
+              </Table>
+            </Panel>
+          )}
+
+          {pickupTab === 'outstanding' && (
+            <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Collector Outstanding Summary">
+              <Table data={collectorOutstanding} virtualized height={400} rowHeight={45}>
+                <Column width={160}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
+                <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+                <Column width={140}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-amber-600 font-bold">{formatCurrency(r.outstanding_amount)}</span>}</Cell></Column>
+                <Column width={100}><HeaderCell>Pending</HeaderCell><Cell>{(r: any) => <Tag color="yellow">{r.pending_count}</Tag>}</Cell></Column>
+                <Column width={100}><HeaderCell>Remitted</HeaderCell><Cell>{(r: any) => <Tag color="green">{r.remitted_count}</Tag>}</Cell></Column>
+              </Table>
+            </Panel>
+          )}
+        </div>
+      )}
+
       {/* ===== TAB: Reports ===== */}
       {activeTab === 'reports' && (
         <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered
@@ -1042,6 +1211,49 @@ ${transactions.map((t: any, i: number) => `<tr>
         <Modal.Footer>
           <Button appearance="ghost" onClick={() => printReport(viewData?.id)} disabled={!viewData?.id}><Printer className="w-4 h-4 mr-1" />Print Report</Button>
           <Button appearance="subtle" onClick={() => { setViewModal(false); setShiftDetail(null); }}>Close</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Pickup View modal */}
+      <Modal open={pickupViewModal} onClose={() => { setPickupViewModal(false); setPickupView(null); }} size="md">
+        <Modal.Header><Modal.Title>Pick-up Details - {pickupView?.pickup_number}</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {!pickupView ? <p className="text-gray-400">Loading...</p> : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 p-4 bg-gray-50 dark:bg-gray-700 rounded text-sm">
+                <div><span className="text-gray-500">Pick-up #:</span> <span className="font-bold">{pickupView.pickup_number}</span></div>
+                <div><span className="text-gray-500">Amount:</span> <span className="font-bold">{formatCurrency(pickupView.total_amount)}</span></div>
+                <div><span className="text-gray-500">Collector:</span> <span className="font-bold">{pickupView.collector_name}</span></div>
+                <div><span className="text-gray-500">Cashier:</span> <span className="font-bold">{pickupView.cashier_name}</span></div>
+                <div><span className="text-gray-500">Date:</span> <span className="font-bold">{new Date(pickupView.created_at).toLocaleString()}</span></div>
+                <div><span className="text-gray-500">Notes:</span> <span>{pickupView.notes || '-'}</span></div>
+              </div>
+              <div className="text-sm font-bold border-b border-gray-300 pb-1">Denominations</div>
+              {(!pickupView.denominations || !pickupView.denominations.length) ? (
+                <p className="text-gray-400 text-sm">No denomination data.</p>
+              ) : (
+                <Table data={pickupView.denominations} virtualized height={150} rowHeight={35}>
+                  <Column width={120}><HeaderCell>Denomination</HeaderCell><Cell>{(r: any) => `₱${r.denomination}`}</Cell></Column>
+                  <Column width={100}><HeaderCell>Count</HeaderCell><Cell dataKey="count" /></Column>
+                  <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.amount)}</Cell></Column>
+                </Table>
+              )}
+              <div className="text-sm font-bold border-b border-gray-300 pb-1">Payments Collected ({pickupView.payments?.length || 0})</div>
+              {(!pickupView.payments || !pickupView.payments.length) ? (
+                <p className="text-gray-400 text-sm">No payments.</p>
+              ) : (
+                <Table data={pickupView.payments} virtualized height={150} rowHeight={35}>
+                  <Column width={130}><HeaderCell>Payment #</HeaderCell><Cell dataKey="payment_number" /></Column>
+                  <Column width={150}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+                  <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.amount)}</Cell></Column>
+                  <Column width={120}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.created_at).toLocaleDateString()}</Cell></Column>
+                </Table>
+              )}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button appearance="subtle" onClick={() => { setPickupViewModal(false); setPickupView(null); }}>Close</Button>
         </Modal.Footer>
       </Modal>
 

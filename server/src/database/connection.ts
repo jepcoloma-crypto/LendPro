@@ -8,13 +8,25 @@ export const pool = new Pool({
   user: config.db.user,
   password: config.db.password,
   ssl: config.db.ssl ? { rejectUnauthorized: false } : false,
-  max: 20,
+  max: 5,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
+});
+
+pool.on('connect', (client) => {
+  client.query('SET search_path TO public').catch(() => {});
 });
 
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
 });
 
-export const query = (text: string, params?: any[]) => pool.query(text, params);
+export const query = async (text: string, params?: any[]) => {
+  const client = await pool.connect();
+  try {
+    await client.query('SET search_path TO public');
+    return await client.query(text, params);
+  } finally {
+    client.release();
+  }
+};

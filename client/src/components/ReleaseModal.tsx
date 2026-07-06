@@ -20,12 +20,13 @@ interface Props {
   applicationId: string;
   productId: string;
   principal: number;
+  previousBalance?: number;
   onClose: () => void;
   onSuccess: () => void;
   onError?: (msg: string) => void;
 }
 
-export const ReleaseModal = ({ open, applicationId, productId, principal, onClose, onSuccess, onError }: Props) => {
+export const ReleaseModal = ({ open, applicationId, productId, principal, previousBalance = 0, onClose, onSuccess, onError }: Props) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [method, setMethod] = useState('cash');
@@ -55,7 +56,7 @@ export const ReleaseModal = ({ open, applicationId, productId, principal, onClos
       ? Math.round(principal * amt / 100 * 100) / 100
       : amt);
   }, 0);
-  const netProceeds = principal - totalCharges;
+  const netProceeds = principal - totalCharges - previousBalance;
 
   const handleRelease = async () => {
     setSaving(true);
@@ -101,7 +102,13 @@ export const ReleaseModal = ({ open, applicationId, productId, principal, onClos
                   </div>
                 );
               })}
-              {totalCharges > 0 && <div className="border-t border-gray-300 dark:border-gray-600 pt-2" />}
+              {previousBalance > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Previous Balance</span>
+                  <span className="text-red-500">- {formatCurrency(previousBalance)}</span>
+                </div>
+              )}
+              {(totalCharges > 0 || previousBalance > 0) && <div className="border-t border-gray-300 dark:border-gray-600 pt-2" />}
               <div className="flex justify-between font-bold text-base">
                 <span>Net Proceeds</span>
                 <span className="text-green-600">{formatCurrency(netProceeds)}</span>
@@ -125,9 +132,9 @@ export const ReleaseModal = ({ open, applicationId, productId, principal, onClos
               </Form.Group>
             </Form>
 
-            {productCharges.length > 0 && (
+            {(productCharges.length > 0 || previousBalance > 0) && (
               <div className="text-xs text-gray-400">
-                <p>Charges are deducted from the principal at release.</p>
+                <p>Charges{previousBalance > 0 ? ' and previous balance' : ''} are deducted from the principal at release.</p>
                 <p>The borrower receives the net proceeds.</p>
               </div>
             )}

@@ -69,39 +69,33 @@ export class CashierController {
         notes: req.body.notes || '',
       });
 
-      // Create reconciliation record for audit trail / variance approval
+      // Determine status upfront — auto-approve if within threshold
+      const thresholdResult = await cashierSessionRepo.query(
+        `SELECT value FROM system_settings WHERE key = 'cash_variance_threshold'`
+      );
+      const threshold = parseFloat(thresholdResult[0]?.value) || 500;
+      const absVariance = Math.abs(overShort);
+      const reconcilStatus = absVariance <= threshold ? 'approved' : 'pending';
+
       const varianceType = overShort === 0 ? 'balanced' : overShort > 0 ? 'over' : 'short';
       const reconciliation = await cashReconciliationRepo.create({
         shift_id: id, count_id: null,
         expected_cash: expectedCash, actual_cash: actual,
         variance: overShort, variance_type: varianceType,
         variance_reason: req.body.variance_reason || null,
-        status: 'pending',
+        status: reconcilStatus,
+        reviewed_by: reconcilStatus === 'approved' ? req.user?.userId : null,
+        reviewed_at: reconcilStatus === 'approved' ? new Date().toISOString() : null,
       });
 
-      // Auto-approve if within threshold
-      const thresholdResult = await cashierSessionRepo.query(
-        `SELECT value FROM system_settings WHERE key = 'cash_variance_threshold'`
-      );
-      const threshold = parseFloat(thresholdResult[0]?.value) || 500;
-      const absVariance = Math.abs(overShort);
-      if (absVariance <= threshold) {
-        await cashReconciliationRepo.update(reconciliation.id, {
-          status: 'approved', reviewed_by: req.user?.userId,
-          reviewed_at: new Date().toISOString(),
-        });
-        await approvalHistoryRepo.create({
-          shift_id: id, reconciliation_id: reconciliation.id,
-          action: 'auto-approved', performed_by: req.user?.userId,
-          comments: `Variance ${overShort.toFixed(2)} within threshold (${threshold.toFixed(2)}) — auto-approved`,
-        });
-      } else {
-        await approvalHistoryRepo.create({
-          shift_id: id, reconciliation_id: reconciliation.id,
-          action: 'submitted', performed_by: req.user?.userId,
-          comments: `Variance ${overShort.toFixed(2)} exceeds threshold (${threshold.toFixed(2)}) — pending approval`,
-        });
-      }
+      await approvalHistoryRepo.create({
+        shift_id: id, reconciliation_id: reconciliation.id,
+        action: reconcilStatus === 'approved' ? 'auto-approved' : 'submitted',
+        performed_by: req.user?.userId,
+        comments: reconcilStatus === 'approved'
+          ? `Variance ${overShort.toFixed(2)} within threshold (${threshold.toFixed(2)}) — auto-approved`
+          : `Variance ${overShort.toFixed(2)} exceeds threshold (${threshold.toFixed(2)}) — pending approval`,
+      });
 
       const updated = await cashierSessionRepo.findById(id);
       res.json({ success: true, data: updated });

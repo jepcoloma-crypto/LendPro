@@ -87,10 +87,12 @@ export class ReportController {
         params.push(borrowerId);
       }
       const rows = await loanRepo.query(
-        `SELECT l.id as loan_id, l.loan_number, l.principal_amount, l.total_amount, l.outstanding_balance, l.status as loan_status,
+        `SELECT l.id as loan_id, l.loan_number, l.principal_amount, l.total_amount, l.outstanding_balance, l.net_proceeds, l.status as loan_status,
                 b.first_name || ' ' || b.last_name as borrower_name, b.borrower_code,
                 a.id as schedule_id, a.installment_no, a.due_date, a.total_due, a.paid_amount, a.status as schedule_status, a.penalty_amount, a.paid_at,
-                u.first_name || ' ' || u.last_name as loan_officer_name
+                u.first_name || ' ' || u.last_name as loan_officer_name,
+                COALESCE(la.previous_balance, 0) as previous_balance,
+                COALESCE((SELECT SUM(amount) FROM loan_charges WHERE loan_id = l.id), 0) as total_charges
          FROM loans l
          JOIN borrowers b ON l.borrower_id = b.id
          JOIN amortization_schedules a ON a.loan_id = l.id
@@ -114,6 +116,9 @@ export class ReportController {
             total_amount: row.total_amount,
             outstanding_balance: row.outstanding_balance,
             loan_officer_name: row.loan_officer_name || '',
+            net_proceeds: row.net_proceeds,
+            previous_balance: parseFloat(row.previous_balance) || 0,
+            total_charges: parseFloat(row.total_charges) || 0,
             paid: 0, partial: 0, unpaid: 0,
             schedules: [],
           };
@@ -132,6 +137,9 @@ export class ReportController {
         if (row.schedule_status === 'paid') current.paid++;
         else if (row.schedule_status === 'partial') current.partial++;
         else current.unpaid++;
+      }
+      for (const g of grouped) {
+        g.effective_net_proceeds = Math.max(0, parseFloat(g.principal_amount) - g.total_charges - g.previous_balance);
       }
       res.json({ success: true, data: grouped });
     } catch (error: any) {
@@ -444,7 +452,7 @@ export class ReportController {
             l.loan_number, l.release_date,
             l.principal_amount, l.interest_amount, l.total_amount, l.net_proceeds,
             l.term_months, l.payment_frequency, l.status,
-            la.application_type,
+            la.application_type, la.previous_balance,
             b.name as branch_name,
            br.first_name || ' ' || br.last_name as borrower_name,
            br.present_address, br.present_city, br.present_province,
@@ -784,7 +792,7 @@ export class ReportController {
          JOIN borrowers br ON br.id = a.borrower_id
          LEFT JOIN users u ON u.id = a.assigned_officer_id
          LEFT JOIN branches b ON b.id = COALESCE(br.branch_id, u.branch_id)
-         WHERE a.status != 'draft'
+         WHERE a.deleted_at IS NULL AND a.status != 'draft'
            AND ($1::date IS NULL OR a.created_at >= $1::date)
            AND ($2::date IS NULL OR a.created_at <= $2::date + interval '1 day')
          GROUP BY b.name, a.application_type
@@ -801,7 +809,7 @@ export class ReportController {
          JOIN borrowers br ON br.id = a.borrower_id
          LEFT JOIN users u ON u.id = a.assigned_officer_id
          LEFT JOIN branches b ON b.id = COALESCE(br.branch_id, u.branch_id)
-         WHERE a.status != 'draft'
+         WHERE a.deleted_at IS NULL AND a.status != 'draft'
            AND ($1::date IS NULL OR a.created_at >= $1::date)
            AND ($2::date IS NULL OR a.created_at <= $2::date + interval '1 day')
          GROUP BY b.name

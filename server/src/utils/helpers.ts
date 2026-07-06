@@ -21,6 +21,8 @@ export const generateReceiptNumber = (): string => generateCode(getReceiptPrefix
 
 export const generateBorrowerCode = (): string => generateCode(getBorrowerCodePrefix());
 
+export const generatePickupNumber = (): string => generateCode('PU-');
+
 export const paramStr = (val: any): string =>
   Array.isArray(val) ? String(val[0]) : (val ? String(val) : '');
 

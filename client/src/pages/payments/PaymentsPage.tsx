@@ -106,6 +106,13 @@ export const PaymentsPage = () => {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    if (formValue.loanId && loans.length) {
+      const sl = loans.find(l => l.id === formValue.loanId);
+      if (sl) setFormValue((prev: any) => ({ ...prev, collectorId: sl.collector_id || null }));
+    }
+  }, [formValue.loanId, loans]);
+
   const toDateString = (d: Date) => { const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; };
 
   const computePenalty = (schedule: any, loan: any, payDateNorm: Date): number => {
@@ -235,6 +242,7 @@ export const PaymentsPage = () => {
         paymentDate: toDateString(payDate),
         referenceNumber: payReference || undefined,
         penaltyAmount: penaltyTotal,
+        collectorId: payLoan.collector_id || null,
         allocations,
       });
       setInstModalOpen(false);
@@ -341,7 +349,7 @@ export const PaymentsPage = () => {
             <tr><td>Received From:</td><td>${r.borrower_name}</td></tr>
             ${r.present_address ? `<tr><td>Address:</td><td>${r.present_address}${r.present_city ? `, ${r.present_city}` : ''}</td></tr>` : ''}
             <tr><td>Loan #:</td><td>${r.loan_number}</td></tr>
-            <tr><td>Payment Method:</td><td>${r.payment_method}${r.reference_number ? ` (Ref: ${r.reference_number})` : ''}</td></tr>
+            <tr><td>Payment Method:</td><td>${r.payment_method === 'historical' ? 'Historical' : r.payment_method}${r.reference_number ? ` (Ref: ${r.reference_number})` : ''}</td></tr>
           </table>
           <div class="amount-box">
             <span class="label">AMOUNT PAID</span>
@@ -400,7 +408,7 @@ export const PaymentsPage = () => {
           <Column width={180}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
           <Column width={200}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
           <Column width={130}><HeaderCell>Amount</HeaderCell><Cell>{(r: Payment) => formatCurrency(r.amount)}</Cell></Column>
-          <Column width={120}><HeaderCell>Method</HeaderCell><Cell>{(r: Payment) => <Tag color={methodColor(r.payment_method)}>{r.payment_method}</Tag>}</Cell></Column>
+          <Column width={120}><HeaderCell>Method</HeaderCell><Cell>{(r: Payment) => r.payment_method === 'historical' ? <Tag color="violet">Historical</Tag> : <Tag color={methodColor(r.payment_method)}>{r.payment_method}</Tag>}</Cell></Column>
           <Column width={100}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => r.status === 'cancelled' ? <Tag color="red">Cancelled</Tag> : <Tag color="green">Completed</Tag>}</Cell></Column>
           <Column width={130}><HeaderCell>Date</HeaderCell><Cell>{(r: Payment) => new Date(r.payment_date).toLocaleDateString()}</Cell></Column>
           <Column width={280} align="center"><HeaderCell>Actions</HeaderCell><Cell>{(r: any) => (
@@ -426,7 +434,7 @@ export const PaymentsPage = () => {
               <SelectPicker data={loans.filter(l => l.status === 'active').map(l => ({
                 label: `${l.loan_number} - ${l.borrower_name} (${formatCurrency(l.outstanding_balance)})`,
                 value: l.id,
-              }))} value={formValue.loanId} onChange={(v) => setFormValue({ ...formValue, loanId: v })} style={{ width: '100%' }} />
+              }))} value={formValue.loanId} onChange={(v) => { const sl = loans.find(l => l.id === v); setFormValue({ ...formValue, loanId: v, collectorId: sl?.collector_id || null }); }} style={{ width: '100%' }} />
             </Form.Group>
             <Form.Group>
               <Form.ControlLabel>Amount *</Form.ControlLabel>
@@ -453,6 +461,10 @@ export const PaymentsPage = () => {
               <Form.ControlLabel>Notes</Form.ControlLabel>
               <textarea className="rs-input w-full" rows={3} value={formValue.notes || ''} onChange={(e) => setFormValue({ ...formValue, notes: e.target.value })} />
             </Form.Group>
+            <div className="flex items-center gap-2 mt-2">
+              <input type="checkbox" id="waivePenalty" checked={formValue.waivePenalty || false} onChange={(e) => setFormValue({ ...formValue, waivePenalty: e.target.checked })} className="w-4 h-4" />
+              <label htmlFor="waivePenalty" className="text-sm text-gray-600 cursor-pointer select-none">Waive Penalty</label>
+            </div>
           </Form>
           <div className="mt-3 text-sm text-gray-500">
             <Button appearance="link" size="sm" onClick={() => { setModalOpen(false); setVoidPaymentId(null); openInstallmentModal(); }}>
@@ -563,7 +575,7 @@ export const PaymentsPage = () => {
                 ['Principal', formatCurrency(viewPayment.principal_amount)],
                 ['Interest', formatCurrency(viewPayment.interest_amount)],
                 ['Penalty', formatCurrency(viewPayment.penalty_amount)],
-                ['Method', viewPayment.payment_method],
+                ['Method', viewPayment.payment_method === 'historical' ? 'Historical' : viewPayment.payment_method],
                 ['Reference', viewPayment.reference_number || '-'],
                 ['Date', new Date(viewPayment.payment_date).toLocaleDateString()],
                 ['Received By', viewPayment.received_by_name || '-'],

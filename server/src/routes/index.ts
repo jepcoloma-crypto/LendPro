@@ -20,6 +20,7 @@ import { twilioWebhook, setBorrowerPin } from '../controllers/twilio.controller'
 import { cashflowController } from '../controllers/cashflow.controller';
 import { cancellationController } from '../controllers/cancellation.controller';
 import { cashierController } from '../controllers/cashier.controller';
+import { pickupController } from '../controllers/pickup.controller';
 import { auditLogRepo } from '../repositories';
 
 
@@ -83,9 +84,13 @@ router.put('/loan-products/:id', authenticate, authorize('super-admin', 'admin')
 
 // Loan Applications
 router.get('/applications', authenticate, loanController.getApplications.bind(loanController));
+router.get('/applications/deleted', authenticate, authorize('super-admin'), loanController.getDeletedApplications.bind(loanController));
 router.post('/applications', authenticate, auditLog('create', 'application'), loanController.createApplication.bind(loanController));
 router.put('/applications/:id', authenticate, auditLog('update', 'application'), loanController.updateApplication.bind(loanController));
-router.delete('/applications/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager'), auditLog('delete', 'application'), loanController.deleteApplication.bind(loanController));
+router.delete('/applications/:id', authenticate, authorize('super-admin'), auditLog('delete', 'application'), loanController.deleteApplication.bind(loanController));
+router.delete('/applications/:id/permanent', authenticate, authorize('super-admin'), auditLog('permanent-delete', 'application'), loanController.permanentDeleteApplication.bind(loanController));
+router.delete('/applications/trash/empty', authenticate, authorize('super-admin'), auditLog('empty-trash', 'application'), loanController.emptyTrash.bind(loanController));
+router.post('/applications/:id/restore', authenticate, authorize('super-admin'), auditLog('restore', 'application'), loanController.restoreApplication.bind(loanController));
 router.get('/applications/:id', authenticate, loanController.getApplicationById.bind(loanController));
 router.get('/applications/:id/amortization', authenticate, loanController.getTempAmortization.bind(loanController));
 router.get('/applications/:id/print-document', authenticate, loanController.getPrintDocument.bind(loanController));
@@ -103,6 +108,7 @@ router.delete('/applications/:id/documents/:docId', authenticate, auditLog('dele
 
 // Loans
 router.get('/loans', authenticate, loanController.getLoans.bind(loanController));
+router.post('/loans/historical', authenticate, authorize('super-admin', 'admin'), auditLog('create', 'loan'), loanController.createHistoricalLoan.bind(loanController));
 router.get('/loans/dashboard', authenticate, loanController.getDashboardStats.bind(loanController));
 router.get('/loans/:id', authenticate, loanController.getLoanById.bind(loanController));
 router.get('/loans/:id/schedule', authenticate, loanController.getLoanSchedule.bind(loanController));
@@ -151,6 +157,14 @@ router.put('/cash-reconciliations/:id/reject', authenticate, authorize('super-ad
 router.put('/cash-reconciliations/:id/request-recount', authenticate, authorize('super-admin', 'admin'), auditLog('request-recount', 'reconciliation'), cashierController.requestRecount.bind(cashierController));
 // Approval history
 router.get('/approval-history', authenticate, authorize('super-admin', 'admin'), cashierController.approvalHistory.bind(cashierController));
+// Cash Pick-up from collectors
+router.post('/pickups', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('create', 'pickup'), pickupController.createPickup.bind(pickupController));
+router.get('/pickups', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), pickupController.getPickups.bind(pickupController));
+router.get('/pickups/unremitted-payments', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), pickupController.getUnremittedPayments.bind(pickupController));
+router.get('/pickups/collector-outstanding', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), pickupController.getCollectorOutstanding.bind(pickupController));
+router.get('/pickups/report', authenticate, authorize('super-admin', 'admin', 'branch-manager'), pickupController.getPickupReport.bind(pickupController));
+router.get('/pickups/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), pickupController.getPickupById.bind(pickupController));
+
 // Cash management reports
 router.get('/cash-reports/collection-summary', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.reportCollectionSummary.bind(cashierController));
 router.get('/cash-reports/variance-summary', authenticate, authorize('super-admin', 'admin', 'branch-manager'), cashierController.reportVarianceSummary.bind(cashierController));

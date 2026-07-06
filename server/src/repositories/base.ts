@@ -136,6 +136,7 @@ export class BaseRepository {
     const { pool } = require('../database/connection');
     const client = await pool.connect();
     try {
+      await client.query('SET search_path TO public');
       await client.query('BEGIN');
       const result = await callback(client);
       await client.query('COMMIT');

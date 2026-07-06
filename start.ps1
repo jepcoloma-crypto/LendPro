@@ -32,8 +32,12 @@ Write-Host "`nTunnel URL: $tunnelUrl" -ForegroundColor Green
 # Update Vercel
 Write-Host "`nUpdating Vercel with new URL..." -ForegroundColor Yellow
 cd C:\Projects\LendingApp\client
-$tunnelUrl | vercel env add VITE_API_BASE_URL production --force 2>$null
-vercel deploy --prod --yes 2>$null | Out-Null
+# Remove old env var (ignore error if not exists)
+vercel env rm VITE_API_BASE_URL production --yes 2>$null | Out-Null
+# Add new env var
+$tunnelUrl | vercel env add VITE_API_BASE_URL production 2>&1 | Out-Null
+# Redeploy
+vercel deploy --prod 2>&1 | Out-Null
 
 Write-Host "`n=== Done! ===" -ForegroundColor Green
 Write-Host "Frontend: https://lendpro-seven.vercel.app"

@@ -1,4 +1,5 @@
 import { BaseRepository } from './base';
+import { query } from '../database/connection';
 
 export class UserRepository extends BaseRepository { constructor() { super('users'); } }
 export class RoleRepository extends BaseRepository { constructor() { super('roles'); } }
@@ -8,7 +9,130 @@ export class BorrowerDocumentRepository extends BaseRepository { constructor() {
 export class CoMakerRepository extends BaseRepository { constructor() { super('co_makers'); } }
 export class LoanProductRepository extends BaseRepository { constructor() { super('loan_products'); } }
 export class InterestTypeRepository extends BaseRepository { constructor() { super('interest_types'); } }
-export class LoanApplicationRepository extends BaseRepository { constructor() { super('loan_applications'); } }
+export class LoanApplicationRepository extends BaseRepository {
+  constructor() { super('loan_applications'); }
+
+  async findById(id: string, select: string = '*'): Promise<any | null> {
+    const result = await query(
+      `SELECT ${select} FROM ${this.tableName} WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    return result.rows[0] || null;
+  }
+
+  async findOne(conditions: Record<string, any>, select: string = '*'): Promise<any | null> {
+    const whereClauses: string[] = ['deleted_at IS NULL'];
+    const values: any[] = [];
+    let paramIndex = 1;
+    for (const [key, value] of Object.entries(conditions)) {
+      whereClauses.push(`${key} = $${paramIndex}`);
+      values.push(value);
+      paramIndex++;
+    }
+    const result = await query(
+      `SELECT ${select} FROM ${this.tableName} WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
+  async findAll(options: {
+    conditions?: Record<string, any>;
+    joins?: string;
+    select?: string;
+    orderBy?: string;
+    limit?: number;
+    offset?: number;
+    alias?: string;
+  } = {}): Promise<{ rows: any[]; total: number }> {
+    const { conditions = {}, joins = '', select = '*', orderBy = 'created_at DESC', limit = 10, offset = 0, alias } = options;
+    const from = alias ? `${this.tableName} ${alias}` : this.tableName;
+    const whereClauses: string[] = ['deleted_at IS NULL'];
+    const values: any[] = [];
+    let paramIndex = 1;
+    for (const [key, value] of Object.entries(conditions)) {
+      if (value !== undefined && value !== null) {
+        whereClauses.push(`${key} = $${paramIndex}`);
+        values.push(value);
+        paramIndex++;
+      }
+    }
+    const where = `WHERE ${whereClauses.join(' AND ')}`;
+    const countResult = await query(`SELECT COUNT(*) FROM ${from} ${joins} ${where}`, values);
+    const total = parseInt(countResult.rows[0].count, 10);
+    const dataResult = await query(
+      `SELECT ${select} FROM ${from} ${joins} ${where} ORDER BY ${orderBy} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+      [...values, limit, offset]
+    );
+    return { rows: dataResult.rows, total };
+  }
+
+  async softDelete(id: string): Promise<boolean> {
+    const result = await query(
+      `UPDATE ${this.tableName} SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async restore(id: string): Promise<any | null> {
+    const result = await query(
+      `UPDATE ${this.tableName} SET deleted_at = NULL WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    return result.rows[0] || null;
+  }
+
+  async findDeleted(options: {
+    joins?: string;
+    select?: string;
+    orderBy?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{ rows: any[]; total: number }> {
+    const { joins = '', select = '*', orderBy = 'deleted_at DESC', limit = 10, offset = 0 } = options;
+    const countResult = await query(
+      `SELECT COUNT(*) FROM ${this.tableName} ${joins} WHERE deleted_at IS NOT NULL`
+    );
+    const total = parseInt(countResult.rows[0].count, 10);
+    const dataResult = await query(
+      `SELECT ${select} FROM ${this.tableName} ${joins} WHERE deleted_at IS NOT NULL ORDER BY ${orderBy} LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    return { rows: dataResult.rows, total };
+  }
+
+  async findAllIncludingDeleted(options: {
+    conditions?: Record<string, any>;
+    joins?: string;
+    select?: string;
+    orderBy?: string;
+    limit?: number;
+    offset?: number;
+    alias?: string;
+  } = {}): Promise<{ rows: any[]; total: number }> {
+    const { conditions = {}, joins = '', select = '*', orderBy = 'created_at DESC', limit = 10, offset = 0, alias } = options;
+    const from = alias ? `${this.tableName} ${alias}` : this.tableName;
+    const whereClauses: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+    for (const [key, value] of Object.entries(conditions)) {
+      if (value !== undefined && value !== null) {
+        whereClauses.push(`${key} = $${paramIndex}`);
+        values.push(value);
+        paramIndex++;
+      }
+    }
+    const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    const countResult = await query(`SELECT COUNT(*) FROM ${from} ${joins} ${where}`, values);
+    const total = parseInt(countResult.rows[0].count, 10);
+    const dataResult = await query(
+      `SELECT ${select} FROM ${from} ${joins} ${where} ORDER BY ${orderBy} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+      [...values, limit, offset]
+    );
+    return { rows: dataResult.rows, total };
+  }
+}
 export class ApplicationDocumentRepository extends BaseRepository { constructor() { super('application_documents'); } }
 export class LoanApprovalRepository extends BaseRepository { constructor() { super('loan_approvals'); } }
 export class LoanRepository extends BaseRepository { constructor() { super('loans'); } }

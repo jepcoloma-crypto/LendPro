@@ -35,17 +35,22 @@ export class PaymentService {
     }
 
     let penaltyAmount = 0;
-    const pValue = parseFloat(loan.penalty_value) || 0;
-    const maturedValue = parseFloat(loan.penalty_matured_value) || 0;
 
-    if (totalOverdue > 0) {
-      const maturityDate = loan.maturity_date ? new Date(loan.maturity_date) : null;
-      if (maturityDate && paymentDateNorm > new Date(maturityDate.getFullYear(), maturityDate.getMonth(), maturityDate.getDate())) {
-        const daysPast = Math.floor((paymentDateNorm.getTime() - new Date(maturityDate.getFullYear(), maturityDate.getMonth(), maturityDate.getDate()).getTime()) / (1000 * 60 * 60 * 24));
-        const monthsPast = daysPast / 30;
-        penaltyAmount = Math.round(totalOverdue * (maturedValue / 100) * monthsPast * 100) / 100;
-      } else if (pValue > 0) {
-        penaltyAmount = Math.round(totalOverdue * (pValue / 100) * 100) / 100;
+    if (data.waivePenalty === true || data.waivePenalty === 'true') {
+      // penalty waived by user
+    } else {
+      const pValue = parseFloat(loan.penalty_value) || 0;
+      const maturedValue = parseFloat(loan.penalty_matured_value) || 0;
+
+      if (totalOverdue > 0) {
+        const maturityDate = loan.maturity_date ? new Date(loan.maturity_date) : null;
+        if (maturityDate && paymentDateNorm > new Date(maturityDate.getFullYear(), maturityDate.getMonth(), maturityDate.getDate())) {
+          const daysPast = Math.floor((paymentDateNorm.getTime() - new Date(maturityDate.getFullYear(), maturityDate.getMonth(), maturityDate.getDate()).getTime()) / (1000 * 60 * 60 * 24));
+          const monthsPast = daysPast / 30;
+          penaltyAmount = Math.round(totalOverdue * (maturedValue / 100) * monthsPast * 100) / 100;
+        } else if (pValue > 0) {
+          penaltyAmount = Math.round(totalOverdue * (pValue / 100) * 100) / 100;
+        }
       }
     }
 
@@ -116,6 +121,8 @@ export class PaymentService {
       receipt_number: receiptNumber,
       notes: data.notes || null,
       status: 'completed',
+      collector_id: data.collectorId || null,
+      remittance_status: data.collectorId ? 'pending' : 'direct',
     });
 
     // Second pass: update schedules and record allocations
@@ -215,6 +222,8 @@ export class PaymentService {
       receipt_number: receiptNumber,
       notes: data.notes || null,
       status: 'completed',
+      collector_id: data.collectorId || null,
+      remittance_status: data.collectorId ? 'pending' : 'direct',
     });
 
     // Distribute penalty to all overdue schedules proportionally
