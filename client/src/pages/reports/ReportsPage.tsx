@@ -127,7 +127,7 @@ export const ReportsPage = () => {
         setBorrowers(br.data.data || []);
         setCollectors(us.data.data || []);
         setBranches(bra.data.data || []);
-      } catch (err) { console.error(err); }
+      } catch { /* ignore */ }
       finally { setLoading(false); }
     };
     fetchData();

@@ -160,11 +160,11 @@ export const CashierReconciliationPage = () => {
   useEffect(() => { if (activeTab === 'approvals') fetchPending(); }, [activeTab, fetchPending]);
 
   const fetchDashStats = useCallback(async () => {
-    try { const { data } = await api.get('/cashier-sessions/dashboard/stats'); setDashStats(data.data); } catch {}
+    try { const { data } = await api.get('/cashier-sessions/dashboard/stats'); setDashStats(data.data); } catch { setDashStats(null); }
   }, []);
 
   const fetchCollectors = useCallback(async () => {
-    try { const { data } = await api.get('/users/collectors'); setCollectors(data.data || []); } catch {}
+    try { const { data } = await api.get('/users/collectors'); setCollectors(data.data || []); } catch { setCollectors([]); }
   }, []);
 
   const fetchUnremitted = useCallback(async (collectorId: string) => {
@@ -210,7 +210,7 @@ export const CashierReconciliationPage = () => {
   };
 
   const fetchChart = useCallback(async () => {
-    try { const { data } = await api.get('/cash-reports/daily-chart', { params: { days: 7 } }); setChartData(data.data || []); } catch {}
+    try { const { data } = await api.get('/cash-reports/daily-chart', { params: { days: 7 } }); setChartData(data.data || []); } catch { setChartData([]); }
   }, []);
 
   const fmtDate = (d: Date) => d.toLocaleDateString('en-CA');
@@ -946,7 +946,7 @@ ${transactions.map((t: any, i: number) => `<tr>
                 <Column width={200}><HeaderCell>Notes</HeaderCell><Cell dataKey="notes" /></Column>
                 <Column width={80} align="center"><HeaderCell>View</HeaderCell><Cell>{(r: any) => (
                   <Button size="xs" appearance="ghost" onClick={async () => {
-                    try { const { data } = await api.get(`/pickups/${r.id}`); setPickupView(data.data); setPickupViewModal(true); } catch {}
+                    try { const { data } = await api.get(`/pickups/${r.id}`); setPickupView(data.data); setPickupViewModal(true); } catch { toaster.push(<Message type="error">Failed to load pickup details</Message>, { placement: 'topEnd' }); }
                   }}><Eye className="w-3.5 h-3.5" /></Button>
                 )}</Cell></Column>
               </Table>

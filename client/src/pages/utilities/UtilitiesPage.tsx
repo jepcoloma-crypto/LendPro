@@ -83,15 +83,15 @@ const SystemToolsTab = () => {
               a.click();
               document.body.removeChild(a);
               window.URL.revokeObjectURL(url);
-              try { toaster.push(<Message type="success">Backup downloaded</Message>, { placement: 'topEnd' }); } catch {}
+              toaster.push(<Message type="success">Backup downloaded</Message>, { placement: 'topEnd' });
             } else if (msg.type === 'error') {
-              try { toaster.push(<Message type="error">{msg.message}</Message>, { placement: 'topEnd' }); } catch {}
+              toaster.push(<Message type="error">{msg.message}</Message>, { placement: 'topEnd' });
             }
           } catch {}
         }
       }
     } catch {
-      try { toaster.push(<Message type="error">Backup failed</Message>, { placement: 'topEnd' }); } catch {}
+      toaster.push(<Message type="error">Backup failed</Message>, { placement: 'topEnd' });
     }
     finally { setBackupLoading(false); setBackupProgress(0); setBackupTotal(0); setBackupTable(''); }
   };
@@ -259,18 +259,18 @@ const SystemToolsTab = () => {
                         else if (msg.type === 'progress') { setRestoreProgress(msg.current); if (msg.total) setRestoreTotal(msg.total); }
                         else if (msg.type === 'progress_note') setRestoreNote(msg.message);
                         else if (msg.type === 'complete') {
-                          try { toaster.push(<Message type="success">{msg.message}</Message>, { placement: 'topEnd' }); } catch {}
+                          toaster.push(<Message type="success">{msg.message}</Message>, { placement: 'topEnd' });
                         } else if (msg.type === 'error') {
-                          try { toaster.push(<Message type="error">{msg.message}</Message>, { placement: 'topEnd' }); } catch {}
+                          toaster.push(<Message type="error">{msg.message}</Message>, { placement: 'topEnd' });
                         }
                       } catch {}
                     }
                   }
                   if (lastMessage && !lastMessage.includes('complete')) {
-                    try { toaster.push(<Message type="success">{lastMessage}</Message>, { placement: 'topEnd' }); } catch {}
+                    toaster.push(<Message type="success">{lastMessage}</Message>, { placement: 'topEnd' });
                   }
                 } catch {
-                  try { toaster.push(<Message type="error">Restore failed</Message>, { placement: 'topEnd' }); } catch {}
+                  toaster.push(<Message type="error">Restore failed</Message>, { placement: 'topEnd' });
                 }
                 finally { setRestoreOpen(false); setRestoreFile(null); setRestoreProgress(0); setRestoreTotal(0); setRestoreLoading(false); setRestoreNote(''); }
               }}>Restore Database</Button>

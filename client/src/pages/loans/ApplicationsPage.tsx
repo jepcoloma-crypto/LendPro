@@ -238,7 +238,6 @@ const [collectors, setCollectors] = useState<any[]>([]);
     } catch (err: any) {
       const msg = err?.response?.data?.error || err?.message || 'Error creating application';
       toaster.push(<Message type="error">{msg}</Message>, { placement: 'topEnd' });
-      console.error('Create application error:', err);
     } finally {
       setCreating(false);
     }
@@ -717,7 +716,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
                       const { data: loansRes } = await api.get('/loans', { params: { borrowerId: v, limit: 1 } });
                       const hasExisting = (loansRes.data || []).some((l: any) => ['active', 'closed'].includes(l.status));
                       setFormValue((prev: any) => ({ ...prev, borrowerId: v, applicationType: hasExisting ? 'Renewal' : 'New' }));
-                    } catch {}
+                    } catch { toaster.push(<Message type="error">Failed to check existing loans</Message>, { placement: 'topEnd' }); }
                   }
                 }} style={{ width: '100%' }} block />
               </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Panel, Loader, Row, Col, Tag, Button } from 'rsuite';
+import { Panel, Loader, Row, Col, Tag, Button, toaster, Message } from 'rsuite';
 import { loansApi, applicationsApi, paymentsApi, borrowersApi, collectionsApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { DashboardStats } from '../../types';
@@ -68,8 +68,8 @@ export const DashboardPage = () => {
           });
           setExtra(extraData);
         }
-      } catch (err) {
-        console.error('Failed to load dashboard', err);
+      } catch {
+        toaster.push(<Message type="error">Failed to load dashboard data</Message>, { placement: 'topEnd' });
       } finally {
         setLoading(false);
       }

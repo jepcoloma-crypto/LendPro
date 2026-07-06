@@ -163,10 +163,10 @@ export const PaymentsPage = () => {
       setFormValue({});
       setVoidPaymentId(null);
       fetchPayments();
-      try { toaster.push(<Message type="success">Payment received. {voidPaymentId ? 'Cancellation request submitted for old payment.' : ''}</Message>, { placement: 'topEnd' }); } catch {}
+      toaster.push(<Message type="success">Payment received. {voidPaymentId ? 'Cancellation request submitted for old payment.' : ''}</Message>, { placement: 'topEnd' });
       if (res?.data?.id) printReceipt(res.data.id);
     } catch (err: any) {
-      try { toaster.push(<Message type="error">{err?.response?.data?.error || 'Error processing payment'}</Message>, { placement: 'topEnd' }); } catch {}
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Error processing payment'}</Message>, { placement: 'topEnd' });
     }
   };
 
@@ -228,7 +228,7 @@ export const PaymentsPage = () => {
       .map(([scheduleId, v]) => ({ scheduleId, amount: v.amount, penalty: v.penalty || 0 }));
 
     if (allocations.filter(a => a.amount > 0).length === 0 && penaltyTotal <= 0) {
-      try { toaster.push(<Message type="warning">Enter at least one payment amount</Message>, { placement: 'topEnd' }); } catch {}
+      toaster.push(<Message type="warning">Enter at least one payment amount</Message>, { placement: 'topEnd' });
       return;
     }
 
@@ -247,10 +247,10 @@ export const PaymentsPage = () => {
       });
       setInstModalOpen(false);
       fetchPayments();
-      try { toaster.push(<Message type="success">Payment recorded</Message>, { placement: 'topEnd' }); } catch {}
+      toaster.push(<Message type="success">Payment recorded</Message>, { placement: 'topEnd' });
       if (res?.data?.id) printReceipt(res.data.id);
     } catch (err: any) {
-      try { toaster.push(<Message type="error">{err?.response?.data?.error || 'Payment failed'}</Message>, { placement: 'topEnd' }); } catch {}
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Payment failed'}</Message>, { placement: 'topEnd' });
     } finally { setPaySubmitting(false); }
   };
 

@@ -94,9 +94,9 @@ export const LoansPage = () => {
       setEditOpen(false);
       setViewOpen(false);
       fetchLoans();
-      try { toaster.push(<Message type="success">Loan updated</Message>, { placement: 'topEnd' }); } catch {}
+      toaster.push(<Message type="success">Loan updated</Message>, { placement: 'topEnd' });
     } catch (err: any) {
-      try { toaster.push(<Message type="error">{err?.response?.data?.error || 'Update failed'}</Message>, { placement: 'topEnd' }); } catch {}
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Update failed'}</Message>, { placement: 'topEnd' });
     }
   };
 
@@ -146,7 +146,7 @@ export const LoansPage = () => {
           <p className="text-gray-500 dark:text-gray-400">Manage active and closed loans</p>
         </div>
         {isAdmin && (
-          <Button appearance="subtle" color="violet" onClick={async () => { try { const [bRes, pRes] = await Promise.all([borrowersApi.getAll({ limit: 1000 }), loanProductsApi.getAll()]); setHistoryBorrowers(bRes.data.data || []); setHistoryProducts(pRes.data.data || []); } catch {} setHistoryForm({ paymentFrequency: 'monthly', interestType: 'flat-rate', status: 'paid', schedule: [] }); setHistoryFormKey((k) => k + 1); setHistoryOpen(true); }} startIcon={<FileText className="w-4 h-4" />}>
+          <Button appearance="subtle" color="violet" onClick={async () => { try { const [bRes, pRes] = await Promise.all([borrowersApi.getAll({ limit: 1000 }), loanProductsApi.getAll()]); setHistoryBorrowers(bRes.data.data || []); setHistoryProducts(pRes.data.data || []); } catch { toaster.push(<Message type="error">Failed to load data</Message>, { placement: 'topEnd' }); } setHistoryForm({ paymentFrequency: 'monthly', interestType: 'flat-rate', status: 'paid', schedule: [] }); setHistoryFormKey((k) => k + 1); setHistoryOpen(true); }} startIcon={<FileText className="w-4 h-4" />}>
             Record Historical
           </Button>
         )}
