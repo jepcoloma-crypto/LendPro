@@ -487,6 +487,21 @@ export class CashierController {
         [userId]
       );
 
+      // Sum cash on hand across all open shifts in scope
+      let cohFilter = '';
+      const cohParams: any[] = [];
+      if (roleSlug === 'cashier') {
+        cohFilter = `AND cs.user_id = $1`;
+        cohParams.push(userId);
+      } else if (roleSlug === 'branch-manager' && branchId) {
+        cohFilter = `AND cs.branch_id = $1`;
+        cohParams.push(branchId);
+      }
+      const cashOnHand = await cashierSessionRepo.query(
+        `SELECT COALESCE(SUM(expected_cash), 0) as total FROM cashier_sessions cs WHERE cs.status = 'open' ${cohFilter}`,
+        cohParams
+      );
+
       const todayTxns = await cashierSessionRepo.query(
         `SELECT COUNT(*) as count FROM cash_transactions WHERE created_at::date = $1`,
         [today]
@@ -500,7 +515,7 @@ export class CashierController {
           open_shifts: parseInt(shiftStats[0]?.open_shifts) || 0,
           closed_shifts: parseInt(shiftStats[0]?.closed_shifts) || 0,
           pending_approvals: parseInt(pendingApprovals[0]?.count) || 0,
-          cash_on_hand: openShift[0]?.expected_cash || 0,
+          cash_on_hand: parseFloat(cashOnHand[0]?.total) || 0,
           shift_open: !!openShift[0],
           shift_opened_at: openShift[0]?.opened_at || null,
           shift_opening_float: openShift[0]?.opening_float || 0,
