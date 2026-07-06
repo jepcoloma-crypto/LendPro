@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Tag, Modal, Form, toaster, Message, SelectPicker, InputNumber, Input } from 'rsuite';
-import { loansApi, borrowersApi, loanProductsApi } from '../../services/api';
+import { loansApi, borrowersApi, loanProductsApi, usersApi } from '../../services/api';
 import { Loan } from '../../types';
 import { Eye, Edit3, Trash2, ExternalLink, Ban, RefreshCw, FileText } from 'lucide-react';
 import { DataTable } from '../../components/DataTable';
@@ -43,6 +43,7 @@ export const LoansPage = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyBorrowers, setHistoryBorrowers] = useState<any[]>([]);
   const [historyProducts, setHistoryProducts] = useState<any[]>([]);
+  const [historyCollectors, setHistoryCollectors] = useState<any[]>([]);
   const limit = 20;
 
   const fetchLoans = async () => {
@@ -146,7 +147,7 @@ export const LoansPage = () => {
           <p className="text-gray-500 dark:text-gray-400">Manage active and closed loans</p>
         </div>
         {isAdmin && (
-          <Button appearance="subtle" color="violet" onClick={async () => { try { const [bRes, pRes] = await Promise.all([borrowersApi.getAll({ limit: 1000 }), loanProductsApi.getAll()]); setHistoryBorrowers(bRes.data.data || []); setHistoryProducts(pRes.data.data || []); } catch { toaster.push(<Message type="error">Failed to load data</Message>, { placement: 'topEnd' }); } setHistoryForm({ paymentFrequency: 'monthly', interestType: 'flat-rate', status: 'paid', schedule: [] }); setHistoryFormKey((k) => k + 1); setHistoryOpen(true); }} startIcon={<FileText className="w-4 h-4" />}>
+          <Button appearance="subtle" color="violet" onClick={async () => { try { const [bRes, pRes, cRes] = await Promise.all([borrowersApi.getAll({ limit: 1000 }), loanProductsApi.getAll(), usersApi.getCollectors()]); setHistoryBorrowers(bRes.data.data || []); setHistoryProducts(pRes.data.data || []); setHistoryCollectors(cRes.data.data || []); } catch { toaster.push(<Message type="error">Failed to load data</Message>, { placement: 'topEnd' }); } setHistoryForm({ paymentFrequency: 'monthly', interestType: 'flat-rate', status: 'paid', schedule: [] }); setHistoryFormKey((k) => k + 1); setHistoryOpen(true); }} startIcon={<FileText className="w-4 h-4" />}>
             Record Historical
           </Button>
         )}
@@ -389,6 +390,10 @@ export const LoansPage = () => {
             <div>
               <label className="rs-form-control-label">Installments (leave blank for auto)</label>
               <input type="number" className="rs-input w-full" min={1} max={9999} value={historyForm.installmentCount || ''} onChange={(e) => setHistoryForm((prev: any) => ({ ...prev, installmentCount: e.target.value }))} placeholder="Auto from term & frequency" />
+            </div>
+            <div>
+              <label className="rs-form-control-label">Collector (for Cash Pick-up tracking)</label>
+              <SelectPicker value={historyForm.collectorId} onChange={(v: string | null) => setHistoryForm((prev: any) => ({ ...prev, collectorId: v }))} data={historyCollectors.map((c: any) => ({ label: `${c.first_name} ${c.last_name}`, value: c.id }))} style={{ width: '100%' }} block cleanable placeholder="Assign a collector..." />
             </div>
           </div>
 

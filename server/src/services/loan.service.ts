@@ -851,6 +851,7 @@ export class LoanService {
       late_payment_fee: 0,
       net_proceeds: principal - (Number(data.previousBalance) || 0),
       released_by: userId,
+      collector_id: data.collectorId || null,
     });
 
     const paidSchedules: { scheduleId: string; amount: number; paidAt: Date | null }[] = [];
