@@ -242,9 +242,9 @@ export const LoansPage = () => {
                   <h4 className="font-semibold mb-2">Payment History</h4>
                   <div className="overflow-auto">
                     <table className="w-full text-sm">
-                      <thead><tr className="border-b text-left text-gray-500"><th className="py-1 pr-2">Payment #</th><th className="py-1 pr-2">Date</th><th className="py-1 pr-2">Amount</th><th className="py-1 pr-2">Method</th><th className="py-1">Reference</th></tr></thead>
+                      <thead><tr className="border-b text-left text-gray-500"><th className="py-1 pr-2">Payment #</th><th className="py-1 pr-2">Date</th><th className="py-1 pr-2">Amount</th><th className="py-1 pr-2">Method</th><th className="py-1 pr-2">Status</th><th className="py-1">Reference</th></tr></thead>
                       <tbody>{viewLoan.payments.map((r: any) => (
-                        <tr key={r.id} className="border-b border-gray-100"><td className="py-1 pr-2">{r.payment_number}</td><td className="py-1 pr-2">{new Date(r.payment_date).toLocaleDateString()}</td><td className="py-1 pr-2">{formatCurrency(r.amount)}</td><td className="py-1 pr-2">{r.payment_method === 'historical' ? <Tag color="violet">Historical</Tag> : r.payment_method}</td><td className="py-1">{r.reference_number || '-'}</td></tr>
+                        <tr key={r.id} className="border-b border-gray-100"><td className="py-1 pr-2">{r.payment_number}</td><td className="py-1 pr-2">{new Date(r.payment_date).toLocaleDateString()}</td><td className="py-1 pr-2">{formatCurrency(r.amount)}</td><td className="py-1 pr-2">{r.payment_method === 'historical' ? <Tag color="violet">Historical</Tag> : r.payment_method}</td><td className="py-1 pr-2">{r.status === 'cancelled' ? <Tag color="red">Cancelled</Tag> : <Tag color="green">Completed</Tag>}</td><td className="py-1">{r.reference_number || '-'}</td></tr>
                       ))}</tbody>
                     </table>
                   </div>

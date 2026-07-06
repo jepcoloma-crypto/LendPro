@@ -775,6 +775,7 @@ export const BorrowersPage = () => {
               <Column width={100}><HeaderCell>Interest</HeaderCell><Cell>{(r: any) => formatCurrency(r.interest_amount)}</Cell></Column>
               <Column width={100}><HeaderCell>Penalty</HeaderCell><Cell>{(r: any) => formatCurrency(r.penalty_amount)}</Cell></Column>
               <Column width={130}><HeaderCell>Method</HeaderCell><Cell>{(r: any) => <Tag color={methodColor(r.payment_method)}>{r.payment_method}</Tag>}</Cell></Column>
+              <Column width={100}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => r.status === 'cancelled' ? <Tag color="red">Cancelled</Tag> : <Tag color="green">Completed</Tag>}</Cell></Column>
               <Column width={180}><HeaderCell>Received By</HeaderCell><Cell>{(r: any) => r.received_by_name || '-'}</Cell></Column>
             </Table>
           )}

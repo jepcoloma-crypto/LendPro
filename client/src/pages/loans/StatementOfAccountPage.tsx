@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { loansApi } from '../../services/api';
 import { formatCurrency } from '../../utils/format';
-import { Button, Loader } from 'rsuite';
+import { Button, Loader, Tag } from 'rsuite';
 import { Printer, ArrowLeft } from 'lucide-react';
 
 export const StatementOfAccountPage = () => {
@@ -136,6 +136,7 @@ export const StatementOfAccountPage = () => {
                   <th className="text-right px-2 py-2 font-medium text-gray-600">Interest</th>
                   <th className="text-right px-2 py-2 font-medium text-gray-600">Penalty</th>
                   <th className="text-center px-2 py-2 font-medium text-gray-600">Method</th>
+                  <th className="text-center px-2 py-2 font-medium text-gray-600">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -147,10 +148,11 @@ export const StatementOfAccountPage = () => {
                     <td className="px-2 py-1.5 text-right">{formatCurrency(p.principal_amount)}</td>
                     <td className="px-2 py-1.5 text-right">{formatCurrency(p.interest_amount)}</td>
                     <td className="px-2 py-1.5 text-right">{formatCurrency(p.penalty_amount)}</td>
-                    <td className="px-2 py-1.5 text-center">{p.payment_method}</td>
+                    <td className="px-2 py-1.5 text-center">{p.payment_method === 'historical' ? <Tag color="violet">Historical</Tag> : p.payment_method}</td>
+                    <td className="px-2 py-1.5 text-center">{p.status === 'cancelled' ? <Tag color="red">Cancelled</Tag> : <Tag color="green">Completed</Tag>}</td>
                   </tr>
                 ))}
-                {payments.length === 0 && <tr><td colSpan={7} className="text-center text-gray-400 py-4">No payments recorded</td></tr>}
+                {payments.length === 0 && <tr><td colSpan={8} className="text-center text-gray-400 py-4">No payments recorded</td></tr>}
               </tbody>
             </table>
           </div>
