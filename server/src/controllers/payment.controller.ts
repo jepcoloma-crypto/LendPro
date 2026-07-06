@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import { parsePagination, paramStr } from '../utils/helpers';
 import { parse } from 'csv-parse/sync';
 import { autoRecordTransaction } from '../services/cash-transaction.service';
+import { pool } from '../database/connection';
 
 export class PaymentController {
   async receivePayment(req: AuthRequest, res: Response, next: NextFunction) {
@@ -325,40 +326,59 @@ export class PaymentController {
 
       const loanId = payment.loan_id;
       const restoreAmount = (parseFloat(payment.amount) || 0) - (parseFloat(payment.penalty_amount) || 0);
-      const allocations = await paymentAllocationRepo.query(`SELECT * FROM payment_allocations WHERE payment_id = $1`, [id]);
-
       const penaltyAmt = parseFloat(payment.penalty_amount) || 0;
-      for (const alloc of allocations) {
-        const schedule = await amortizationScheduleRepo.findById(alloc.schedule_id);
-        if (schedule) {
-          const oldPaid = parseFloat(schedule.paid_amount) || 0;
-          const newPaid = Math.max(0, oldPaid - (parseFloat(alloc.amount) || 0));
-          const totalDue = parseFloat(schedule.total_due) || 0;
-          const status = newPaid <= 0 ? 'pending' : (newPaid >= totalDue - 0.005 ? 'paid' : 'partial');
-          await amortizationScheduleRepo.update(alloc.schedule_id, {
-            paid_amount: newPaid,
-            status,
-            paid_at: status === 'pending' ? null : schedule.paid_at,
-            penalty_amount: penaltyAmt > 0 ? '0' : undefined,
-          });
+
+      const client = await pool.connect();
+      try {
+        await client.query('SET search_path TO public');
+        await client.query('BEGIN');
+
+        const { rows: allocations } = await client.query(`SELECT * FROM payment_allocations WHERE payment_id = $1`, [id]);
+
+        for (const alloc of allocations) {
+          const { rows: schedRows } = await client.query(`SELECT * FROM amortization_schedules WHERE id = $1`, [alloc.schedule_id]);
+          const schedule = schedRows[0];
+          if (schedule) {
+            const oldPaid = parseFloat(schedule.paid_amount) || 0;
+            const newPaid = Math.max(0, oldPaid - (parseFloat(alloc.amount) || 0));
+            const totalDue = parseFloat(schedule.total_due) || 0;
+            const schedStatus = newPaid <= 0 ? 'pending' : (newPaid >= totalDue - 0.005 ? 'paid' : 'partial');
+            await client.query(
+              `UPDATE amortization_schedules SET paid_amount = $1, status = $2, paid_at = $3, penalty_amount = $4, updated_at = NOW() WHERE id = $5`,
+              [newPaid, schedStatus, schedStatus === 'pending' ? null : schedule.paid_at, penaltyAmt > 0 ? '0' : schedule.penalty_amount, alloc.schedule_id]
+            );
+          }
         }
-      }
 
-      await paymentAllocationRepo.query(`DELETE FROM payment_allocations WHERE payment_id = $1`, [id]);
+        await client.query(`DELETE FROM payment_allocations WHERE payment_id = $1`, [id]);
 
-      const loan = await loanRepo.findById(loanId);
-      if (loan) {
-        const oldBalance = parseFloat(loan.outstanding_balance) || 0;
-        const newBalance = oldBalance + restoreAmount;
-        const newStatus = loan.status === 'closed' ? 'active' : loan.status;
-        await loanRepo.update(loanId, {
-          outstanding_balance: newBalance,
-          status: newStatus,
-        });
+        const { rows: loanRows } = await client.query(`SELECT * FROM loans WHERE id = $1`, [loanId]);
+        const loan = loanRows[0];
+        if (loan) {
+          const oldBalance = parseFloat(loan.outstanding_balance) || 0;
+          const newBalance = oldBalance + restoreAmount;
+          const newStatus = loan.status === 'closed' ? 'active' : loan.status;
+          await client.query(
+            `UPDATE loans SET outstanding_balance = $1, status = $2, updated_at = NOW() WHERE id = $3`,
+            [newBalance, newStatus, loanId]
+          );
+        }
+
+        await client.query(
+          `UPDATE payments SET status = 'cancelled', cancellation_reason = $1, updated_at = NOW() WHERE id = $2`,
+          [cancellation_reason, id]
+        );
+
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
       }
 
       (req as any).oldValues = payment;
-      const cancelled = await paymentRepo.update(id, { status: 'cancelled', cancellation_reason });
+      const cancelled = await paymentRepo.findById(id);
       res.json({ success: true, data: cancelled });
     } catch (error: any) {
       next(new AppError(400, error.message));

@@ -1,5 +1,6 @@
 import { paymentRepo, amortizationScheduleRepo, loanRepo, collectionRepo, paymentAllocationRepo } from '../repositories';
 import { generatePaymentNumber, generateReceiptNumber } from '../utils/helpers';
+import { pool } from '../database/connection';
 
 export class PaymentService {
   async receivePayment(data: any, userId: string) {
@@ -106,72 +107,87 @@ export class PaymentService {
     totalPrincipal = Math.round(totalPrincipal * 100) / 100;
     totalInterest = Math.round(totalInterest * 100) / 100;
 
-    const payment = await paymentRepo.create({
-      payment_number: paymentNumber,
-      loan_id: data.loanId,
-      borrower_id: loan.borrower_id,
-      amount: netForSchedules + penaltyAmount,
-      principal_amount: totalPrincipal,
-      interest_amount: totalInterest,
-      penalty_amount: penaltyAmount,
-      payment_method: data.paymentMethod || 'cash',
-      reference_number: data.referenceNumber || null,
-      payment_date: data.paymentDate || new Date(),
-      received_by: userId,
-      receipt_number: receiptNumber,
-      notes: data.notes || null,
-      status: 'completed',
-      collector_id: data.collectorId || null,
-      remittance_status: data.collectorId ? 'pending' : 'direct',
-    });
+    // Execute all writes in a single transaction
+    const writeClient = await pool.connect();
+    try {
+      await writeClient.query('SET search_path TO public');
+      await writeClient.query('BEGIN');
 
-    // Second pass: update schedules and record allocations
-    for (const alloc of allocs) {
-      const schedule = alloc.schedule;
-      const newPaid = parseFloat(schedule.paid_amount) + alloc.amount;
-      const totalDue = parseFloat(schedule.total_due);
-      const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
+      const { rows: [payment] } = await writeClient.query(
+        `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'completed',$14,$15) RETURNING *`,
+        [paymentNumber, data.loanId, loan.borrower_id, netForSchedules + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount,
+         data.paymentMethod || 'cash', data.referenceNumber || null, data.paymentDate || new Date(), userId, receiptNumber,
+         data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
+      );
 
-      await amortizationScheduleRepo.update(schedule.id, {
-        paid_amount: newPaid,
-        status: newStatus,
-        paid_at: newStatus === 'paid' ? paymentDate : null,
-      });
+      for (const alloc of allocs) {
+        const schedule = alloc.schedule;
+        const newPaid = parseFloat(schedule.paid_amount) + alloc.amount;
+        const totalDue = parseFloat(schedule.total_due);
+        const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
 
-      await paymentAllocationRepo.create({
-        payment_id: payment.id,
-        schedule_id: schedule.id,
-        amount: alloc.amount,
-        allocated_to: 'principal',
-      });
-    }
+        await writeClient.query(
+          `UPDATE amortization_schedules SET paid_amount = $1, status = $2, paid_at = $3, updated_at = NOW() WHERE id = $4`,
+          [newPaid, newStatus, newStatus === 'paid' ? paymentDate : null, schedule.id]
+        );
 
-    const newBalance = Math.max(0, outstandingBalance - totalAllocated);
-    await loanRepo.update(data.loanId, { outstanding_balance: newBalance });
-
-    if (newBalance <= 0) {
-      await loanRepo.update(data.loanId, { status: 'closed', next_payment_date: null });
-      await collectionRepo.update(loan.id, { status: 'closed' });
-    }
-
-    // Re-fetch to get updated statuses
-    const updatedSchedules = await amortizationScheduleRepo.findAll({
-      conditions: { loan_id: data.loanId },
-      orderBy: 'installment_no ASC',
-      limit: 1000,
-    });
-    const allPaid = updatedSchedules.rows.every(s => s.status === 'paid');
-    if (allPaid || newBalance <= 0) {
-      await loanRepo.update(data.loanId, { status: 'closed', outstanding_balance: 0, next_payment_date: null });
-      await collectionRepo.update(loan.id, { status: 'closed' });
-    } else {
-      const nextPending = updatedSchedules.rows.find(s => s.status === 'pending' || (s.status === 'partial' && parseFloat(s.paid_amount) < parseFloat(s.total_due) - 0.005));
-      if (nextPending) {
-        await loanRepo.update(data.loanId, { next_payment_date: nextPending.due_date });
+        await writeClient.query(
+          `INSERT INTO payment_allocations (payment_id, schedule_id, amount, allocated_to) VALUES ($1,$2,$3,'principal')`,
+          [payment.id, schedule.id, alloc.amount]
+        );
       }
-    }
 
-    return payment;
+      const newBalance = Math.max(0, outstandingBalance - totalAllocated);
+      await writeClient.query(
+        `UPDATE loans SET outstanding_balance = $1, updated_at = NOW() WHERE id = $2`,
+        [newBalance, data.loanId]
+      );
+
+      if (newBalance <= 0) {
+        await writeClient.query(
+          `UPDATE loans SET status = 'closed', outstanding_balance = 0, next_payment_date = NULL, updated_at = NOW() WHERE id = $1`,
+          [data.loanId]
+        );
+        await writeClient.query(
+          `UPDATE collections SET status = 'closed' WHERE id = $1`,
+          [loan.id]
+        );
+      }
+
+      // Re-fetch to get updated statuses
+      const { rows: updatedRows } = await writeClient.query(
+        `SELECT * FROM amortization_schedules WHERE loan_id = $1 ORDER BY installment_no ASC`,
+        [data.loanId]
+      );
+      const allPaid = updatedRows.every((s: any) => s.status === 'paid');
+      if (allPaid || newBalance <= 0) {
+        await writeClient.query(
+          `UPDATE loans SET status = 'closed', outstanding_balance = 0, next_payment_date = NULL, updated_at = NOW() WHERE id = $1`,
+          [data.loanId]
+        );
+        await writeClient.query(
+          `UPDATE collections SET status = 'closed' WHERE id = $1`,
+          [loan.id]
+        );
+      } else {
+        const nextPending = updatedRows.find((s: any) => s.status === 'pending' || (s.status === 'partial' && parseFloat(s.paid_amount) < parseFloat(s.total_due) - 0.005));
+        if (nextPending) {
+          await writeClient.query(
+            `UPDATE loans SET next_payment_date = $1, updated_at = NOW() WHERE id = $2`,
+            [nextPending.due_date, data.loanId]
+          );
+        }
+      }
+
+      await writeClient.query('COMMIT');
+      return payment;
+    } catch (err) {
+      await writeClient.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      writeClient.release();
+    }
   }
 
   private async receiveWithAllocations(data: any, loan: any, userId: string, paymentNumber: string, receiptNumber: string) {
@@ -207,137 +223,147 @@ export class PaymentService {
     totalInterest = Math.round(totalInterest * 100) / 100;
 
     const penaltyAmount = parseFloat(data.penaltyAmount) || 0;
-    const payment = await paymentRepo.create({
-      payment_number: paymentNumber,
-      loan_id: data.loanId,
-      borrower_id: loan.borrower_id,
-      amount: totalAllocAmount + penaltyAmount,
-      principal_amount: totalPrincipal,
-      interest_amount: totalInterest,
-      penalty_amount: penaltyAmount,
-      payment_method: data.paymentMethod || 'cash',
-      reference_number: data.referenceNumber || null,
-      payment_date: data.paymentDate || new Date(),
-      received_by: userId,
-      receipt_number: receiptNumber,
-      notes: data.notes || null,
-      status: 'completed',
-      collector_id: data.collectorId || null,
-      remittance_status: data.collectorId ? 'pending' : 'direct',
-    });
 
-    // Distribute penalty to all overdue schedules proportionally
-    let totalOverdue = 0;
-    const payDateNorm = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
-    const overdueShortages: { scheduleId: string; shortage: number }[] = [];
-    for (const s of allSchedules.rows) {
-      if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
-      const dueDate = new Date(s.due_date);
-      const dueNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-      if (dueNorm >= payDateNorm) continue;
-      const shortage = parseFloat(s.total_due) - parseFloat(s.paid_amount);
-      totalOverdue += shortage;
-      overdueShortages.push({ scheduleId: s.id, shortage });
-    }
-    if (penaltyAmount > 0 && totalOverdue > 0) {
-      let remainingPenalty = penaltyAmount;
-      for (const os of overdueShortages) {
-        if (remainingPenalty <= 0) break;
-        const portion = Math.round(penaltyAmount * (os.shortage / totalOverdue) * 100) / 100;
-        const appliedPenalty = Math.min(portion, remainingPenalty);
-        const sched = allSchedules.rows.find((s: any) => s.id === os.scheduleId);
-        const curPenalty = parseFloat(sched?.penalty_amount || '0');
-        await amortizationScheduleRepo.update(os.scheduleId, {
-          penalty_amount: (curPenalty + appliedPenalty).toFixed(2),
-        });
-        remainingPenalty -= appliedPenalty;
+    // Execute all writes in a single transaction
+    const writeClient = await pool.connect();
+    try {
+      await writeClient.query('SET search_path TO public');
+      await writeClient.query('BEGIN');
+
+      const { rows: [payment] } = await writeClient.query(
+        `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'completed',$14,$15) RETURNING *`,
+        [paymentNumber, data.loanId, loan.borrower_id, totalAllocAmount + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount,
+         data.paymentMethod || 'cash', data.referenceNumber || null, data.paymentDate || new Date(), userId, receiptNumber,
+         data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
+      );
+
+      // Distribute penalty to all overdue schedules proportionally
+      let totalOverdue = 0;
+      const payDateNorm = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
+      const overdueShortages: { scheduleId: string; shortage: number }[] = [];
+      for (const s of allSchedules.rows) {
+        if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
+        const dueDate = new Date(s.due_date);
+        const dueNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+        if (dueNorm >= payDateNorm) continue;
+        const shortage = parseFloat(s.total_due) - parseFloat(s.paid_amount);
+        totalOverdue += shortage;
+        overdueShortages.push({ scheduleId: s.id, shortage });
       }
-    }
-
-    let overflow: { [scheduleId: string]: number } = {};
-    for (const alloc of data.allocations) {
-      overflow[alloc.scheduleId] = (overflow[alloc.scheduleId] || 0) + (parseFloat(alloc.amount) || 0);
-    }
-
-    let remainingOverflow = 0;
-    for (const schedule of allSchedules.rows) {
-      let allocAmount = overflow[schedule.id] || 0;
-      if (remainingOverflow > 0) {
-        allocAmount += remainingOverflow;
-        remainingOverflow = 0;
-      }
-      if (allocAmount <= 0) continue;
-
-      const currentPaid = parseFloat(schedule.paid_amount);
-      const totalDue = parseFloat(schedule.total_due);
-      const shortage = Math.max(0, totalDue - currentPaid);
-
-      let applied = allocAmount;
-      if (allocAmount > shortage) {
-        applied = shortage;
-        remainingOverflow = allocAmount - shortage;
+      if (penaltyAmount > 0 && totalOverdue > 0) {
+        let remainingPenalty = penaltyAmount;
+        for (const os of overdueShortages) {
+          if (remainingPenalty <= 0) break;
+          const portion = Math.round(penaltyAmount * (os.shortage / totalOverdue) * 100) / 100;
+          const appliedPenalty = Math.min(portion, remainingPenalty);
+          const { rows: schedRows } = await writeClient.query(`SELECT penalty_amount FROM amortization_schedules WHERE id = $1`, [os.scheduleId]);
+          const curPenalty = parseFloat(schedRows[0]?.penalty_amount || '0');
+          await writeClient.query(
+            `UPDATE amortization_schedules SET penalty_amount = $1, updated_at = NOW() WHERE id = $2`,
+            [(curPenalty + appliedPenalty).toFixed(2), os.scheduleId]
+          );
+          remainingPenalty -= appliedPenalty;
+        }
       }
 
-      const newPaid = currentPaid + applied;
-      const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
+      let overflow: { [scheduleId: string]: number } = {};
+      for (const alloc of data.allocations) {
+        overflow[alloc.scheduleId] = (overflow[alloc.scheduleId] || 0) + (parseFloat(alloc.amount) || 0);
+      }
 
-      await amortizationScheduleRepo.update(schedule.id, {
-        paid_amount: newPaid,
-        status: newStatus,
-        paid_at: newStatus === 'paid' ? paymentDate : null,
-      });
-
-      await paymentAllocationRepo.create({
-        payment_id: payment.id,
-        schedule_id: schedule.id,
-        amount: applied,
-        allocated_to: 'principal',
-      });
-    }
-
-    if (remainingOverflow > 0) {
+      let remainingOverflow = 0;
       for (const schedule of allSchedules.rows) {
-        if (remainingOverflow <= 0) break;
-        if (schedule.status === 'paid') continue;
+        let allocAmount = overflow[schedule.id] || 0;
+        if (remainingOverflow > 0) {
+          allocAmount += remainingOverflow;
+          remainingOverflow = 0;
+        }
+        if (allocAmount <= 0) continue;
+
         const currentPaid = parseFloat(schedule.paid_amount);
         const totalDue = parseFloat(schedule.total_due);
         const shortage = Math.max(0, totalDue - currentPaid);
-        const applied = Math.min(remainingOverflow, shortage);
-        if (applied <= 0) continue;
+
+        let applied = allocAmount;
+        if (allocAmount > shortage) {
+          applied = shortage;
+          remainingOverflow = allocAmount - shortage;
+        }
 
         const newPaid = currentPaid + applied;
-        const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : 'partial';
-        await amortizationScheduleRepo.update(schedule.id, {
-          paid_amount: newPaid,
-          status: newStatus,
-          paid_at: newStatus === 'paid' ? paymentDate : null,
-        });
-        await paymentAllocationRepo.create({
-          payment_id: payment.id,
-          schedule_id: schedule.id,
-          amount: applied,
-          allocated_to: 'principal',
-        });
-        remainingOverflow -= applied;
+        const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
+
+        await writeClient.query(
+          `UPDATE amortization_schedules SET paid_amount = $1, status = $2, paid_at = $3, updated_at = NOW() WHERE id = $4`,
+          [newPaid, newStatus, newStatus === 'paid' ? paymentDate : null, schedule.id]
+        );
+
+        await writeClient.query(
+          `INSERT INTO payment_allocations (payment_id, schedule_id, amount, allocated_to) VALUES ($1,$2,$3,'principal')`,
+          [payment.id, schedule.id, applied]
+        );
       }
-    }
 
-    const outstandingBalance = parseFloat(loan.outstanding_balance);
-    const newBalance = Math.max(0, outstandingBalance - totalAllocAmount);
-    await loanRepo.update(data.loanId, { outstanding_balance: newBalance });
+      if (remainingOverflow > 0) {
+        for (const schedule of allSchedules.rows) {
+          if (remainingOverflow <= 0) break;
+          if (schedule.status === 'paid') continue;
+          const currentPaid = parseFloat(schedule.paid_amount);
+          const totalDue = parseFloat(schedule.total_due);
+          const shortage = Math.max(0, totalDue - currentPaid);
+          const applied = Math.min(remainingOverflow, shortage);
+          if (applied <= 0) continue;
 
-    const allPaid = allSchedules.rows.every(s => s.status === 'paid');
-    if (allPaid || newBalance <= 0) {
-      await loanRepo.update(data.loanId, { status: 'closed', outstanding_balance: 0, next_payment_date: null });
-      await collectionRepo.update(loan.id, { status: 'closed' });
-    } else {
-      const nextPending = allSchedules.rows.find(s => s.status === 'pending' || (s.status === 'partial' && parseFloat(s.paid_amount) < parseFloat(s.total_due) - 0.005));
-      if (nextPending) {
-        await loanRepo.update(data.loanId, { next_payment_date: nextPending.due_date });
+          const newPaid = currentPaid + applied;
+          const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : 'partial';
+          await writeClient.query(
+            `UPDATE amortization_schedules SET paid_amount = $1, status = $2, paid_at = $3, updated_at = NOW() WHERE id = $4`,
+            [newPaid, newStatus, newStatus === 'paid' ? paymentDate : null, schedule.id]
+          );
+          await writeClient.query(
+            `INSERT INTO payment_allocations (payment_id, schedule_id, amount, allocated_to) VALUES ($1,$2,$3,'principal')`,
+            [payment.id, schedule.id, applied]
+          );
+          remainingOverflow -= applied;
+        }
       }
-    }
 
-    return payment;
+      const outstandingBalance = parseFloat(loan.outstanding_balance);
+      const newBalance = Math.max(0, outstandingBalance - totalAllocAmount);
+      await writeClient.query(
+        `UPDATE loans SET outstanding_balance = $1, updated_at = NOW() WHERE id = $2`,
+        [newBalance, data.loanId]
+      );
+
+      const allPaid = allSchedules.rows.every((s: any) => s.status === 'paid');
+      if (allPaid || newBalance <= 0) {
+        await writeClient.query(
+          `UPDATE loans SET status = 'closed', outstanding_balance = 0, next_payment_date = NULL, updated_at = NOW() WHERE id = $1`,
+          [data.loanId]
+        );
+        await writeClient.query(
+          `UPDATE collections SET status = 'closed' WHERE id = $1`,
+          [loan.id]
+        );
+      } else {
+        const nextPending = allSchedules.rows.find((s: any) => s.status === 'pending' || (s.status === 'partial' && parseFloat(s.paid_amount) < parseFloat(s.total_due) - 0.005));
+        if (nextPending) {
+          await writeClient.query(
+            `UPDATE loans SET next_payment_date = $1, updated_at = NOW() WHERE id = $2`,
+            [nextPending.due_date, data.loanId]
+          );
+        }
+      }
+
+      await writeClient.query('COMMIT');
+      return payment;
+    } catch (err) {
+      await writeClient.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      writeClient.release();
+    }
   }
 
   async getPaymentsByLoan(loanId: string, options: any) {

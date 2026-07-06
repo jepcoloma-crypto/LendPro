@@ -115,6 +115,9 @@ export const calculateAmortization = (
   for (let i = 1; i <= installments; i++) {
     const dueDate = new Date(startDate);
     dueDate.setDate(dueDate.getDate() + i * intervalDays);
+    if (paymentFrequency === 'daily' && dueDate.getDay() === 0) {
+      dueDate.setDate(dueDate.getDate() + 1);
+    }
     remainingPrincipal -= principalPerInstallment;
     const principalRounded = Math.round(principalPerInstallment * 100) / 100;
     const interestRounded = Math.round(interestPerInstallment * 100) / 100;
