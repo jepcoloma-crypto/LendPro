@@ -71,7 +71,8 @@ export const CashierReconciliationPage = () => {
   const [pickupTab, setPickupTab] = useState<'new' | 'history' | 'outstanding'>('new');
 
   const [openShiftModal, setOpenShiftModal] = useState(false);
-  const [openShiftForm, setOpenShiftForm] = useState({ opening_float: 0 });
+  const [openShiftForm, setOpenShiftForm] = useState({ opening_float: 0, branch_id: null as string | null });
+  const [openShiftBranches, setOpenShiftBranches] = useState<any[]>([]);
   const [closeModal, setCloseModal] = useState(false);
   const [closeForm, setCloseForm] = useState({ actual_cash: 0, notes: '' });
   const [countModal, setCountModal] = useState(false);
@@ -235,7 +236,7 @@ export const CashierReconciliationPage = () => {
   // ========== SHIFT OPEN ==========
   const handleOpenShift = async () => {
     try {
-      await api.post('/cashier-sessions/open', { opening_float: openShiftForm.opening_float || 0 });
+      await api.post('/cashier-sessions/open', { opening_float: openShiftForm.opening_float || 0, branch_id: openShiftForm.branch_id });
       setOpenShiftModal(false);
       toaster.push(<Message type="success">Shift opened</Message>, { placement: 'topEnd' });
       fetchMyShift(); fetchShifts();
@@ -590,7 +591,7 @@ ${transactions.map((t: any, i: number) => `<tr>
           <div className="flex items-center gap-4">
             <div><span className="text-xs text-gray-500">Status</span><div className="font-medium text-gray-400">No open shift</div></div>
             <div className="ml-auto">
-              <Button size="sm" appearance="primary" onClick={() => { setOpenShiftForm({ opening_float: 0 }); setOpenShiftModal(true); }}><Plus className="w-3.5 h-3.5 mr-1" />Open Shift</Button>
+              <Button size="sm" appearance="primary" onClick={async () => { try { const { data } = await api.get('/branches'); setOpenShiftBranches(data.data || []); } catch {} setOpenShiftForm({ opening_float: 0, branch_id: (user as any)?.branchId || null }); setOpenShiftModal(true); }}><Plus className="w-3.5 h-3.5 mr-1" />Open Shift</Button>
             </div>
           </div>
         )}
@@ -1075,8 +1076,12 @@ ${transactions.map((t: any, i: number) => `<tr>
         <Modal.Body>
           <Form fluid>
             <Form.Group>
+              <Form.ControlLabel>Branch</Form.ControlLabel>
+              <SelectPicker data={openShiftBranches.map((b: any) => ({ label: `${b.name} (${b.code})`, value: b.id }))} value={openShiftForm.branch_id} onChange={(v) => setOpenShiftForm((prev: any) => ({ ...prev, branch_id: v }))} style={{ width: '100%' }} block placeholder="Select branch..." />
+            </Form.Group>
+            <Form.Group>
               <Form.ControlLabel>Opening Float (Cash on Hand)</Form.ControlLabel>
-              <InputNumber value={openShiftForm.opening_float} onChange={(v: any) => setOpenShiftForm({ opening_float: Number(v) || 0 })} min={0} step={0.01} style={{ width: '100%' }} />
+              <InputNumber value={openShiftForm.opening_float} onChange={(v: any) => setOpenShiftForm((prev: any) => ({ ...prev, opening_float: Number(v) || 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
             </Form.Group>
           </Form>
         </Modal.Body>
