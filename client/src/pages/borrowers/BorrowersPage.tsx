@@ -97,7 +97,7 @@ export const BorrowersPage = () => {
       const full = `${b.first_name} ${b.middle_name ? b.middle_name + ' ' : ''}${b.last_name}${b.suffix ? ', ' + b.suffix : ''}`;
       if (full.length > maxName) maxName = full.length;
     }
-    return { codeWidth: Math.max(90, Math.min(160, maxCode * 8.5 + 24)), nameWidth: Math.max(140, Math.min(350, maxName * 8.5 + 24)) };
+    return { codeWidth: Math.max(90, Math.min(220, maxCode * 8.5 + 24)), nameWidth: Math.max(140, Math.min(350, maxName * 8.5 + 24)) };
   }, [borrowers]);
 
   const fetchBorrowers = async () => {
