@@ -20,7 +20,7 @@ export class PickupController {
                 CONCAT(b.first_name, ' ', b.last_name) as borrower_name
          FROM payments p
          LEFT JOIN borrowers b ON b.id = p.borrower_id
-         WHERE p.collector_id = $1 AND p.remittance_status = 'pending'
+         WHERE p.collector_id = $1 AND p.remittance_status = 'pending' AND p.status != 'cancelled'
          ORDER BY p.created_at ASC`,
         [collector_id]
       );
@@ -156,7 +156,7 @@ export class PickupController {
          FROM payments p
          LEFT JOIN borrowers b ON b.id = p.borrower_id
          LEFT JOIN loans l ON l.id = p.loan_id
-         WHERE p.collector_id = $1 AND p.remittance_status = 'pending'
+         WHERE p.collector_id = $1 AND p.remittance_status = 'pending' AND p.status != 'cancelled'
          ORDER BY p.created_at ASC`,
         [collector_id]
       );
@@ -174,9 +174,9 @@ export class PickupController {
                 COALESCE((
                   SELECT SUM(p.amount::numeric)
                   FROM payments p
-                  WHERE p.collector_id = u.id AND p.remittance_status = 'pending'
+                  WHERE p.collector_id = u.id AND p.remittance_status = 'pending' AND p.status != 'cancelled'
                 ), 0) as outstanding_amount,
-                COUNT(pf.id) FILTER (WHERE pf.remittance_status = 'pending') as pending_count,
+                COUNT(pf.id) FILTER (WHERE pf.remittance_status = 'pending' AND pf.status != 'cancelled') as pending_count,
                 COUNT(pf.id) FILTER (WHERE pf.remittance_status = 'remitted') as remitted_count
          FROM users u
          JOIN roles r ON r.id = u.role_id
