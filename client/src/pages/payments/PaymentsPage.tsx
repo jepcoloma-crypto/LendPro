@@ -1,7 +1,7 @@
 import { useState, useEffect, memo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Table, Button, Panel, Modal, Form, toaster, Message, Pagination, Tag, SelectPicker, DatePicker, InputNumber, Input, InputGroup } from 'rsuite';
-import { paymentsApi, loansApi, auditLogsApi, cancellationRequestsApi } from '../../services/api';
+import { paymentsApi, loansApi, auditLogsApi, cancellationRequestsApi, usersApi } from '../../services/api';
 import { Payment, Loan } from '../../types';
 import { Plus, ListOrdered, Eye, Search, Printer, Download, RotateCcw, Ban } from 'lucide-react';
 import { formatCurrency, methodColor, exportCSV, numberToWords } from '../../utils/format';
@@ -56,6 +56,7 @@ export const PaymentsPage = () => {
   const [paySchedule, setPaySchedule] = useState<any[]>([]);
   const [payAllocations, setPayAllocations] = useState<Record<string, { amount: number; penalty: number }>>({});
   const [voidPaymentId, setVoidPaymentId] = useState<string | null>(null);
+  const [collectors, setCollectors] = useState<any[]>([]);
   const [payMethod, setPayMethod] = useState('cash');
   const [payDate, setPayDate] = useState<Date>(new Date());
   const [payReference, setPayReference] = useState('');
@@ -92,7 +93,7 @@ export const PaymentsPage = () => {
     } catch { toaster.push(<Message type="error">Failed to load loans</Message>, { placement: 'topEnd' }); }
   };
 
-  useEffect(() => { if (modalOpen || instModalOpen) fetchLoans(); }, [modalOpen, instModalOpen]);
+  useEffect(() => { if (modalOpen || instModalOpen) { fetchLoans(); usersApi.getCollectors().then(({ data }) => setCollectors(data.data || [])).catch(() => {}); } }, [modalOpen, instModalOpen]);
 
   useEffect(() => { getCompanySettings().then(setCompanyInfo); }, []);
 
@@ -435,6 +436,10 @@ export const PaymentsPage = () => {
                 label: `${l.loan_number} - ${l.borrower_name} (${formatCurrency(l.outstanding_balance)})`,
                 value: l.id,
               }))} value={formValue.loanId} onChange={(v) => { const sl = loans.find(l => l.id === v); setFormValue({ ...formValue, loanId: v, collectorId: sl?.collector_id || null }); }} style={{ width: '100%' }} />
+            </Form.Group>
+            <Form.Group>
+              <Form.ControlLabel>Collector (leave empty if payment is direct)</Form.ControlLabel>
+              <SelectPicker data={collectors.map((c: any) => ({ label: `${c.first_name} ${c.last_name}`, value: c.id }))} value={formValue.collectorId} onChange={(v) => setFormValue({ ...formValue, collectorId: v })} style={{ width: '100%' }} block cleanable placeholder="Direct payment (no collector)" />
             </Form.Group>
             <Form.Group>
               <Form.ControlLabel>Amount *</Form.ControlLabel>
