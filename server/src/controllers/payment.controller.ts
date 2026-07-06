@@ -364,6 +364,17 @@ export class PaymentController {
           );
         }
 
+        // Reverse cash transaction if one exists
+        const { rows: cashTxns } = await client.query(`SELECT id, shift_id FROM cash_transactions WHERE payment_id = $1`, [id]);
+        for (const txn of cashTxns) {
+          await client.query(`DELETE FROM cash_transactions WHERE id = $1`, [txn.id]);
+          // Reverse the shift's expected_cash that was added during payment
+          await client.query(
+            `UPDATE cashier_sessions SET expected_cash = expected_cash - $1 WHERE id = $2`,
+            [payment.amount, txn.shift_id]
+          );
+        }
+
         await client.query(
           `UPDATE payments SET status = 'cancelled', cancellation_reason = $1, updated_at = NOW() WHERE id = $2`,
           [cancellation_reason, id]

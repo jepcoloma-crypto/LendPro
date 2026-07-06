@@ -450,7 +450,7 @@ export class CashierController {
 
       const txnStats = await cashierSessionRepo.query(
         `SELECT
-           COALESCE(SUM(ct.amount) FILTER (WHERE ct.transaction_type = 'payment' OR ct.transaction_type = 'collection'), 0) as today_collections,
+           COALESCE(SUM(ct.amount) FILTER (WHERE (ct.transaction_type = 'payment' OR ct.transaction_type = 'collection') AND (ct.payment_id IS NULL OR (SELECT p.status FROM payments p WHERE p.id = ct.payment_id) != 'cancelled')), 0) as today_collections,
            COALESCE(SUM(ct.amount) FILTER (WHERE ct.transaction_type = 'disbursement'), 0) as today_disbursed
          FROM cash_transactions ct
          LEFT JOIN cashier_sessions cs ON cs.id = ct.shift_id
