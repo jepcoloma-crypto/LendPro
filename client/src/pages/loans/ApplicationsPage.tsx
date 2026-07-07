@@ -14,6 +14,7 @@ const { Column, HeaderCell, Cell } = Table;
 export const ApplicationsPage = () => {
   const { user } = useAuth();
   const isSuperAdmin = user?.role_slug === 'super-admin';
+  const isAdmin = isSuperAdmin || user?.role_slug === 'admin';
   const [searchParams] = useSearchParams();
   const [applications, setApplications] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -737,7 +738,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
               </div>
               <div>
                 <label className="rs-form-control-label">Previous Balance (deducted from proceeds)</label>
-                <input type="number" className="rs-input w-full" min={0} step={0.01} value={formValue.previousBalance || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, previousBalance: e.target.value }))} placeholder="0.00" />
+                <input type="number" className="rs-input w-full" min={0} step={0.01} value={formValue.previousBalance || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, previousBalance: e.target.value }))} placeholder="0.00" readOnly={!isAdmin} />
               </div>
               <div>
                 <label className="rs-form-control-label">Term ({formValue.termType || 'months'}) *</label>
@@ -840,7 +841,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
             </div>
             <div>
               <label className="rs-form-control-label">Previous Balance (deducted from proceeds)</label>
-              <input type="number" className="rs-input w-full" min={0} step={0.01} value={editFormValue.previousBalance || ''} onChange={(e) => setEditFormValue((prev: any) => ({ ...prev, previousBalance: e.target.value }))} placeholder="0.00" />
+              <input type="number" className="rs-input w-full" min={0} step={0.01} value={editFormValue.previousBalance || ''} onChange={(e) => setEditFormValue((prev: any) => ({ ...prev, previousBalance: e.target.value }))} placeholder="0.00" readOnly={!isAdmin} />
             </div>
             <div>
               <label className="rs-form-control-label">Term ({editFormValue.termType || 'months'}) *</label>
