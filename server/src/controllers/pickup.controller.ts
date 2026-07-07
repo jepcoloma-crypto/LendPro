@@ -166,6 +166,30 @@ export class PickupController {
     }
   }
 
+  async getRemittedPayments(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { collector_id } = req.query;
+      if (!collector_id) throw new AppError(400, 'collector_id is required');
+
+      const { rows } = await pool.query(
+        `SELECT p.id, p.payment_number, p.amount, p.payment_date, p.remitted_at, p.created_at,
+                CONCAT(b.first_name, ' ', b.last_name) as borrower_name,
+                l.loan_number,
+                cp.pickup_number
+         FROM payments p
+         LEFT JOIN borrowers b ON b.id = p.borrower_id
+         LEFT JOIN loans l ON l.id = p.loan_id
+         LEFT JOIN collector_pickups cp ON cp.id = p.pickup_id
+         WHERE p.collector_id = $1 AND p.remittance_status = 'remitted' AND p.status != 'cancelled'
+         ORDER BY p.remitted_at DESC`,
+        [collector_id]
+      );
+      res.json({ success: true, data: rows });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
   async getCollectorOutstanding(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { rows } = await pool.query(

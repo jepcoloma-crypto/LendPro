@@ -161,6 +161,7 @@ router.get('/approval-history', authenticate, authorize('super-admin', 'admin'),
 router.post('/pickups', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('create', 'pickup'), pickupController.createPickup.bind(pickupController));
 router.get('/pickups', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), pickupController.getPickups.bind(pickupController));
 router.get('/pickups/unremitted-payments', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), pickupController.getUnremittedPayments.bind(pickupController));
+router.get('/pickups/remitted-payments', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), pickupController.getRemittedPayments.bind(pickupController));
 router.get('/pickups/collector-outstanding', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), pickupController.getCollectorOutstanding.bind(pickupController));
 router.get('/pickups/report', authenticate, authorize('super-admin', 'admin', 'branch-manager'), pickupController.getPickupReport.bind(pickupController));
 router.get('/pickups/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), pickupController.getPickupById.bind(pickupController));

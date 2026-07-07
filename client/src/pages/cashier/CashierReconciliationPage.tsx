@@ -62,7 +62,11 @@ export const CashierReconciliationPage = () => {
   const [collectors, setCollectors] = useState<any[]>([]);
   const [pickups, setPickups] = useState<any[]>([]);
   const [unremittedPayments, setUnremittedPayments] = useState<any[]>([]);
+  const [remittedPayments, setRemittedPayments] = useState<any[]>([]);
   const [collectorOutstanding, setCollectorOutstanding] = useState<any[]>([]);
+  const [viewPaymentsModal, setViewPaymentsModal] = useState(false);
+  const [viewPaymentsCollector, setViewPaymentsCollector] = useState<any>(null);
+  const [viewPaymentsTab, setViewPaymentsTab] = useState<'pending' | 'remitted'>('pending');
   const [selectedCollector, setSelectedCollector] = useState<string | null>(null);
   const [pickupDenoms, setPickupDenoms] = useState<Record<number, number>>({});
   const [pickupNotes, setPickupNotes] = useState('');
@@ -170,6 +174,10 @@ export const CashierReconciliationPage = () => {
 
   const fetchUnremitted = useCallback(async (collectorId: string) => {
     try { const { data } = await api.get('/pickups/unremitted-payments', { params: { collector_id: collectorId } }); setUnremittedPayments(data.data || []); } catch { setUnremittedPayments([]); }
+  }, []);
+
+  const fetchRemitted = useCallback(async (collectorId: string) => {
+    try { const { data } = await api.get('/pickups/remitted-payments', { params: { collector_id: collectorId } }); setRemittedPayments(data.data || []); } catch { setRemittedPayments([]); }
   }, []);
 
   const fetchPickups = useCallback(async (collectorId?: string) => {
@@ -929,8 +937,9 @@ ${transactions.map((t: any, i: number) => `<tr>
                   <Column width={160}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
                   <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
                   <Column width={120}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-amber-600 font-semibold">{formatCurrency(r.outstanding_amount)}</span>}</Cell></Column>
-                  <Column width={90}><HeaderCell>Pending</HeaderCell><Cell dataKey="pending_count" /></Column>
-                  <Column width={90}><HeaderCell>Remitted</HeaderCell><Cell dataKey="remitted_count" /></Column>
+                  <Column width={80}><HeaderCell>Pending</HeaderCell><Cell dataKey="pending_count" /></Column>
+                  <Column width={80}><HeaderCell>Remitted</HeaderCell><Cell dataKey="remitted_count" /></Column>
+                  <Column width={80}><HeaderCell>{' '}</HeaderCell><Cell>{(r: any) => <Button size="sm" appearance="link" onClick={() => { setViewPaymentsCollector(r); setViewPaymentsTab('pending'); fetchUnremitted(r.id); fetchRemitted(r.id); setViewPaymentsModal(true); }}><Eye className="w-4 h-4" /></Button>}</Cell></Column>
                 </Table>
               </Panel>
             </div>
@@ -957,11 +966,12 @@ ${transactions.map((t: any, i: number) => `<tr>
           {pickupTab === 'outstanding' && (
             <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Collector Outstanding Summary">
               <Table data={collectorOutstanding} virtualized height={400} rowHeight={45}>
-                <Column width={160}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
-                <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
-                <Column width={140}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-amber-600 font-bold">{formatCurrency(r.outstanding_amount)}</span>}</Cell></Column>
-                <Column width={100}><HeaderCell>Pending</HeaderCell><Cell>{(r: any) => <Tag color="yellow">{r.pending_count}</Tag>}</Cell></Column>
-                <Column width={100}><HeaderCell>Remitted</HeaderCell><Cell>{(r: any) => <Tag color="green">{r.remitted_count}</Tag>}</Cell></Column>
+                <Column width={150}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
+                <Column width={110}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+                <Column width={130}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-amber-600 font-bold">{formatCurrency(r.outstanding_amount)}</span>}</Cell></Column>
+                <Column width={90}><HeaderCell>Pending</HeaderCell><Cell>{(r: any) => <Tag color="yellow">{r.pending_count}</Tag>}</Cell></Column>
+                <Column width={90}><HeaderCell>Remitted</HeaderCell><Cell>{(r: any) => <Tag color="green">{r.remitted_count}</Tag>}</Cell></Column>
+                <Column width={70}><HeaderCell>{' '}</HeaderCell><Cell>{(r: any) => <Button size="sm" appearance="link" onClick={() => { setViewPaymentsCollector(r); setViewPaymentsTab('pending'); fetchUnremitted(r.id); fetchRemitted(r.id); setViewPaymentsModal(true); }}><Eye className="w-4 h-4" /></Button>}</Cell></Column>
               </Table>
             </Panel>
           )}
@@ -1216,6 +1226,55 @@ ${transactions.map((t: any, i: number) => `<tr>
         <Modal.Footer>
           <Button appearance="ghost" onClick={() => printReport(viewData?.id)} disabled={!viewData?.id}><Printer className="w-4 h-4 mr-1" />Print Report</Button>
           <Button appearance="subtle" onClick={() => { setViewModal(false); setShiftDetail(null); }}>Close</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* View Payments modal */}
+      <Modal open={viewPaymentsModal} onClose={() => setViewPaymentsModal(false)} size="lg">
+        <Modal.Header><Modal.Title>Payments — {viewPaymentsCollector?.collector_name}</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
+            <Button appearance={viewPaymentsTab === 'pending' ? 'primary' : 'subtle'} size="sm" onClick={() => setViewPaymentsTab('pending')}>
+              Pending ({viewPaymentsCollector?.pending_count || 0})
+            </Button>
+            <Button appearance={viewPaymentsTab === 'remitted' ? 'primary' : 'subtle'} size="sm" onClick={() => setViewPaymentsTab('remitted')}>
+              Remitted ({viewPaymentsCollector?.remitted_count || 0})
+            </Button>
+          </div>
+          {viewPaymentsTab === 'pending' ? (
+            unremittedPayments.length === 0 ? (
+              <p className="text-gray-400 text-sm py-4 text-center">No pending payments</p>
+            ) : (
+              <Table data={unremittedPayments} virtualized height={350} rowHeight={40}>
+                <Column width={140}><HeaderCell>Payment #</HeaderCell><Cell dataKey="payment_number" /></Column>
+                <Column width={180}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+                <Column width={140}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+                <Column width={100}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => <span className="font-semibold text-amber-600">{formatCurrency(r.amount)}</span>}</Cell></Column>
+                <Column width={120}><HeaderCell>Payment Date</HeaderCell><Cell>{(r: any) => new Date(r.payment_date || r.created_at).toLocaleDateString()}</Cell></Column>
+              </Table>
+            )
+          ) : (
+            remittedPayments.length === 0 ? (
+              <p className="text-gray-400 text-sm py-4 text-center">No remitted payments</p>
+            ) : (
+              <Table data={remittedPayments} virtualized height={350} rowHeight={40}>
+                <Column width={140}><HeaderCell>Payment #</HeaderCell><Cell dataKey="payment_number" /></Column>
+                <Column width={180}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+                <Column width={140}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+                <Column width={100}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => <span className="font-semibold text-green-600">{formatCurrency(r.amount)}</span>}</Cell></Column>
+                <Column width={140}><HeaderCell>Pick-up #</HeaderCell><Cell dataKey="pickup_number" /></Column>
+                <Column width={130}><HeaderCell>Remitted At</HeaderCell><Cell>{(r: any) => r.remitted_at ? new Date(r.remitted_at).toLocaleString() : '-'}</Cell></Column>
+              </Table>
+            )
+          )}
+          {viewPaymentsTab === 'pending' && unremittedPayments.length > 0 && (
+            <div className="text-right mt-2 text-sm text-gray-500">
+              Total: <span className="font-bold text-amber-600">{formatCurrency(unremittedPayments.reduce((s: number, p: any) => s + parseFloat(p.amount), 0))}</span>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button appearance="subtle" onClick={() => setViewPaymentsModal(false)}>Close</Button>
         </Modal.Footer>
       </Modal>
 
