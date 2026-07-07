@@ -737,7 +737,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
               </div>
               <div>
                 <label className="rs-form-control-label">Previous Balance (deducted from proceeds)</label>
-                <input type="number" className="rs-input w-full" min={0} step={0.01} value={formValue.previousBalance || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, previousBalance: e.target.value }))} placeholder="0.00" readOnly={formValue.applicationType === 'Renewal'} />
+                <input type="number" className="rs-input w-full" min={0} step={0.01} value={formValue.previousBalance || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, previousBalance: e.target.value }))} placeholder="0.00" />
               </div>
               <div>
                 <label className="rs-form-control-label">Term ({formValue.termType || 'months'}) *</label>
@@ -840,7 +840,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
             </div>
             <div>
               <label className="rs-form-control-label">Previous Balance (deducted from proceeds)</label>
-              <input type="number" className="rs-input w-full" min={0} step={0.01} value={editFormValue.previousBalance || ''} onChange={(e) => setEditFormValue((prev: any) => ({ ...prev, previousBalance: e.target.value }))} placeholder="0.00" readOnly={editFormValue.applicationType === 'Renewal'} />
+              <input type="number" className="rs-input w-full" min={0} step={0.01} value={editFormValue.previousBalance || ''} onChange={(e) => setEditFormValue((prev: any) => ({ ...prev, previousBalance: e.target.value }))} placeholder="0.00" />
             </div>
             <div>
               <label className="rs-form-control-label">Term ({editFormValue.termType || 'months'}) *</label>
