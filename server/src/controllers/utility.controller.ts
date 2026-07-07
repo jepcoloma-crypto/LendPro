@@ -100,11 +100,42 @@ export class UtilityController {
     }
   }
 
-  async backupDatabase(_req: AuthRequest, res: Response, next: NextFunction) {
+  async backupDatabase(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const tables = (await pool.query(
+      const modulesParam = req.query.modules ? (req.query.modules as string).split(',').map(s => s.trim()).filter(Boolean) : null;
+
+      const allTables = (await pool.query(
         `SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' ORDER BY tablename`
       )).rows.map((r: any) => r.tablename as string);
+
+      const MODULE_TABLES: Record<string, string[]> = {
+        borrowers: ['borrowers', 'borrower_documents', 'co_makers'],
+        applications: ['loan_applications', 'application_documents', 'loan_approvals'],
+        loans: ['loans', 'loan_charges', 'penalties', 'amortization_schedules', 'loan_disbursements'],
+        payments: ['payments', 'payment_allocations'],
+        cashier: ['cashier_sessions', 'cash_transactions', 'cash_counts', 'cash_reconciliations', 'approval_history', 'operating_expenses', 'other_income'],
+        collections: ['collections', 'collection_visits'],
+        reports: ['audit_logs', 'notifications', 'email_logs', 'sms_logs'],
+      };
+      const SYSTEM_TABLES = ['settings', 'users', 'roles', 'branches', 'loan_products', 'charges', 'login_history'];
+
+      let tables: string[];
+      let backupModules: string[] = [];
+      if (modulesParam && modulesParam.length > 0) {
+        const tableSet = new Set<string>();
+        for (const mod of modulesParam) {
+          const tbls = MODULE_TABLES[mod];
+          if (tbls) {
+            tbls.forEach(t => tableSet.add(t));
+            backupModules.push(mod);
+          }
+        }
+        SYSTEM_TABLES.forEach(t => tableSet.add(t));
+        tables = allTables.filter(t => tableSet.has(t));
+      } else {
+        tables = allTables;
+        backupModules = ['all'];
+      }
       const total = tables.length;
 
       res.setHeader('Content-Type', 'application/x-ndjson');
@@ -146,6 +177,7 @@ export class UtilityController {
       const lines: string[] = [];
       lines.push('-- LendPro Database Backup');
       lines.push(`-- Generated: ${new Date().toISOString()}`);
+      lines.push(`-- Modules: ${backupModules.join(', ')}`);
       lines.push('', 'SET session_replication_role = replica;', '');
 
       let tableIndex = 0;
@@ -205,7 +237,8 @@ export class UtilityController {
 
       lines.push('SET session_replication_role = origin;', '');
       const sql = lines.join('\n');
-      const filename = `lendpro-backup-${new Date().toISOString().slice(0, 10)}.sql`;
+      const suffix = backupModules.length === 1 && backupModules[0] === 'all' ? 'full' : backupModules.join('-');
+      const filename = `lendpro-${suffix}-${new Date().toISOString().slice(0, 10)}.sql`;
       res.write(JSON.stringify({ type: 'file', content: Buffer.from(sql).toString('base64'), filename }) + '\n');
       res.end();
     } catch (error: any) {

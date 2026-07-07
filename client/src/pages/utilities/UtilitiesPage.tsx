@@ -25,6 +25,9 @@ const SystemToolsTab = () => {
   const [backupProgress, setBackupProgress] = useState(0);
   const [backupTotal, setBackupTotal] = useState(0);
   const [backupTable, setBackupTable] = useState('');
+  const [backupOpen, setBackupOpen] = useState(false);
+  const [backupMode, setBackupMode] = useState<'full' | 'modules'>('full');
+  const [backupModules, setBackupModules] = useState<string[]>([]);
   const [clearOpen, setClearOpen] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
   const [clearModules, setClearModules] = useState<string[]>([]);
@@ -55,7 +58,8 @@ const SystemToolsTab = () => {
     setBackupTable('');
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch(`${api.defaults.baseURL}/utilities/backup`, {
+      const params = backupModules.length > 0 ? `?modules=${backupModules.join(',')}` : '';
+      const response = await fetch(`${api.defaults.baseURL}/utilities/backup${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const reader = response.body!.getReader();
@@ -144,17 +148,9 @@ const SystemToolsTab = () => {
 
       {/* Database Backup */}
       <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-sm font-semibold flex items-center gap-2"><Download className="w-4 h-4 text-purple-500" /> Database Backup</div>}>
-        <p className="text-sm text-gray-500 mb-3">Download a complete SQL dump of the database — schema + all data.</p>
-        {backupLoading && backupTotal > 0 && (
-          <div className="mb-3">
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
-              <div className="h-full bg-purple-500 rounded-full transition-all duration-300" style={{ width: `${Math.round((backupProgress / backupTotal) * 100)}%` }} />
-            </div>
-            <p className="text-xs text-gray-500 mt-1">Processing {backupTable || '...'} ({backupProgress} / {backupTotal} tables)</p>
-          </div>
-        )}
-        <Button appearance="primary" color="violet" onClick={handleBackup} loading={backupLoading && backupTotal === 0} startIcon={<Download className="w-4 h-4" />}>
-          {backupLoading ? 'Backing up...' : 'Download Backup'}
+        <p className="text-sm text-gray-500 mb-3">Download a SQL dump — full database or selected modules only.</p>
+        <Button appearance="primary" color="violet" onClick={() => { setBackupMode('full'); setBackupModules([]); setBackupOpen(true); }} startIcon={<Download className="w-4 h-4" />}>
+          Download Backup
         </Button>
       </Panel>
 
@@ -192,6 +188,77 @@ const SystemToolsTab = () => {
         <p className="text-sm text-gray-500 mb-3">Remove data from selected modules. Users, roles, loan products, charges, and settings are always preserved.</p>
         <Button appearance="primary" color="red" onClick={() => { setClearModules([]); setClearOpen(true); }} startIcon={<Trash2 className="w-4 h-4" />}>Clear Data</Button>
       </Panel>
+
+      {/* Backup Modal */}
+      <Modal open={backupOpen} onClose={() => { if (!backupLoading) { setBackupOpen(false); setBackupProgress(0); setBackupTotal(0); } }} size="sm">
+        <Modal.Header><Modal.Title>Database Backup</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {backupLoading ? (
+            <div className="text-center py-4">
+              <div className="w-16 h-16 mx-auto mb-3 rounded-full border-4 border-purple-200 border-t-purple-500 animate-spin" />
+              <p className="text-gray-700 dark:text-gray-300 font-medium mb-2">Generating backup...</p>
+              {backupTotal > 0 && (
+                <div className="mt-3">
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+                    <div className="h-full bg-purple-500 rounded-full transition-all duration-300" style={{ width: `${Math.round((backupProgress / backupTotal) * 100)}%` }} />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Processing {backupTable || '...'} ({backupProgress} / {backupTotal} tables)</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-2">
+              <p className="text-gray-700 dark:text-gray-300 font-medium mb-3">Select backup type:</p>
+              <div className="space-y-3">
+                {(['full', 'modules'] as const).map(mode => {
+                  const active = backupMode === mode;
+                  return (
+                    <label key={mode} className="flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors"
+                      style={{
+                        borderColor: active ? '#7c3aed' : '#d1d5db',
+                        background: active ? 'rgba(124,58,237,0.06)' : undefined,
+                      }}>
+                      <input type="radio" name="backupMode" checked={active}
+                        onChange={() => { setBackupMode(mode); if (mode === 'full') setBackupModules([]); }}
+                        className="mt-0.5" />
+                      <div>
+                        <div className="font-medium text-sm">{mode === 'full' ? 'Full Database' : 'Selected Modules'}</div>
+                        <div className="text-xs text-gray-400">{mode === 'full' ? 'All tables — complete system backup' : 'Backup specific modules only'}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              {backupMode === 'modules' && (
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs text-gray-500 mb-2">Choose modules to backup:</p>
+                  {MODULE_OPTIONS.map(m => (
+                    <label key={m.value} className="flex items-start gap-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                      <input type="checkbox" checked={backupModules.includes(m.value)}
+                        onChange={(e) => setBackupModules(e.target.checked ? [...backupModules, m.value] : backupModules.filter(v => v !== m.value))}
+                        className="mt-0.5" />
+                      <div>
+                        <div className="font-medium text-sm">{m.label}</div>
+                        <div className="text-xs text-gray-400">{m.desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          {!backupLoading && (
+            <>
+              <Button appearance="primary" color="violet" onClick={handleBackup} disabled={backupMode === 'modules' && backupModules.length === 0} startIcon={<Download className="w-4 h-4" />}>
+                {backupMode === 'full' ? 'Download Full Backup' : `Download (${backupModules.length} module${backupModules.length > 1 ? 's' : ''})`}
+              </Button>
+              <Button onClick={() => setBackupOpen(false)} appearance="subtle">Cancel</Button>
+            </>
+          )}
+        </Modal.Footer>
+      </Modal>
 
       {/* Restore Confirmation */}
       <Modal open={restoreOpen} onClose={() => { setRestoreOpen(false); setRestoreFile(null); setRestoreProgress(0); setRestoreTotal(0); }} size="xs">
