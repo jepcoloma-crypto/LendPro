@@ -44,6 +44,15 @@ export class CashierController {
         throw new Error(`Cannot close shift — ${pendingPickups.rows[0].c} payment(s) are still pending in Cash Pick-up. Record all pick-ups first.`);
       }
 
+      // Check for unresolved reconciliations from previous shifts
+      const pendingRecon = await pool.query(
+        `SELECT COUNT(*) as c FROM cash_reconciliations r JOIN cashier_sessions s ON s.id = r.shift_id WHERE r.status = 'pending' AND s.user_id = $1`,
+        [req.user!.userId]
+      );
+      if (parseInt(pendingRecon.rows[0]?.c || '0') > 0) {
+        throw new Error(`Cannot close shift — you have ${pendingRecon.rows[0].c} pending reconciliation(s) from previous shifts that need approval first.`);
+      }
+
       // Recompute from cash_transactions
       const txns = await cashTransactionRepo.query(
         `SELECT direction, payment_method, COALESCE(SUM(amount),0) as total
