@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { cashierSessionRepo, cashTransactionRepo, cashCountRepo, cashReconciliationRepo, approvalHistoryRepo, paymentRepo } from '../repositories';
+import { pool } from '../database/connection';
 import { AppError } from '../middleware/errorHandler';
 import { paramStr } from '../utils/helpers';
 
@@ -34,6 +35,14 @@ export class CashierController {
       if (!shift) throw new Error('Shift not found');
       if (shift.status !== 'open') throw new Error('Shift is not open');
       if (shift.user_id !== req.user?.userId) throw new Error('Not your shift');
+
+      // Check for pending unremitted payments
+      const pendingPickups = await pool.query(
+        `SELECT COUNT(*) as c FROM payments WHERE remittance_status = 'pending' AND status != 'cancelled'`
+      );
+      if (parseInt(pendingPickups.rows[0]?.c || '0') > 0) {
+        throw new Error(`Cannot close shift — ${pendingPickups.rows[0].c} payment(s) are still pending in Cash Pick-up. Record all pick-ups first.`);
+      }
 
       // Recompute from cash_transactions
       const txns = await cashTransactionRepo.query(
