@@ -637,6 +637,23 @@ export const DashboardPage = () => {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4">
                 <div className="flex items-center justify-between">
                   <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Principal</p>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{formatCurrency(stats.totalPrincipal)}</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+                    <DollarSign className="w-6 h-6 text-green-600" />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center text-sm text-gray-400">
+                  <span>Originally lent</span>
+                </div>
+              </div>
+            </Col>
+
+            <Col xs={24} sm={12} lg={6}>
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4">
+                <div className="flex items-center justify-between">
+                  <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Collection Rate</p>
                     <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats.collectionRate}%</h3>
                   </div>
