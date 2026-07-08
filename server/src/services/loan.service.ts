@@ -544,75 +544,51 @@ export class LoanService {
   async getDashboardStats(userId?: string, roleSlug?: string) {
     const isCollector = roleSlug === 'collector' && userId;
     const cid = isCollector ? [userId] : [];
+    const cf = isCollector ? 'AND collector_id = $1' : '';
+    const cfl = isCollector ? 'AND l.collector_id = $1' : '';
 
-    const collectorSuffix = (sql: string, collectorField = 'collector_id') =>
-      isCollector ? sql + ` AND l.${collectorField} = $1` : sql;
+    const aggQuery = isCollector
+      ? `
+        SELECT
+          (SELECT COUNT(*) FROM loans WHERE status = 'active' AND collector_id = $1) as active_loans,
+          (SELECT COUNT(*) FROM loans) as total_loans,
+          (SELECT COALESCE(SUM(outstanding_balance), 0) FROM loans WHERE status = 'active' AND collector_id = $1) as outstanding_balance,
+          (SELECT COALESCE(SUM(outstanding_balance), 0) FROM loans WHERE status IN ('active','delinquent') AND collector_id = $1) as total_portfolio,
+          (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE status = 'active' AND collector_id = $1) as total_principal,
+          (SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed' AND l.collector_id = $1) as total_collections,
+          (SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed' AND pay.payment_date >= DATE_TRUNC('month', NOW()) AND l.collector_id = $1) as monthly_collections,
+          (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE release_date >= DATE_TRUNC('month', NOW()) AND collector_id = $1) as monthly_releases,
+          (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE release_date IS NOT NULL AND collector_id = $1) as total_releases,
+          (SELECT COUNT(*) FROM loans WHERE status = 'delinquent' AND collector_id = $1) as delinquent_loans,
+          (SELECT COUNT(*) FROM amortization_schedules a JOIN loans l ON l.id = a.loan_id WHERE a.status = 'overdue' AND l.collector_id = $1) as overdue_count,
+          (SELECT COALESCE(SUM(pay.interest_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE l.collector_id = $1) as total_interest,
+          (SELECT COALESCE(SUM(pay.penalty_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE l.collector_id = $1) as total_penalties,
+          (SELECT COALESCE(SUM(l.outstanding_balance), 0) FROM loans l WHERE l.status IN ('active','delinquent') AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.status = 'overdue' AND a.due_date < CURRENT_DATE - INTERVAL '30 days') AND l.collector_id = $1) as par30_amount,
+          (SELECT COUNT(DISTINCT borrower_id) FROM loans WHERE status IN ('active','delinquent') AND collector_id = $1) as borrower_count
+      `
+      : `
+        SELECT
+          (SELECT COUNT(*) FROM loans WHERE status = 'active') as active_loans,
+          (SELECT COUNT(*) FROM loans) as total_loans,
+          (SELECT COALESCE(SUM(outstanding_balance), 0) FROM loans WHERE status = 'active') as outstanding_balance,
+          (SELECT COALESCE(SUM(outstanding_balance), 0) FROM loans WHERE status IN ('active','delinquent')) as total_portfolio,
+          (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE status = 'active') as total_principal,
+          (SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed') as total_collections,
+          (SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed' AND pay.payment_date >= DATE_TRUNC('month', NOW())) as monthly_collections,
+          (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE release_date >= DATE_TRUNC('month', NOW())) as monthly_releases,
+          (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE release_date IS NOT NULL) as total_releases,
+          (SELECT COUNT(*) FROM loans WHERE status = 'delinquent') as delinquent_loans,
+          (SELECT COUNT(*) FROM amortization_schedules WHERE status = 'overdue') as overdue_count,
+          (SELECT COALESCE(SUM(pay.interest_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id) as total_interest,
+          (SELECT COALESCE(SUM(pay.penalty_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id) as total_penalties,
+          (SELECT COALESCE(SUM(l.outstanding_balance), 0) FROM loans l WHERE l.status IN ('active','delinquent') AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.status = 'overdue' AND a.due_date < CURRENT_DATE - INTERVAL '30 days')) as par30_amount,
+          (SELECT COUNT(DISTINCT borrower_id) FROM loans WHERE status IN ('active','delinquent')) as borrower_count
+      `;
 
-    const [activeLoans, totalLoans, totalOutstanding, totalPortfolio, totalPrincipal,
-      totalPayments, monthlyPayments, monthlyReleases, totalReleases, delinquentLoans,
-      overdueCount, totalInterestEarned, totalPenalties,
-      monthlyTrendResult, releaseTrendResult, topCollectorsResult, recentLoans, recentPayments, par30Result, borrowerCountResult] = await Promise.all([
+    const [aggResult, monthlyTrendResult, releaseTrendResult, topCollectorsResult,
+      recentLoans, recentPayments] = await Promise.all([
 
-      isCollector
-        ? loanRepo.query(`SELECT COUNT(*) as c FROM loans WHERE status = 'active' AND collector_id = $1`, [userId]).then(r => parseInt(r[0]?.c || '0'))
-        : loanRepo.count({ status: 'active' }),
-
-      loanRepo.count({}),
-
-      loanRepo.query(
-        `SELECT COALESCE(SUM(outstanding_balance), 0) as total FROM loans WHERE status = 'active'${isCollector ? ' AND collector_id = $1' : ''}`,
-        cid
-      ),
-
-      loanRepo.query(
-        `SELECT COALESCE(SUM(outstanding_balance), 0) as total FROM loans WHERE status IN ('active', 'delinquent')${isCollector ? ' AND collector_id = $1' : ''}`,
-        cid
-      ),
-
-      loanRepo.query(
-        `SELECT COALESCE(SUM(principal_amount), 0) as total FROM loans WHERE status = 'active'${isCollector ? ' AND collector_id = $1' : ''}`,
-        cid
-      ),
-
-      paymentRepo.query(
-        `SELECT COALESCE(SUM(pay.amount), 0) as total FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed'${isCollector ? ' AND l.collector_id = $1' : ''}`,
-        cid
-      ),
-
-      paymentRepo.query(
-        `SELECT COALESCE(SUM(pay.amount), 0) as total FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed' AND pay.payment_date >= DATE_TRUNC('month', NOW())${isCollector ? ' AND l.collector_id = $1' : ''}`,
-        cid
-      ),
-
-      loanRepo.query(
-        `SELECT COALESCE(SUM(principal_amount), 0) as total FROM loans WHERE release_date >= DATE_TRUNC('month', NOW())${isCollector ? ' AND collector_id = $1' : ''}`,
-        cid
-      ),
-
-      loanRepo.query(
-        `SELECT COALESCE(SUM(principal_amount), 0) as total FROM loans WHERE release_date IS NOT NULL${isCollector ? ' AND collector_id = $1' : ''}`,
-        cid
-      ),
-
-      isCollector
-        ? loanRepo.query(`SELECT COUNT(*) as c FROM loans WHERE status = 'delinquent' AND collector_id = $1`, [userId]).then(r => parseInt(r[0]?.c || '0'))
-        : loanRepo.count({ status: 'delinquent' }),
-
-      isCollector
-        ? amortizationScheduleRepo.query(
-            `SELECT COUNT(*) as c FROM amortization_schedules a JOIN loans l ON l.id = a.loan_id WHERE a.status = 'overdue' AND l.collector_id = $1`, [userId]
-          ).then(r => parseInt(r[0]?.c || '0'))
-        : amortizationScheduleRepo.count({ status: 'overdue' }),
-
-      paymentRepo.query(
-        `SELECT COALESCE(SUM(pay.interest_amount), 0) as total FROM payments pay JOIN loans l ON l.id = pay.loan_id${isCollector ? ' WHERE l.collector_id = $1' : ''}`,
-        cid
-      ),
-
-      paymentRepo.query(
-        `SELECT COALESCE(SUM(pay.penalty_amount), 0) as total FROM payments pay JOIN loans l ON l.id = pay.loan_id${isCollector ? ' WHERE l.collector_id = $1' : ''}`,
-        cid
-      ),
+      loanRepo.query(aggQuery, cid),
 
       paymentRepo.query(
         `SELECT DATE_TRUNC('month', pay.payment_date) as month,
@@ -623,7 +599,7 @@ export class LoanService {
          JOIN loans l ON l.id = pay.loan_id
          WHERE pay.status = 'completed'
            AND pay.payment_date >= DATE_TRUNC('month', NOW()) - INTERVAL '5 months'
-           ${isCollector ? 'AND l.collector_id = $1' : ''}
+           ${cfl}
          GROUP BY DATE_TRUNC('month', pay.payment_date)
          ORDER BY month ASC`,
         cid
@@ -635,7 +611,7 @@ export class LoanService {
          FROM loans
          WHERE release_date IS NOT NULL
            AND release_date >= DATE_TRUNC('month', NOW()) - INTERVAL '5 months'
-           ${isCollector ? 'AND collector_id = $1' : ''}
+           ${cf}
          GROUP BY DATE_TRUNC('month', release_date)
          ORDER BY month ASC`,
         cid
@@ -660,7 +636,7 @@ export class LoanService {
                 b.first_name || ' ' || b.last_name as borrower_name
          FROM loans l
          JOIN borrowers b ON b.id = l.borrower_id
-         WHERE l.release_date IS NOT NULL${isCollector ? ' AND l.collector_id = $1' : ''}
+         WHERE l.release_date IS NOT NULL${cf}
          ORDER BY l.release_date DESC
          LIMIT 5`,
         cid
@@ -673,50 +649,32 @@ export class LoanService {
          FROM payments p
          JOIN loans l ON l.id = p.loan_id
          JOIN borrowers b ON b.id = p.borrower_id
-         WHERE p.status = 'completed'${isCollector ? ' AND l.collector_id = $1' : ''}
+         WHERE p.status = 'completed'${cfl}
          ORDER BY p.payment_date DESC
          LIMIT 5`,
         cid
       ),
+    ]);
 
-      loanRepo.query(
-        `SELECT COALESCE(SUM(l.outstanding_balance), 0) as total
-         FROM loans l
-         WHERE l.status IN ('active', 'delinquent')
-           AND EXISTS (
-             SELECT 1 FROM amortization_schedules a
-             WHERE a.loan_id = l.id
-               AND a.status = 'overdue'
-               AND a.due_date < CURRENT_DATE - INTERVAL '30 days'
-           )
-            ${isCollector ? 'AND l.collector_id = $1' : ''}`,
-         cid
-       ),
-
-       loanRepo.query(
-         `SELECT COUNT(DISTINCT l.borrower_id) as c
-          FROM loans l
-          WHERE l.status IN ('active', 'delinquent')
-            ${isCollector ? 'AND l.collector_id = $1' : ''}`,
-         cid
-       ),
-     ]);
-
-    const portfolioTotal = parseFloat(totalPortfolio[0]?.total || '0');
-    const totalCollected = parseFloat(totalPayments[0]?.total || '0');
+    const r = aggResult[0];
+    const activeLoans = parseInt(r.active_loans);
+    const totalLoans = parseInt(r.total_loans);
+    const portfolioTotal = parseFloat(r.total_portfolio);
+    const totalCollected = parseFloat(r.total_collections);
     const collectionRate = portfolioTotal > 0
       ? Math.round((totalCollected / (portfolioTotal + totalCollected)) * 100)
       : totalCollected > 0 ? 100 : 0;
+    const delinquentLoans = parseInt(r.delinquent_loans);
     const totalActiveAndDelinquent = activeLoans + delinquentLoans;
     const delinquencyRate = totalActiveAndDelinquent > 0
       ? Math.round((delinquentLoans / totalActiveAndDelinquent) * 100)
       : 0;
-    const par30Amount = parseFloat(par30Result[0]?.total || '0');
+    const par30Amount = parseFloat(r.par30_amount);
     const par30 = portfolioTotal > 0
       ? Math.round((par30Amount / portfolioTotal) * 100)
       : 0;
-    const borrowerCount = parseInt(borrowerCountResult[0]?.c || '0');
-    const activePrincipal = parseFloat(totalPrincipal[0]?.total || '0');
+    const borrowerCount = parseInt(r.borrower_count);
+    const activePrincipal = parseFloat(r.total_principal);
     const averageLoanSize = activeLoans > 0
       ? Math.round(activePrincipal / activeLoans)
       : 0;
@@ -728,19 +686,19 @@ export class LoanService {
       averageLoanSize,
       activeLoans,
       totalLoans,
-      outstandingBalance: parseFloat(totalOutstanding[0]?.total || '0'),
+      outstandingBalance: parseFloat(r.outstanding_balance),
       totalPortfolio: portfolioTotal,
-      totalPrincipal: parseFloat(totalPrincipal[0]?.total || '0'),
+      totalPrincipal: activePrincipal,
       totalCollections: totalCollected,
-      monthlyCollections: parseFloat(monthlyPayments[0]?.total || '0'),
-      monthlyReleases: parseFloat(monthlyReleases[0]?.total || '0'),
-      totalReleases: parseFloat(totalReleases[0]?.total || '0'),
+      monthlyCollections: parseFloat(r.monthly_collections),
+      monthlyReleases: parseFloat(r.monthly_releases),
+      totalReleases: parseFloat(r.total_releases),
       collectionRate,
       delinquencyRate,
       delinquentLoans,
-      overdueCount,
-      interestEarned: parseFloat(totalInterestEarned[0]?.total || '0'),
-      penaltyIncome: parseFloat(totalPenalties[0]?.total || '0'),
+      overdueCount: parseInt(r.overdue_count),
+      interestEarned: parseFloat(r.total_interest),
+      penaltyIncome: parseFloat(r.total_penalties),
       monthlyTrend: (monthlyTrendResult || []).map((r: any) => ({
         month: r.month,
         collected: parseFloat(r.collected),
