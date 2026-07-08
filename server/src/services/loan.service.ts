@@ -280,9 +280,13 @@ export class LoanService {
 
     const loanNumber = generateLoanNumber();
 
-    const maturityDate = schedule.length > 0
-      ? new Date(schedule[schedule.length - 1].dueDate)
-      : new Date();
+    const maturityDate = (() => {
+      const d = new Date();
+      if (app.term_type === 'days') d.setDate(d.getDate() + app.term_months);
+      else if (app.term_type === 'weeks') d.setDate(d.getDate() + app.term_months * 7);
+      else d.setMonth(d.getMonth() + app.term_months);
+      return d;
+    })();
 
     const loan = await loanRepo.create({
       loan_number: loanNumber,
@@ -367,8 +371,8 @@ export class LoanService {
       [loan.id, method, netProceeds, reference || null, userId]
     );
 
-    for (const item of schedule) {
-      await amortizationScheduleRepo.create({
+    await amortizationScheduleRepo.batchCreate(
+      schedule.map((item: any) => ({
         loan_id: loan.id,
         installment_no: item.installmentNo,
         due_date: item.dueDate,
@@ -377,8 +381,8 @@ export class LoanService {
         balance: item.balance,
         total_due: item.totalDue,
         status: 'pending',
-      });
-    }
+      }))
+    );
 
     await collectionRepo.create({
       loan_id: loan.id,
@@ -413,7 +417,13 @@ export class LoanService {
     );
 
     const loanNumber = generateLoanNumber();
-    const maturityDate = schedule.length > 0 ? new Date(schedule[schedule.length - 1].dueDate) : new Date();
+    const maturityDate = (() => {
+      const d = new Date();
+      if (termType === 'days') d.setDate(d.getDate() + termMonths);
+      else if (termType === 'weeks') d.setDate(d.getDate() + termMonths * 7);
+      else d.setMonth(d.getMonth() + termMonths);
+      return d;
+    })();
 
     const product = await loanProductRepo.findById(existing.product_id);
 
@@ -450,8 +460,8 @@ export class LoanService {
     await loanRepo.update(existingLoanId, { status: 'restructured' });
 
     // Create amortization schedule for new loan
-    for (const item of schedule) {
-      await amortizationScheduleRepo.create({
+    await amortizationScheduleRepo.batchCreate(
+      schedule.map((item: any) => ({
         loan_id: newLoan.id,
         installment_no: item.installmentNo,
         due_date: item.dueDate,
@@ -460,8 +470,8 @@ export class LoanService {
         balance: item.balance,
         total_due: item.totalDue,
         status: 'pending',
-      });
-    }
+      }))
+    );
 
     // Create collection record
     await collectionRepo.create({
@@ -783,9 +793,14 @@ export class LoanService {
     const totalAmount = scheduleItems.reduce((s: number, item: any) => s + Number(item.total_due || 0), 0);
     const loanNumber = generateLoanNumber();
 
-    const maturityDate = scheduleItems.length > 0
-      ? new Date(scheduleItems[scheduleItems.length - 1].dueDate)
-      : null;
+    const maturityDate = (() => {
+      if (!data.releaseDate) return null;
+      const d = new Date(data.releaseDate);
+      if (termType === 'days') d.setDate(d.getDate() + termMonths);
+      else if (termType === 'weeks') d.setDate(d.getDate() + termMonths * 7);
+      else d.setMonth(d.getMonth() + termMonths);
+      return d;
+    })();
 
     const loan = await loanRepo.create({
       loan_number: loanNumber,
@@ -811,10 +826,8 @@ export class LoanService {
       collector_id: data.collectorId || null,
     });
 
-    const paidSchedules: { scheduleId: string; amount: number; paidAt: Date | null }[] = [];
-
-    for (const item of scheduleItems) {
-      const created = await amortizationScheduleRepo.create({
+    const createdSchedules = await amortizationScheduleRepo.batchCreate(
+      scheduleItems.map(item => ({
         loan_id: loan.id,
         installment_no: item.installmentNo,
         due_date: new Date(item.dueDate),
@@ -825,16 +838,16 @@ export class LoanService {
         paid_amount: Number(item.paidAmount) || 0,
         status: item.status || 'pending',
         paid_at: item.paidAt ? new Date(item.paidAt) : null,
-      });
-      if (Number(item.paidAmount) > 0) {
-        paidSchedules.push({ scheduleId: created.id, amount: Number(item.paidAmount), paidAt: item.paidAt ? new Date(item.paidAt) : null });
-      }
-    }
+      }))
+    );
 
-    // Create payment records for historical payments
-    const totalPaidAmount = paidSchedules.reduce((s, p) => s + p.amount, 0);
+    const paidSchedules = createdSchedules
+      .filter((s: any) => Number(s.paid_amount) > 0)
+      .map((s: any) => ({ scheduleId: s.id, amount: Number(s.paid_amount), paidAt: s.paid_at }));
+
+    const totalPaidAmount = paidSchedules.reduce((s: number, p: any) => s + p.amount, 0);
     if (totalPaidAmount > 0) {
-      const latestDate = paidSchedules.reduce((latest, p) => p.paidAt && p.paidAt > latest ? p.paidAt : latest, paidSchedules[0].paidAt || new Date());
+      const latestDate = paidSchedules.reduce((latest: Date, p: any) => p.paidAt && p.paidAt > latest ? p.paidAt : latest, paidSchedules[0].paidAt || new Date());
       const payment = await paymentRepo.create({
         payment_number: 'HIST-' + loan.loan_number,
         loan_id: loan.id,
@@ -849,13 +862,15 @@ export class LoanService {
         status: 'completed',
       });
 
-      for (const ps of paidSchedules) {
-        await paymentAllocationRepo.create({
-          payment_id: payment.id,
-          schedule_id: ps.scheduleId,
-          amount: ps.amount,
-          allocated_to: 'principal',
-        });
+      if (paidSchedules.length > 0) {
+        await paymentAllocationRepo.batchCreate(
+          paidSchedules.map((ps: any) => ({
+            payment_id: payment.id,
+            schedule_id: ps.scheduleId,
+            amount: ps.amount,
+            allocated_to: 'principal',
+          }))
+        );
       }
     }
 

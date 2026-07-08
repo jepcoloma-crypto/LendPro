@@ -86,6 +86,24 @@ export class BaseRepository {
     return result.rows[0];
   }
 
+  async batchCreate(dataArray: Record<string, any>[]): Promise<any[]> {
+    if (dataArray.length === 0) return [];
+    const keys = Object.keys(dataArray[0]);
+    const columns = keys.join(', ');
+    const allValues: any[] = [];
+    const placeholders = dataArray.map((_, rowIdx) => {
+      const rowValues = keys.map(key => dataArray[rowIdx][key]);
+      allValues.push(...rowValues);
+      return `(${rowValues.map((_, colIdx) => `$${rowIdx * keys.length + colIdx + 1}`).join(', ')})`;
+    });
+
+    const result = await query(
+      `INSERT INTO ${this.tableName} (${columns}) VALUES ${placeholders.join(', ')} RETURNING *`,
+      allValues
+    );
+    return result.rows;
+  }
+
   async update(id: string, data: Record<string, any>): Promise<any | null> {
     const keys = Object.keys(data);
     const values = Object.values(data);
