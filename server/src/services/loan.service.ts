@@ -802,6 +802,39 @@ export class LoanService {
       return d;
     })();
 
+    // Compute charges (same logic as releaseLoan)
+    let totalCharges = 0;
+    let chargeSource: any[] = [];
+    if (data.loanProductId) {
+      const productCharges = await loanProductChargeRepo.query(
+        `SELECT lpc.*, c.name, c.computation_type, c.default_amount
+         FROM loan_product_charges lpc
+         JOIN charges c ON c.id = lpc.charge_id
+         WHERE lpc.loan_product_id = $1 AND c.is_active = true`,
+        [data.loanProductId]
+      );
+      if (productCharges.length > 0) {
+        chargeSource = productCharges;
+      } else {
+        const allCharges = await loanProductChargeRepo.query(
+          `SELECT NULL as id, NULL as loan_product_id, c.id as charge_id, NULL as amount, false as is_required,
+                  c.name, c.computation_type, c.default_amount
+           FROM charges c WHERE c.is_active = true ORDER BY c.name`
+        );
+        chargeSource = allCharges;
+      }
+    }
+    for (const pc of chargeSource) {
+      const rawAmount = parseFloat(pc.amount ?? pc.default_amount ?? 0);
+      const chargeAmount = pc.computation_type === 'percentage'
+        ? Math.round(principal * rawAmount / 100 * 100) / 100
+        : rawAmount;
+      totalCharges += chargeAmount;
+    }
+    const prevBalance = Number(data.previousBalance) || 0;
+    const netProceeds = principal - totalCharges - prevBalance;
+    const totalSchedulePaid = scheduleItems.reduce((s: number, item: any) => s + Number(item.paidAmount || 0), 0);
+
     const loan = await loanRepo.create({
       loan_number: loanNumber,
       borrower_id: data.borrowerId,
@@ -809,7 +842,7 @@ export class LoanService {
       principal_amount: principal,
       interest_amount: totalInterest,
       total_amount: totalAmount,
-      outstanding_balance: totalAmount - (Number(data.totalPaid) || 0),
+      outstanding_balance: totalAmount - totalSchedulePaid,
       interest_rate: interestRate,
       interest_type: interestType,
       term_months: termMonths,
@@ -821,10 +854,24 @@ export class LoanService {
       next_payment_date: null,
       maturity_date: maturityDate,
       late_payment_fee: 0,
-      net_proceeds: principal - (Number(data.previousBalance) || 0),
+      net_proceeds: netProceeds,
       released_by: userId,
       collector_id: data.collectorId || null,
     });
+
+    // Create loan charge records
+    for (const pc of chargeSource) {
+      const rawAmount = parseFloat(pc.amount ?? pc.default_amount ?? 0);
+      const chargeAmount = pc.computation_type === 'percentage'
+        ? Math.round(principal * rawAmount / 100 * 100) / 100
+        : rawAmount;
+      await loanChargeRepo.create({
+        loan_id: loan.id,
+        charge_id: pc.charge_id,
+        charge_name: pc.name,
+        amount: chargeAmount,
+      });
+    }
 
     const createdSchedules = await amortizationScheduleRepo.batchCreate(
       scheduleItems.map(item => ({
