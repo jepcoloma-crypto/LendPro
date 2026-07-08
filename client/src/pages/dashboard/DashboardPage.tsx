@@ -667,6 +667,57 @@ export const DashboardPage = () => {
                 </div>
               </div>
             </Col>
+
+            <Col xs={24} sm={12} lg={6}>
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">PAR 30</p>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats.par30}%</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 text-orange-600" />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center text-sm text-gray-400">
+                  <span>At risk: <strong className="text-orange-500">{formatCurrency(stats.par30Amount)}</strong></span>
+                </div>
+              </div>
+            </Col>
+
+            <Col xs={24} sm={12} lg={6}>
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Borrowers</p>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats.borrowerCount}</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-cyan-100 dark:bg-cyan-900 rounded-lg flex items-center justify-center">
+                    <Users className="w-6 h-6 text-cyan-600" />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center text-sm text-gray-400">
+                  <span>Active accounts</span>
+                </div>
+              </div>
+            </Col>
+
+            <Col xs={24} sm={12} lg={6}>
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Avg Loan Size</p>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{formatCurrency(stats.averageLoanSize)}</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-teal-100 dark:bg-teal-900 rounded-lg flex items-center justify-center">
+                    <DollarSign className="w-6 h-6 text-teal-600" />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center text-sm text-gray-400">
+                  <span>Principal ÷ active loans</span>
+                </div>
+              </div>
+            </Col>
           </Row>
 
           {/* Charts Row */}

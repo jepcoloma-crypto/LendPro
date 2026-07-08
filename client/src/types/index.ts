@@ -254,6 +254,10 @@ export interface CollectionVisit {
 }
 
 export interface DashboardStats {
+  par30: number;
+  par30Amount: number;
+  borrowerCount: number;
+  averageLoanSize: number;
   activeLoans: number;
   totalLoans: number;
   outstandingBalance: number;

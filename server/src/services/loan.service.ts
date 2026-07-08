@@ -551,7 +551,7 @@ export class LoanService {
     const [activeLoans, totalLoans, totalOutstanding, totalPortfolio, totalPrincipal,
       totalPayments, monthlyPayments, monthlyReleases, totalReleases, delinquentLoans,
       overdueCount, totalInterestEarned, totalPenalties,
-      monthlyTrendResult, releaseTrendResult, topCollectorsResult, recentLoans, recentPayments] = await Promise.all([
+      monthlyTrendResult, releaseTrendResult, topCollectorsResult, recentLoans, recentPayments, par30Result, borrowerCountResult] = await Promise.all([
 
       isCollector
         ? loanRepo.query(`SELECT COUNT(*) as c FROM loans WHERE status = 'active' AND collector_id = $1`, [userId]).then(r => parseInt(r[0]?.c || '0'))
@@ -678,7 +678,29 @@ export class LoanService {
          LIMIT 5`,
         cid
       ),
-    ]);
+
+      loanRepo.query(
+        `SELECT COALESCE(SUM(l.outstanding_balance), 0) as total
+         FROM loans l
+         WHERE l.status IN ('active', 'delinquent')
+           AND EXISTS (
+             SELECT 1 FROM amortization_schedules a
+             WHERE a.loan_id = l.id
+               AND a.status = 'overdue'
+               AND a.due_date < CURRENT_DATE - INTERVAL '30 days'
+           )
+            ${isCollector ? 'AND l.collector_id = $1' : ''}`,
+         cid
+       ),
+
+       loanRepo.query(
+         `SELECT COUNT(DISTINCT l.borrower_id) as c
+          FROM loans l
+          WHERE l.status IN ('active', 'delinquent')
+            ${isCollector ? 'AND l.collector_id = $1' : ''}`,
+         cid
+       ),
+     ]);
 
     const portfolioTotal = parseFloat(totalPortfolio[0]?.total || '0');
     const totalCollected = parseFloat(totalPayments[0]?.total || '0');
@@ -689,8 +711,21 @@ export class LoanService {
     const delinquencyRate = totalActiveAndDelinquent > 0
       ? Math.round((delinquentLoans / totalActiveAndDelinquent) * 100)
       : 0;
+    const par30Amount = parseFloat(par30Result[0]?.total || '0');
+    const par30 = portfolioTotal > 0
+      ? Math.round((par30Amount / portfolioTotal) * 100)
+      : 0;
+    const borrowerCount = parseInt(borrowerCountResult[0]?.c || '0');
+    const activePrincipal = parseFloat(totalPrincipal[0]?.total || '0');
+    const averageLoanSize = activeLoans > 0
+      ? Math.round(activePrincipal / activeLoans)
+      : 0;
 
     return {
+      par30,
+      par30Amount,
+      borrowerCount,
+      averageLoanSize,
       activeLoans,
       totalLoans,
       outstandingBalance: parseFloat(totalOutstanding[0]?.total || '0'),
