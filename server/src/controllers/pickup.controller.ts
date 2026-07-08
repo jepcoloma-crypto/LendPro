@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { pool } from '../database/connection';
 import { generatePickupNumber } from '../utils/helpers';
+import { cashierSessionRepo, cashTransactionRepo } from '../repositories';
 
 const DENOMINATIONS = [1000, 500, 200, 100, 50, 20, 10, 5, 1];
 
@@ -13,6 +14,10 @@ export class PickupController {
       if (!collector_id) throw new AppError(400, 'Collector is required');
       if (!denominations || !Array.isArray(denominations) || !denominations.length)
         throw new AppError(400, 'At least one denomination entry is required');
+
+      // Must have an open shift to record cash
+      const shift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
+      if (!shift) throw new AppError(400, 'No open shift found. Open a shift first.');
 
       // Fetch unremitted payments for this collector
       const { rows: payments } = await pool.query(
@@ -29,9 +34,13 @@ export class PickupController {
 
       const totalAmount = payments.reduce((s: number, p: any) => s + parseFloat(p.amount), 0);
       const denomTotal = denominations.reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0);
+      const variance = parseFloat((denomTotal - totalAmount).toFixed(2));
 
-      if (Math.abs(denomTotal - totalAmount) > 0.02) {
-        throw new AppError(400, `Denomination total (${denomTotal.toFixed(2)}) does not match payment total (${totalAmount.toFixed(2)})`);
+      // Allow mismatch — record actual cash received, variance will surface in reconciliation
+      if (Math.abs(variance) > 0.02 && !req.body.variance_reason) {
+        throw new AppError(400,
+          `Cash amount (${denomTotal.toFixed(2)}) differs from payment total (${totalAmount.toFixed(2)}) by ${variance > 0 ? '+' : ''}${variance.toFixed(2)}. Provide a reason.`
+        );
       }
 
       const pickupNumber = generatePickupNumber();
@@ -40,11 +49,11 @@ export class PickupController {
         await client.query('SET search_path TO public');
         await client.query('BEGIN');
 
-        // Create pickup
+        // Create pickup with actual cash received
         const { rows: [pickup] } = await client.query(
           `INSERT INTO collector_pickups (pickup_number, collector_id, cashier_id, total_amount, notes)
            VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-          [pickupNumber, collector_id, req.user!.userId, totalAmount, notes || null]
+          [pickupNumber, collector_id, req.user!.userId, denomTotal, notes || null]
         );
 
         // Insert denominations
@@ -62,18 +71,28 @@ export class PickupController {
           [pickup.id, paymentIds]
         );
 
-        await client.query('COMMIT');
+        // Adjust expected_cash only for variance between actual cash and system amount.
+        // Payment auto-record already incremented expected_cash at payment creation time.
+        if (Math.abs(variance) > 0.02) {
+          const adjDirection = variance > 0 ? 'in' : 'out';
+          await client.query(
+            `INSERT INTO cash_transactions (shift_id, transaction_type, direction, amount, payment_method, description, created_by)
+             VALUES ($1, 'adjustment', $2, $3, 'cash', $4, $5)`,
+            [
+              shift.id,
+              adjDirection,
+              Math.abs(variance),
+              `Pick-up ${pickupNumber} ${variance > 0 ? 'overage' : 'shortage'}: ${req.body.variance_reason || ''}`,
+              req.user!.userId
+            ]
+          );
+          await client.query(
+            `UPDATE cashier_sessions SET expected_cash = expected_cash + $1 WHERE id = $2`,
+            [variance, shift.id]
+          );
+        }
 
-        // Auto-record cash transaction
-        const { autoRecordTransaction } = require('../services/cash-transaction.service');
-        await autoRecordTransaction({
-          userId: req.user!.userId,
-          transactionType: 'collection',
-          direction: 'in',
-          amount: totalAmount,
-          paymentMethod: 'cash',
-          description: `Cash pick-up ${pickupNumber} from collector`,
-        });
+        await client.query('COMMIT');
 
         res.status(201).json({ success: true, data: pickup, message: 'Cash pick-up recorded successfully' });
       } catch (err) {
