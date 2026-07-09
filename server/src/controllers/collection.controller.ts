@@ -75,7 +75,19 @@ export class CollectionController {
               c.last_visit_date, c.last_visit_notes, c.next_visit_date,
               c.created_at, c.updated_at,
               l.loan_number, l.outstanding_balance as total_due,
-              b.first_name || ' ' || b.last_name as borrower_name, b.mobile
+              b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
+              COALESCE((
+                SELECT SUM(a2.total_due - COALESCE(a2.paid_amount,0))
+                FROM amortization_schedules a2
+                WHERE a2.loan_id = l.id AND a2.due_date < CURRENT_DATE
+                  AND COALESCE(a2.paid_amount,0) < a2.total_due
+              ), 0) as total_overdue,
+              COALESCE((
+                SELECT MAX(CURRENT_DATE - a3.due_date)
+                FROM amortization_schedules a3
+                WHERE a3.loan_id = l.id AND a3.due_date < CURRENT_DATE
+                  AND COALESCE(a3.paid_amount,0) < a3.total_due
+              ), 0)::int as days_overdue
              FROM collections c
              JOIN loans l ON c.loan_id = l.id
              JOIN borrowers b ON c.borrower_id = b.id
@@ -93,7 +105,19 @@ export class CollectionController {
               c.last_visit_date, c.last_visit_notes, c.next_visit_date,
               c.created_at, c.updated_at,
               l.loan_number, l.outstanding_balance as total_due,
-              b.first_name || ' ' || b.last_name as borrower_name, b.mobile
+              b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
+              COALESCE((
+                SELECT SUM(a2.total_due - COALESCE(a2.paid_amount,0))
+                FROM amortization_schedules a2
+                WHERE a2.loan_id = l.id AND a2.due_date < CURRENT_DATE
+                  AND COALESCE(a2.paid_amount,0) < a2.total_due
+              ), 0) as total_overdue,
+              COALESCE((
+                SELECT MAX(CURRENT_DATE - a3.due_date)
+                FROM amortization_schedules a3
+                WHERE a3.loan_id = l.id AND a3.due_date < CURRENT_DATE
+                  AND COALESCE(a3.paid_amount,0) < a3.total_due
+              ), 0)::int as days_overdue
              FROM collections c
              JOIN loans l ON c.loan_id = l.id
              JOIN borrowers b ON c.borrower_id = b.id
