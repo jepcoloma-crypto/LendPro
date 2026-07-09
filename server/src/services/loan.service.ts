@@ -781,7 +781,23 @@ export class LoanService {
     }
 
     const totalInterest = scheduleItems.reduce((s: number, item: any) => s + Number(item.interest || 0), 0);
-    const totalAmount = scheduleItems.reduce((s: number, item: any) => s + Number(item.total_due || 0), 0);
+      const totalAmount = scheduleItems.reduce((s: number, item: any) => s + Number(item.total_due || 0), 0);
+
+    // Also compute total overdue & max days for the collection record
+    const now = new Date();
+    let totalOverdue = 0;
+    let maxDaysOverdue = 0;
+    for (const s of scheduleItems) {
+      const dueDate = new Date(s.dueDate);
+      if (dueDate < now) {
+        const shortage = Number(s.total_due) - Number(s.paidAmount || 0);
+        if (shortage > 0) {
+          totalOverdue += shortage;
+          const days = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (days > maxDaysOverdue) maxDaysOverdue = days;
+        }
+      }
+    }
     const loanNumber = generateLoanNumber();
 
     const maturityDate = (() => {
@@ -911,6 +927,16 @@ export class LoanService {
         );
       }
     }
+
+    await collectionRepo.create({
+      loan_id: loan.id,
+      borrower_id: data.borrowerId,
+      collector_id: loan.collector_id || null,
+      status: 'active',
+      total_due: totalAmount,
+      total_overdue: totalOverdue,
+      days_overdue: maxDaysOverdue,
+    });
 
     return loan;
   }

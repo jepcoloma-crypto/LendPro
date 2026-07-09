@@ -36,12 +36,12 @@ export class ReportController {
                 b.first_name || ' ' || b.last_name as borrower_name, b.mobile, b.borrower_code,
                 COALESCE(SUM(a.total_due - COALESCE(a.paid_amount,0)), 0) as total_overdue,
                 COALESCE(MAX(CURRENT_DATE - a.due_date), 0)::int as days_overdue
-         FROM collections c
-         JOIN loans l ON c.loan_id = l.id
-         JOIN borrowers b ON c.borrower_id = b.id
+         FROM loans l
+         JOIN borrowers b ON l.borrower_id = b.id
          JOIN amortization_schedules a ON a.loan_id = l.id
+         LEFT JOIN collections c ON c.loan_id = l.id
          WHERE a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due
-         GROUP BY c.id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
+         GROUP BY c.id, l.id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
                   b.first_name, b.last_name, b.mobile, b.borrower_code
          ORDER BY MAX(CURRENT_DATE - a.due_date) DESC`
       );
