@@ -512,24 +512,22 @@ export class LoanService {
     );
     if (!loans.length) throw new Error('Loan not found');
 
-    const schedule = await amortizationScheduleRepo.findAll({
-      conditions: { loan_id: id },
-      orderBy: 'installment_no ASC',
-      limit: 1000,
-    });
+    const [scheduleResult, paymentsResult, chargesResult] = await Promise.all([
+      amortizationScheduleRepo.query(
+        `SELECT * FROM amortization_schedules WHERE loan_id = $1 AND deleted_at IS NULL ORDER BY installment_no ASC`,
+        [id]
+      ),
+      paymentRepo.query(
+        `SELECT * FROM payments WHERE loan_id = $1 AND deleted_at IS NULL ORDER BY payment_date DESC`,
+        [id]
+      ),
+      loanChargeRepo.query(
+        `SELECT charge_name, amount FROM loan_charges WHERE loan_id = $1 ORDER BY charge_name`,
+        [id]
+      ),
+    ]);
 
-    const payments = await paymentRepo.findAll({
-      conditions: { loan_id: id },
-      orderBy: 'payment_date DESC',
-      limit: 1000,
-    });
-
-    const charges = await loanChargeRepo.query(
-      `SELECT charge_name, amount FROM loan_charges WHERE loan_id = $1 ORDER BY charge_name`,
-      [id]
-    );
-
-    return { ...loans[0], schedule: schedule.rows, payments: payments.rows, charges };
+    return { ...loans[0], schedule: scheduleResult, payments: paymentsResult, charges: chargesResult };
   }
 
   async getLoanSchedule(loanId: string) {
