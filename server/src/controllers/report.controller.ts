@@ -239,8 +239,8 @@ export class ReportController {
           JOIN (
             SELECT l.collector_id,
                    COUNT(*) as total_assigned,
-                   COUNT(CASE WHEN l.status = 'active' THEN 1 END) as active_assigned,
-                   COUNT(CASE WHEN l.status = 'delinquent' THEN 1 END) as delinquent_assigned,
+                    COUNT(CASE WHEN l.status = 'active' THEN 1 END) as active_assigned,
+                    COUNT(CASE WHEN EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due) THEN 1 END) as delinquent_assigned,
                    COUNT(CASE WHEN l.status = 'closed' THEN 1 END) as closed_assigned,
                    COALESCE(SUM(sched.total_due), 0) as total_due,
                    COALESCE(SUM(CASE WHEN l.status NOT IN ('closed','written-off') THEN l.outstanding_balance ELSE 0 END), 0) as total_outstanding
@@ -349,8 +349,8 @@ export class ReportController {
            SELECT l.borrower_id,
                   COUNT(*) as total_loans,
                   COUNT(CASE WHEN l.status = 'paid' OR l.status = 'completed' THEN 1 END) as completed_loans,
-                  COUNT(CASE WHEN l.status = 'active' THEN 1 END) as active_loans,
-                  COUNT(CASE WHEN l.status = 'delinquent' THEN 1 END) as delinquent_loans,
+                   COUNT(CASE WHEN l.status = 'active' THEN 1 END) as active_loans,
+                   COUNT(CASE WHEN EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due) THEN 1 END) as delinquent_loans,
                   COALESCE(SUM(l.principal_amount), 0) as total_borrowed,
                   COALESCE(SUM(l.outstanding_balance), 0) as outstanding_balance,
                   MAX(l.release_date) as last_loan_date
@@ -517,9 +517,9 @@ export class ReportController {
            COUNT(l.id) as loan_count,
            COALESCE(SUM(l.principal_amount), 0) as total_principal,
            COALESCE(SUM(l.outstanding_balance), 0) as total_outstanding,
-           COALESCE(SUM(CASE WHEN l.status = 'delinquent' THEN 1 ELSE 0 END), 0) as delinquent_count,
+           COALESCE(SUM(CASE WHEN EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due) THEN 1 ELSE 0 END), 0) as delinquent_count,
            COALESCE(SUM(CASE WHEN l.status = 'paid' THEN 1 ELSE 0 END), 0) as paid_count,
-           ROUND(COALESCE(SUM(CASE WHEN l.status = 'delinquent' THEN 1 ELSE 0 END), 0)::numeric /
+           ROUND(COALESCE(SUM(CASE WHEN EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due) THEN 1 ELSE 0 END), 0)::numeric /
              NULLIF(COUNT(l.id), 0) * 100, 1) as delinquency_rate
          FROM loans l
          JOIN loan_products lp ON lp.id = l.product_id
@@ -581,7 +581,7 @@ export class ReportController {
           LEFT JOIN (SELECT br.branch_id, COUNT(*) as delinquent_count
             FROM loans l
             JOIN borrowers br ON br.id = l.borrower_id
-            WHERE l.status = 'delinquent'
+            WHERE EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due)
               AND br.branch_id IS NOT NULL
             GROUP BY br.branch_id) d ON d.branch_id = b.id
          WHERE b.is_active = true

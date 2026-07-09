@@ -28,7 +28,7 @@ export const paramStr = (val: any): string =>
 
 export const parsePagination = (query: any) => {
   const page = Math.max(1, parseInt(query.page) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(query.limit) || 10));
+  const limit = Math.min(10000, Math.max(1, parseInt(query.limit) || 10));
   const offset = (page - 1) * limit;
   const rawSortBy = query.sortBy || 'created_at';
   // Allowlist: only word chars and dots (e.g. "users.created_at")

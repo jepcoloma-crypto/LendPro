@@ -63,7 +63,7 @@ export class LoanService {
     await this.checkCreditLimit(app.borrower_id, Number(app.principal_amount));
 
     const delinquentLoans = await loanRepo.query(
-      `SELECT COUNT(*) as count FROM loans WHERE borrower_id = $1 AND status = 'delinquent'`,
+      `SELECT COUNT(*) as count FROM loans l WHERE l.borrower_id = $1 AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due)`,
       [app.borrower_id]
     );
     const delinquentCount = parseInt(delinquentLoans[0]?.count || '0', 10);
@@ -514,11 +514,11 @@ export class LoanService {
 
     const [scheduleResult, paymentsResult, chargesResult] = await Promise.all([
       amortizationScheduleRepo.query(
-        `SELECT * FROM amortization_schedules WHERE loan_id = $1 AND deleted_at IS NULL ORDER BY installment_no ASC`,
+        `SELECT * FROM amortization_schedules WHERE loan_id = $1 ORDER BY installment_no ASC`,
         [id]
       ),
       paymentRepo.query(
-        `SELECT * FROM payments WHERE loan_id = $1 AND deleted_at IS NULL ORDER BY payment_date DESC`,
+        `SELECT * FROM payments WHERE loan_id = $1 ORDER BY payment_date DESC`,
         [id]
       ),
       loanChargeRepo.query(
@@ -557,8 +557,8 @@ export class LoanService {
           (SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed' AND pay.payment_date >= DATE_TRUNC('month', NOW()) AND l.collector_id = $1) as monthly_collections,
           (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE release_date >= DATE_TRUNC('month', NOW()) AND collector_id = $1) as monthly_releases,
           (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE release_date IS NOT NULL AND collector_id = $1) as total_releases,
-          (SELECT COUNT(DISTINCT a.loan_id) FROM amortization_schedules a JOIN loans l ON l.id = a.loan_id WHERE a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due AND l.collector_id = $1) as delinquent_loans,
-          (SELECT COUNT(DISTINCT a.loan_id) FROM amortization_schedules a JOIN loans l ON l.id = a.loan_id WHERE a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due AND l.collector_id = $1) as overdue_count,
+           (SELECT COUNT(DISTINCT a.loan_id) FROM amortization_schedules a JOIN loans l ON l.id = a.loan_id WHERE a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due AND l.collector_id = $1) as delinquent_loans,
+           (SELECT COUNT(DISTINCT a.loan_id) FROM amortization_schedules a JOIN loans l ON l.id = a.loan_id WHERE a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due AND l.collector_id = $1) as overdue_count,
           (SELECT COALESCE(SUM(pay.interest_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE l.collector_id = $1) as total_interest,
           (SELECT COALESCE(SUM(pay.penalty_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE l.collector_id = $1) as total_penalties,
           (SELECT COALESCE(SUM(l.outstanding_balance), 0) FROM loans l WHERE l.status IN ('active','delinquent') AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.status = 'overdue' AND a.due_date < CURRENT_DATE - INTERVAL '30 days') AND l.collector_id = $1) as par30_amount,
@@ -575,8 +575,8 @@ export class LoanService {
           (SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed' AND pay.payment_date >= DATE_TRUNC('month', NOW())) as monthly_collections,
           (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE release_date >= DATE_TRUNC('month', NOW())) as monthly_releases,
           (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE release_date IS NOT NULL) as total_releases,
-          (SELECT COUNT(DISTINCT loan_id) FROM amortization_schedules WHERE due_date < CURRENT_DATE AND COALESCE(paid_amount,0) < total_due) as delinquent_loans,
-          (SELECT COUNT(DISTINCT loan_id) FROM amortization_schedules WHERE due_date < CURRENT_DATE AND COALESCE(paid_amount,0) < total_due) as overdue_count,
+           (SELECT COUNT(DISTINCT loan_id) FROM amortization_schedules WHERE due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(paid_amount,0) < total_due) as delinquent_loans,
+           (SELECT COUNT(DISTINCT loan_id) FROM amortization_schedules WHERE due_date < CURRENT_DATE AND COALESCE(paid_amount,0) < total_due) as overdue_count,
           (SELECT COALESCE(SUM(pay.interest_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id) as total_interest,
           (SELECT COALESCE(SUM(pay.penalty_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id) as total_penalties,
           (SELECT COALESCE(SUM(l.outstanding_balance), 0) FROM loans l WHERE l.status IN ('active','delinquent') AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.status = 'overdue' AND a.due_date < CURRENT_DATE - INTERVAL '30 days')) as par30_amount,

@@ -36,7 +36,7 @@ export class CollectionController {
         l.loan_number, l.outstanding_balance,
         b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
         CASE WHEN l.status = 'closed' THEN 'closed'
-             WHEN COALESCE(SUM(CASE WHEN a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due
+             WHEN COALESCE(SUM(CASE WHEN a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due
                               THEN 1 ELSE 0 END), 0) > 0 THEN 'delinquent'
              ELSE 'active' END as computed_status,
         l.outstanding_balance as total_due,
@@ -145,7 +145,9 @@ export class CollectionController {
           c.created_at, c.updated_at,
           l.loan_number, l.outstanding_balance as total_due,
           b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
-          CASE WHEN l.status = 'closed' THEN 'closed' ELSE 'delinquent' END as computed_status,
+          CASE WHEN l.status = 'closed' THEN 'closed'
+               WHEN COALESCE(MAX(CASE WHEN a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due THEN 1 ELSE 0 END), 0) > 0 THEN 'delinquent'
+               ELSE 'overdue' END as computed_status,
           COALESCE(SUM(a.total_due - COALESCE(a.paid_amount,0)), 0) as total_overdue,
           COALESCE(MAX(CURRENT_DATE - a.due_date), 0)::int as days_overdue
          FROM collections c
