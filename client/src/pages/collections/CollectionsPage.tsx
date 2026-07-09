@@ -17,7 +17,7 @@ export const CollectionsPage = () => {
   const [visitOpen, setVisitOpen] = useState(false);
   const [visitForm, setVisitForm] = useState<any>({});
   const [currentId, setCurrentId] = useState('');
-  const [tab, setTab] = useState<'all' | 'due' | 'overdue'>('all');
+  const [tab, setTab] = useState<'all' | 'due' | 'overdue' | 'delinquent'>('all');
   const limit = 20;
 
   const fetchData = async () => {
@@ -28,6 +28,12 @@ export const CollectionsPage = () => {
         data = await collectionsApi.getOverdue();
         setCollections(data.data.data || data.data);
         setTotal((data.data.data || data.data).length);
+      } else if (tab === 'delinquent') {
+        data = await collectionsApi.getOverdue();
+        const all = data.data.data || data.data;
+        const filtered = all.filter((r: any) => r.computed_status === 'delinquent');
+        setCollections(filtered);
+        setTotal(filtered.length);
       } else if (tab === 'due') {
         data = await collectionsApi.getDueToday();
         setCollections(data.data.data || data.data);
@@ -81,9 +87,9 @@ export const CollectionsPage = () => {
       </div>
 
       <div className="flex gap-2">
-        {(['all', 'due', 'overdue'] as const).map(t => (
+        {(['all', 'due', 'overdue', 'delinquent'] as const).map(t => (
           <Button key={t} appearance={tab === t ? 'primary' : 'ghost'} onClick={() => { setTab(t); setPage(1); }}>
-            {t === 'all' ? 'All' : t === 'due' ? 'Due Today' : 'Overdue'}
+            {t === 'all' ? 'All' : t === 'due' ? 'Due Today' : t === 'overdue' ? 'Overdue' : 'Delinquent'}
           </Button>
         ))}
       </div>
