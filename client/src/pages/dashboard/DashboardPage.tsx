@@ -17,6 +17,18 @@ import {
 
 const COLORS = ['#1a73e8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+const renderPieLabel = ({ name, value, cx, cy, midAngle, innerRadius, outerRadius }: any) => {
+  const RADIAN = Math.PI / 180;
+  const r = innerRadius + (outerRadius - innerRadius) * 0.55;
+  const x = cx + r * Math.cos(-midAngle * RADIAN);
+  const y = cy + r * Math.sin(-midAngle * RADIAN);
+  return (
+    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={600}>
+      {name}: {value}
+    </text>
+  );
+};
+
 const fmtMonth = (d: string) => {
   const dt = new Date(d);
   return dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
@@ -263,26 +275,26 @@ export const DashboardPage = () => {
               <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="flex items-center gap-2"><PieChart className="w-4 h-4" /> My Portfolio</div>}>
                 <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
-                    <Pie data={portfolioData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                      {portfolioData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#f3f4f6' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex justify-center gap-4 mt-2">
-                  {portfolioData.map((item, i) => (
-                    <div key={item.name} className="flex items-center gap-1 text-sm">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i] }} />
-                      <span className="text-gray-600 dark:text-gray-400">{item.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-            </Col>
-            <Col xs={24} lg={12}>
-              <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="flex items-center gap-2"><Users className="w-4 h-4" /> Loan Statistics</div>}>
+                     <Pie data={portfolioData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value" label={renderPieLabel} labelLine={false}>
+                       {portfolioData.map((_, index) => (
+                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                       ))}
+                     </Pie>
+                     <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#f3f4f6' }} />
+                   </PieChart>
+                 </ResponsiveContainer>
+                 <div className="flex justify-center gap-4 mt-2">
+                   {portfolioData.map((item, i) => (
+                     <div key={item.name} className="flex items-center gap-1 text-sm">
+                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i] }} />
+                       <span className="text-gray-600 dark:text-gray-400">{item.name}</span>
+                     </div>
+                   ))}
+                 </div>
+               </Panel>
+             </Col>
+             <Col xs={24} lg={12}>
+               <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="flex items-center gap-2"><Users className="w-4 h-4" /> Loan Statistics</div>}>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500 dark:text-gray-400">Total Loans</span>
@@ -765,8 +777,8 @@ export const DashboardPage = () => {
             <Col xs={24} lg={8}>
               <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="flex items-center gap-2"><PieChart className="w-4 h-4" /> Portfolio</div>}>
                 <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie data={portfolioData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                   <PieChart>
+                     <Pie data={portfolioData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value" label={renderPieLabel} labelLine={false}>
                       {portfolioData.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
