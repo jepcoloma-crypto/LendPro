@@ -483,15 +483,22 @@ export class LoanController {
       if (method === 'cash') {
         const app = await loanApplicationRepo.findById(appId);
         const principal = parseFloat(app?.principal_amount) || 0;
-        const charges = await loanProductChargeRepo.query(
+        const productCharges = await loanProductChargeRepo.query(
           `SELECT lpc.amount, c.computation_type, c.default_amount
            FROM loan_product_charges lpc
            JOIN charges c ON c.id = lpc.charge_id
            WHERE lpc.loan_product_id = $1 AND c.is_active = true`,
           [app?.loan_product_id || null]
         );
+        // Match same fallback logic as loan.service.ts releaseLoan
+        const chargeSource = productCharges.length > 0
+          ? productCharges
+          : await loanProductChargeRepo.query(
+              `SELECT c.id, c.computation_type, c.default_amount
+               FROM charges c WHERE c.is_active = true ORDER BY c.name`
+            );
         let totalCharges = 0;
-        for (const ch of charges) {
+        for (const ch of chargeSource) {
           const raw = parseFloat(ch.amount ?? ch.default_amount ?? 0);
           totalCharges += ch.computation_type === 'percentage'
             ? Math.round(principal * raw / 100 * 100) / 100
