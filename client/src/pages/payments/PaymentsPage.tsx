@@ -163,6 +163,7 @@ export const PaymentsPage = () => {
       toaster.push(<Message type="warning">Enter a payment amount</Message>, { placement: 'topEnd' });
       return;
     }
+    setPaySubmitting(true);
     try {
       const { data: res } = await paymentsApi.create({ ...formValue, paymentDate: formValue.paymentDate ? toDateString(new Date(formValue.paymentDate)) : undefined });
       if (voidPaymentId && res?.data?.id) {
@@ -176,6 +177,8 @@ export const PaymentsPage = () => {
       if (res?.data?.id) printReceipt(res.data.id);
     } catch (err: any) {
       toaster.push(<Message type="error">{err?.response?.data?.error || 'Error processing payment'}</Message>, { placement: 'topEnd' });
+    } finally {
+      setPaySubmitting(false);
     }
   };
 
@@ -550,7 +553,7 @@ export const PaymentsPage = () => {
             if (!sl) return null;
             return Number(sl.advance_balance) >= Number(sl.outstanding_balance)
               ? <Button appearance="primary" disabled>Loan Covered by Advance</Button>
-              : <Button onClick={handleReceivePayment} appearance="primary">Receive Payment</Button>;
+              : <Button onClick={handleReceivePayment} appearance="primary" loading={paySubmitting}>Receive Payment</Button>;
           })()}
           <Button onClick={() => { setModalOpen(false); setVoidPaymentId(null); }} appearance="subtle">Cancel</Button>
         </Modal.Footer>

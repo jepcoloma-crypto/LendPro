@@ -33,6 +33,7 @@ export class PaymentController {
         referenceNumber: payment.reference_number,
         receiptNumber: payment.receipt_number,
         description: `Payment ${payment.payment_number}`,
+        shiftId: myShift.id,
       });
       res.status(201).json({ success: true, data: payment, message: 'Payment received successfully' });
     } catch (error: any) {

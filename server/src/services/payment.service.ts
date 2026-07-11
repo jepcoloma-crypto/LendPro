@@ -23,15 +23,15 @@ export class PaymentService {
 
     const paymentDate = data.paymentDate ? new Date(data.paymentDate) : new Date();
 
-    const schedules = await amortizationScheduleRepo.findAll({
-      conditions: { loan_id: data.loanId },
-      orderBy: 'installment_no ASC',
-      limit: 1000,
-    });
+    // Direct query — no unnecessary COUNT
+    const { rows: schedules } = await pool.query(
+      `SELECT * FROM amortization_schedules WHERE loan_id = $1 ORDER BY installment_no ASC`,
+      [data.loanId]
+    );
 
     let totalOverdue = 0;
     const paymentDateNorm = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
-    for (const s of schedules.rows) {
+    for (const s of schedules) {
       if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
       const dueDate = new Date(s.due_date);
       const dueDateNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
@@ -61,33 +61,14 @@ export class PaymentService {
 
     const netForSchedules = Math.max(0, amount - penaltyAmount);
 
-    // Distribute penalty proportionally across overdue schedules
-    if (penaltyAmount > 0 && totalOverdue > 0) {
-      let remainingPenalty = penaltyAmount;
-      for (const s of schedules.rows) {
-        if (remainingPenalty <= 0) break;
-        if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
-        const dueDate = new Date(s.due_date);
-        const dueDateNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-        if (dueDateNorm >= paymentDateNorm) continue;
-        const shortage = parseFloat(s.total_due) - parseFloat(s.paid_amount);
-        const portion = Math.round(penaltyAmount * (shortage / totalOverdue) * 100) / 100;
-        const appliedPenalty = Math.min(portion, remainingPenalty);
-        await amortizationScheduleRepo.update(s.id, {
-          penalty_amount: (parseFloat(s.penalty_amount || '0') + appliedPenalty).toFixed(2),
-        });
-        remainingPenalty -= appliedPenalty;
-      }
-    }
-
     let totalPrincipal = 0;
     let totalInterest = 0;
     let totalAllocated = 0;
 
-    // First pass: compute allocations and principal/interest split
+    // Compute allocations and principal/interest split
     const allocs: { schedule: any; amount: number; principal: number; interest: number }[] = [];
     let allocRemaining = netForSchedules;
-    for (const schedule of schedules.rows) {
+    for (const schedule of schedules) {
       if (allocRemaining <= 0) break;
       const currentPaid = parseFloat(schedule.paid_amount);
       const totalDue = parseFloat(schedule.total_due);
@@ -118,6 +99,32 @@ export class PaymentService {
       await writeClient.query('SET search_path TO public');
       await writeClient.query('BEGIN');
 
+      // Batch penalty updates — single query instead of N individual round-trips
+      if (penaltyAmount > 0 && totalOverdue > 0) {
+        let remainingPenalty = penaltyAmount;
+        const penaltyRows: { id: string; applied: number }[] = [];
+        for (const s of schedules) {
+          if (remainingPenalty <= 0) break;
+          if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
+          const dueDate = new Date(s.due_date);
+          const dueDateNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+          if (dueDateNorm >= paymentDateNorm) continue;
+          const shortage = parseFloat(s.total_due) - parseFloat(s.paid_amount);
+          const portion = Math.round(penaltyAmount * (shortage / totalOverdue) * 100) / 100;
+          const appliedPenalty = Math.min(portion, remainingPenalty);
+          penaltyRows.push({ id: s.id, applied: appliedPenalty });
+          remainingPenalty -= appliedPenalty;
+        }
+        if (penaltyRows.length > 0) {
+          const flatValues = penaltyRows.flatMap(r => [r.id, r.applied]);
+          const placeholders = penaltyRows.map((_, i) => `($${i * 2 + 1}::uuid, $${i * 2 + 2}::numeric)`).join(',');
+          await writeClient.query(
+            `UPDATE amortization_schedules SET penalty_amount = penalty_amount + d.applied, updated_at = NOW() FROM (VALUES ${placeholders}) AS d(id, applied) WHERE id = d.id`,
+            flatValues
+          );
+        }
+      }
+
       const { rows: [payment] } = await writeClient.query(
         `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, advance_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'completed',$14,$15,$16) RETURNING *`,
@@ -126,11 +133,20 @@ export class PaymentService {
          data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
       );
 
+      // Track updated statuses in-memory to avoid re-fetch later
+      const updatedStatuses = new Map<string, { paid_amount: number; status: string }>();
+      for (const schedule of schedules) {
+        updatedStatuses.set(schedule.id, { paid_amount: parseFloat(schedule.paid_amount), status: schedule.status });
+      }
+
       for (const alloc of allocs) {
         const schedule = alloc.schedule;
-        const newPaid = parseFloat(schedule.paid_amount) + alloc.amount;
+        const curState = updatedStatuses.get(schedule.id)!;
+        const newPaid = curState.paid_amount + alloc.amount;
         const totalDue = parseFloat(schedule.total_due);
         const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
+        curState.paid_amount = newPaid;
+        curState.status = newStatus;
 
         await writeClient.query(
           `UPDATE amortization_schedules SET paid_amount = $1, status = $2, paid_at = $3, updated_at = NOW() WHERE id = $4`,
@@ -152,23 +168,8 @@ export class PaymentService {
         [newBalance, curAdvance, data.loanId]
       );
 
-      if (newBalance <= 0) {
-        await writeClient.query(
-          `UPDATE loans SET status = 'closed', outstanding_balance = 0, next_payment_date = NULL, updated_at = NOW() WHERE id = $1`,
-          [data.loanId]
-        );
-        await writeClient.query(
-          `UPDATE collections SET status = 'closed' WHERE id = $1`,
-          [loan.id]
-        );
-      }
-
-      // Re-fetch to get updated statuses
-      const { rows: updatedRows } = await writeClient.query(
-        `SELECT * FROM amortization_schedules WHERE loan_id = $1 ORDER BY installment_no ASC`,
-        [data.loanId]
-      );
-      const allPaid = updatedRows.every((s: any) => s.status === 'paid');
+      // Use in-memory tracking instead of re-fetching schedules
+      const allPaid = [...updatedStatuses.values()].every(s => s.status === 'paid');
       if (allPaid || newBalance <= 0) {
         await writeClient.query(
           `UPDATE loans SET status = 'closed', outstanding_balance = 0, next_payment_date = NULL, updated_at = NOW() WHERE id = $1`,
@@ -179,7 +180,10 @@ export class PaymentService {
           [loan.id]
         );
       } else {
-        const nextPending = updatedRows.find((s: any) => s.status === 'pending' || (s.status === 'partial' && parseFloat(s.paid_amount) < parseFloat(s.total_due) - 0.005));
+        const nextPending = schedules.find(s => {
+          const st = updatedStatuses.get(s.id)!;
+          return st.status === 'pending' || (st.status === 'partial' && st.paid_amount < parseFloat(s.total_due) - 0.005);
+        });
         if (nextPending) {
           await writeClient.query(
             `UPDATE loans SET next_payment_date = $1, updated_at = NOW() WHERE id = $2`,
@@ -200,12 +204,11 @@ export class PaymentService {
 
   private async receiveWithAllocations(data: any, loan: any, userId: string, paymentNumber: string, receiptNumber: string) {
     const paymentDate = data.paymentDate ? new Date(data.paymentDate) : new Date();
-    const allSchedules = await amortizationScheduleRepo.findAll({
-      conditions: { loan_id: data.loanId },
-      orderBy: 'installment_no ASC',
-      limit: 1000,
-    });
-    const scheduleMap = new Map(allSchedules.rows.map((s: any) => [s.id, s]));
+    const { rows: allSchedules } = await pool.query(
+      `SELECT * FROM amortization_schedules WHERE loan_id = $1 ORDER BY installment_no ASC`,
+      [data.loanId]
+    );
+    const scheduleMap = new Map(allSchedules.map((s: any) => [s.id, s]));
 
     let totalPrincipal = 0;
     let totalInterest = 0;
@@ -256,7 +259,7 @@ export class PaymentService {
       let totalOverdue = 0;
       const payDateNorm = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
       const overdueShortages: { scheduleId: string; shortage: number }[] = [];
-      for (const s of allSchedules.rows) {
+      for (const s of allSchedules) {
         if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
         const dueDate = new Date(s.due_date);
         const dueNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
@@ -281,13 +284,20 @@ export class PaymentService {
         }
       }
 
+      // Track updated statuses in-memory
+      const updatedStatuses = new Map<string, { paid_amount: number; status: string }>();
+      for (const s of allSchedules) {
+        updatedStatuses.set(s.id, { paid_amount: parseFloat(s.paid_amount), status: s.status });
+      }
+
       for (const alloc of data.allocations) {
         const allocAmount = parseFloat(alloc.amount) || 0;
         if (allocAmount <= 0) continue;
         const schedule = scheduleMap.get(alloc.scheduleId);
         if (!schedule) continue;
 
-        const currentPaid = parseFloat(schedule.paid_amount);
+        const curState = updatedStatuses.get(schedule.id)!;
+        const currentPaid = curState.paid_amount;
         const totalDue = parseFloat(schedule.total_due);
         const shortage = Math.max(0, totalDue - currentPaid);
 
@@ -297,6 +307,8 @@ export class PaymentService {
 
         const newPaid = currentPaid + applied;
         const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
+        curState.paid_amount = newPaid;
+        curState.status = newStatus;
 
         await writeClient.query(
           `UPDATE amortization_schedules SET paid_amount = $1, status = $2, paid_at = $3, updated_at = NOW() WHERE id = $4`,
@@ -326,7 +338,8 @@ export class PaymentService {
         [newBalance, curAdvance, data.loanId]
       );
 
-      const allPaid = allSchedules.rows.every((s: any) => s.status === 'paid');
+      // Use in-memory tracking instead of stale allSchedules array
+      const allPaid = [...updatedStatuses.values()].every(s => s.status === 'paid');
       if (allPaid || newBalance <= 0) {
         await writeClient.query(
           `UPDATE loans SET status = 'closed', outstanding_balance = 0, next_payment_date = NULL, updated_at = NOW() WHERE id = $1`,
@@ -337,7 +350,10 @@ export class PaymentService {
           [loan.id]
         );
       } else {
-        const nextPending = allSchedules.rows.find((s: any) => s.status === 'pending' || (s.status === 'partial' && parseFloat(s.paid_amount) < parseFloat(s.total_due) - 0.005));
+        const nextPending = allSchedules.find((s: any) => {
+          const st = updatedStatuses.get(s.id)!;
+          return st.status === 'pending' || (st.status === 'partial' && st.paid_amount < parseFloat(s.total_due) - 0.005);
+        });
         if (nextPending) {
           await writeClient.query(
             `UPDATE loans SET next_payment_date = $1, updated_at = NOW() WHERE id = $2`,
