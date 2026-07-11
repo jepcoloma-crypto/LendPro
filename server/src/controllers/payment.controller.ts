@@ -15,9 +15,9 @@ export class PaymentController {
       if (!myShift) throw new AppError(400, 'No open shift found. Please open a cashier shift before accepting a payment.');
 
       const shiftDate = new Date(myShift.opened_at).toISOString().slice(0, 10);
-      const today = new Date().toISOString().slice(0, 10);
-      if (shiftDate !== today) {
-        throw new AppError(400, `Your open shift is dated ${shiftDate} but today is ${today}. Close the current shift first, then open a new shift for ${today}.`);
+      const paymentDate = req.body.paymentDate ? new Date(req.body.paymentDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+      if (shiftDate !== paymentDate) {
+        throw new AppError(400, `Your open shift is dated ${shiftDate} but the payment date is ${paymentDate}. Close the current shift first, then open a new shift for ${paymentDate}.`);
       }
 
       const payment = await paymentService.receivePayment(req.body, req.user!.userId);
