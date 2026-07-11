@@ -5,6 +5,7 @@ import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema } from '../validators/auth';
 import { auditLog } from '../middleware/audit';
+import { idempotent } from '../middleware/idempotency';
 import { authController } from '../controllers/auth.controller';
 import { loanController } from '../controllers/loan.controller';
 import { paymentController } from '../controllers/payment.controller';
@@ -121,14 +122,14 @@ router.post('/loans/:id/restructure', authenticate, authorize('super-admin', 'ad
 
 // Payments
 router.get('/payments', authenticate, paymentController.getPayments.bind(paymentController));
-router.post('/payments', authenticate, auditLog('create', 'payment'), paymentController.receivePayment.bind(paymentController));
+router.post('/payments', authenticate, idempotent, auditLog('create', 'payment'), paymentController.receivePayment.bind(paymentController));
 router.post('/payments/import', authenticate, authorize('super-admin', 'admin'), uploadCsv, paymentController.importCsv.bind(paymentController));
 router.get('/payments/recent', authenticate, paymentController.getRecentPayments.bind(paymentController));
 router.get('/payments/:id', authenticate, paymentController.getPaymentById.bind(paymentController));
 router.get('/payments/:id/receipt', authenticate, paymentController.getReceipt.bind(paymentController));
 router.put('/payments/:id', authenticate, auditLog('update', 'payment'), paymentController.updatePayment.bind(paymentController));
-router.put('/payments/:id/cancel', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('cancel', 'payment'), paymentController.cancelPayment.bind(paymentController));
-router.delete('/payments/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('delete', 'payment'), paymentController.deletePayment.bind(paymentController));
+router.put('/payments/:id/cancel', authenticate, authorize('super-admin', 'admin'), auditLog('cancel', 'payment'), paymentController.cancelPayment.bind(paymentController));
+router.delete('/payments/:id', authenticate, authorize('super-admin', 'admin'), auditLog('delete', 'payment'), paymentController.deletePayment.bind(paymentController));
 // Cancellation approval workflow
 router.post('/payments/:id/cancel-request', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('cancel-request', 'payment'), cancellationController.requestCancel.bind(cancellationController));
 router.post('/payments/:id/void-repay-request', authenticate, authorize('super-admin', 'admin', 'branch-manager', 'cashier'), auditLog('void-repay-request', 'payment'), cancellationController.requestVoidRepay.bind(cancellationController));

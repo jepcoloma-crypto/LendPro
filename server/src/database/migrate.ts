@@ -314,6 +314,19 @@ const runMigrations = async () => {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='loans' AND column_name='advance_balance') THEN
           ALTER TABLE loans ADD COLUMN advance_balance NUMERIC(15,2) DEFAULT 0;
         END IF;
+        -- Idempotency keys for payment deduplication
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='idempotency_keys') THEN
+          CREATE TABLE idempotency_keys (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            key TEXT NOT NULL UNIQUE,
+            response_status INTEGER NOT NULL,
+            response_body JSONB NOT NULL,
+            created_by UUID REFERENCES users(id),
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '24 hours')
+          );
+          CREATE INDEX IF NOT EXISTS idx_idempotency_keys_key ON idempotency_keys(key);
+        END IF;
       END $$;
     `);
 
