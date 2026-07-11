@@ -12,12 +12,28 @@ export class CashierController {
 
   async shiftOpen(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { opening_float, branch_id } = req.body;
+      const { opening_float, branch_id, opened_at } = req.body;
+      if (!opening_float || parseFloat(opening_float) <= 0) {
+        throw new Error('Opening float must be greater than 0. Enter the actual cash on hand to start the shift.');
+      }
       const existing = await cashierSessionRepo.findOne({ user_id: req.user?.userId, status: 'open' });
       if (existing) throw new Error('You already have an open shift. Close it first.');
+
+      const shiftDate = opened_at ? new Date(opened_at) : new Date();
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const shiftDateStr = shiftDate.toISOString().slice(0, 10);
+      const todayStr = today.toISOString().slice(0, 10);
+      const yesterdayStr = yesterday.toISOString().slice(0, 10);
+      if (shiftDateStr !== todayStr && shiftDateStr !== yesterdayStr) {
+        throw new Error(`Shift date must be today (${todayStr}) or yesterday (${yesterdayStr}). Cannot backdate further.`);
+      }
+
       const shift = await cashierSessionRepo.create({
         user_id: req.user?.userId,
         branch_id: branch_id || (req.user as any)?.branchId,
+        opened_at: shiftDate.toISOString(),
         opening_float: opening_float || 0,
         expected_cash: opening_float || 0,
         status: 'open',
@@ -71,8 +87,15 @@ export class CashierController {
       }
       const openingFloat = parseFloat(shift.opening_float) || 0;
       const expectedCash = openingFloat + cashIn - cashOut;
-      const actual = parseFloat(req.body.actual_cash) ?? expectedCash;
+      if (req.body.actual_cash === undefined || req.body.actual_cash === null || req.body.actual_cash === '') {
+        throw new Error('Actual cash on hand is required. Please count and enter the actual cash amount.');
+      }
+      const actual = parseFloat(req.body.actual_cash);
+      if (isNaN(actual) || actual < 0) throw new Error('Invalid actual cash amount.');
       const overShort = actual - expectedCash;
+      if (overShort !== 0 && !req.body.variance_reason?.trim()) {
+        throw new Error('Variance reason is required when actual cash differs from expected cash.');
+      }
 
       // Update shift record
       await cashierSessionRepo.update(id, {
@@ -468,7 +491,7 @@ export class CashierController {
 
       const txnStats = await cashierSessionRepo.query(
         `SELECT
-           COALESCE(SUM(ct.amount) FILTER (WHERE (ct.transaction_type = 'payment' OR ct.transaction_type = 'collection') AND (ct.payment_id IS NULL OR (SELECT p.status FROM payments p WHERE p.id = ct.payment_id) != 'cancelled')), 0) as today_collections,
+           COALESCE(SUM(ct.amount) FILTER (WHERE (ct.transaction_type = 'payment' OR ct.transaction_type = 'collection') AND (ct.payment_id IS NULL OR (SELECT p.status FROM payments p WHERE p.id = ct.payment_id) IS DISTINCT FROM 'cancelled')), 0) as today_collections,
            COALESCE(SUM(ct.amount) FILTER (WHERE ct.transaction_type = 'disbursement'), 0) as today_disbursed
          FROM cash_transactions ct
          LEFT JOIN cashier_sessions cs ON cs.id = ct.shift_id

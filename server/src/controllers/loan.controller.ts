@@ -783,6 +783,19 @@ export class LoanController {
     }
   }
 
+  async distributeAdvance(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const { allocations } = req.body;
+      if (!allocations || !Array.isArray(allocations) || allocations.length === 0) {
+        throw new AppError(400, 'No allocations provided');
+      }
+      const result = await loanService.distributeAdvance(id, allocations, req.user!.userId);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
 }
 
 export const loanController = new LoanController();

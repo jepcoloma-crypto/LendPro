@@ -25,7 +25,6 @@ export const StatementOfAccountPage = () => {
   const payments = loan.payments || [];
   const totalPaid = payments.reduce((s: number, p: any) => s + parseFloat(p.amount || 0), 0);
   const totalPenalty = payments.reduce((s: number, p: any) => s + parseFloat(p.penalty_amount || 0), 0);
-
   const handlePrint = () => window.print();
 
   return (
@@ -74,6 +73,7 @@ export const StatementOfAccountPage = () => {
                   <tr><td className="text-gray-500 pr-4 py-0.5">Product:</td><td>{loan.product_name}</td></tr>
                   <tr><td className="text-gray-500 pr-4 py-0.5">Principal:</td><td>{formatCurrency(loan.principal_amount)}</td></tr>
                   <tr><td className="text-gray-500 pr-4 py-0.5">Previous Balance:</td><td className={Number(loan.previous_balance) > 0 ? 'text-red-600' : ''}>{Number(loan.previous_balance) > 0 ? formatCurrency(loan.previous_balance) : '-'}</td></tr>
+                  <tr><td className="text-gray-500 pr-4 py-0.5">Advance Balance:</td><td className={Number(loan.advance_balance) > 0 ? 'text-blue-600 font-medium' : ''}>{Number(loan.advance_balance) > 0 ? formatCurrency(loan.advance_balance) : '-'}</td></tr>
                   <tr><td className="text-gray-500 pr-4 py-0.5">Interest Rate:</td><td>{loan.interest_rate}% ({loan.interest_type})</td></tr>
                   <tr><td className="text-gray-500 pr-4 py-0.5">Term:</td><td>{loan.term_months} {loan.term_type}</td></tr>
                   <tr><td className="text-gray-500 pr-4 py-0.5">Release Date:</td><td>{loan.release_date ? new Date(loan.release_date).toLocaleDateString() : '-'}</td></tr>
@@ -135,6 +135,7 @@ export const StatementOfAccountPage = () => {
                   <th className="text-right px-2 py-2 font-medium text-gray-600">Principal</th>
                   <th className="text-right px-2 py-2 font-medium text-gray-600">Interest</th>
                   <th className="text-right px-2 py-2 font-medium text-gray-600">Penalty</th>
+                  <th className="text-right px-2 py-2 font-medium text-gray-600">Advance</th>
                   <th className="text-center px-2 py-2 font-medium text-gray-600">Method</th>
                   <th className="text-center px-2 py-2 font-medium text-gray-600">Status</th>
                 </tr>
@@ -148,11 +149,12 @@ export const StatementOfAccountPage = () => {
                     <td className="px-2 py-1.5 text-right">{formatCurrency(p.principal_amount)}</td>
                     <td className="px-2 py-1.5 text-right">{formatCurrency(p.interest_amount)}</td>
                     <td className="px-2 py-1.5 text-right">{formatCurrency(p.penalty_amount)}</td>
+                    <td className="px-2 py-1.5 text-right">{p.advance_amount > 0 ? formatCurrency(p.advance_amount) : '-'}</td>
                     <td className="px-2 py-1.5 text-center">{p.payment_method === 'historical' ? <Tag color="violet">Historical</Tag> : p.payment_method}</td>
                     <td className="px-2 py-1.5 text-center">{p.status === 'cancelled' ? <Tag color="red">Cancelled</Tag> : <Tag color="green">Completed</Tag>}</td>
                   </tr>
                 ))}
-                {payments.length === 0 && <tr><td colSpan={8} className="text-center text-gray-400 py-4">No payments recorded</td></tr>}
+                {payments.length === 0 && <tr><td colSpan={9} className="text-center text-gray-400 py-4">No payments recorded</td></tr>}
               </tbody>
             </table>
           </div>
@@ -163,6 +165,7 @@ export const StatementOfAccountPage = () => {
                 <tbody>
                   <tr><td className="text-gray-500 pr-6 py-0.5">Total Payments:</td><td className="font-medium text-right">{formatCurrency(totalPaid)}</td></tr>
                   <tr><td className="text-gray-500 pr-6 py-0.5">Total Penalties:</td><td className="font-medium text-right text-red-600">{formatCurrency(totalPenalty)}</td></tr>
+                  {Number(loan.advance_balance) > 0 && <tr><td className="text-gray-500 pr-6 py-0.5">Advance Balance:</td><td className="font-medium text-right text-blue-600">{formatCurrency(loan.advance_balance)}</td></tr>}
                   <tr><td className="text-gray-500 pr-6 py-0.5">Outstanding Balance:</td><td className="font-bold text-right text-lg">{formatCurrency(loan.outstanding_balance)}</td></tr>
                 </tbody>
               </table>

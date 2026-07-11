@@ -745,6 +745,8 @@ export class LoanService {
 
     // If no manual schedule, generate via calculateAmortization
     let scheduleItems: any[];
+    let excessAmount = 0;
+    let hasPaidUpToDate: Date | null = null;
     if (data.schedule && data.schedule.length > 0) {
       scheduleItems = data.schedule;
     } else {
@@ -755,13 +757,15 @@ export class LoanService {
       );
       const totalPaid = Number(data.totalPaid) || 0;
       const paidUpToDate = data.paidUpToDate ? new Date(data.paidUpToDate) : null;
+      hasPaidUpToDate = paidUpToDate;
 
       let remaining = totalPaid;
       scheduleItems = schedule.map((s: any) => {
-        const isPaid = remaining > 0 && (!paidUpToDate || s.dueDate <= paidUpToDate);
+        const isDue = !paidUpToDate || s.dueDate <= paidUpToDate;
+        const canPay = isDue && remaining > 0;
         let paidAmount = 0;
         let status = 'pending';
-        if (isPaid) {
+        if (canPay) {
           paidAmount = Math.min(remaining, s.totalDue);
           remaining -= paidAmount;
           status = paidAmount >= s.totalDue ? 'paid' : 'partial';
@@ -775,9 +779,10 @@ export class LoanService {
           balance: s.balance,
           paidAmount,
           status,
-          paidAt: paidUpToDate ? paidUpToDate.toISOString() : null,
+          paidAt: canPay && paidUpToDate ? paidUpToDate.toISOString() : null,
         };
       });
+      excessAmount = paidUpToDate ? remaining : 0;
     }
 
     const totalInterest = scheduleItems.reduce((s: number, item: any) => s + Number(item.interest || 0), 0);
@@ -849,7 +854,7 @@ export class LoanService {
       principal_amount: principal,
       interest_amount: totalInterest,
       total_amount: totalAmount,
-      outstanding_balance: totalAmount - totalSchedulePaid,
+      outstanding_balance: totalAmount - totalSchedulePaid - excessAmount,
       interest_rate: interestRate,
       interest_type: interestType,
       term_months: termMonths,
@@ -862,6 +867,7 @@ export class LoanService {
       maturity_date: maturityDate,
       late_payment_fee: 0,
       net_proceeds: netProceeds,
+      advance_balance: excessAmount,
       released_by: userId,
       collector_id: data.collectorId || null,
     });
@@ -900,15 +906,19 @@ export class LoanService {
       .map((s: any) => ({ scheduleId: s.id, amount: Number(s.paid_amount), paidAt: s.paid_at }));
 
     const totalPaidAmount = paidSchedules.reduce((s: number, p: any) => s + p.amount, 0);
-    if (totalPaidAmount > 0) {
-      const latestDate = paidSchedules.reduce((latest: Date, p: any) => p.paidAt && p.paidAt > latest ? p.paidAt : latest, paidSchedules[0].paidAt || new Date());
+    const paymentRecordAmount = totalPaidAmount + excessAmount;
+    if (paymentRecordAmount > 0) {
+      const latestDate = paidSchedules.length > 0
+        ? paidSchedules.reduce((latest: Date, p: any) => p.paidAt && p.paidAt > latest ? p.paidAt : latest, paidSchedules[0].paidAt || new Date())
+        : (hasPaidUpToDate || new Date());
       const payment = await paymentRepo.create({
         payment_number: 'HIST-' + loan.loan_number,
         loan_id: loan.id,
         borrower_id: data.borrowerId,
-        amount: totalPaidAmount,
-        principal_amount: totalPaidAmount,
+        amount: paymentRecordAmount,
+        principal_amount: paymentRecordAmount,
         interest_amount: 0,
+        advance_amount: excessAmount,
         payment_method: 'historical',
         payment_date: latestDate,
         received_by: userId,
@@ -939,6 +949,82 @@ export class LoanService {
     });
 
     return loan;
+  }
+
+  async distributeAdvance(loanId: string, allocations: { scheduleId: string; amount: number }[], userId: string) {
+    const pool = (await import('../database/connection')).pool;
+    const loanRows = await loanRepo.query(`SELECT * FROM loans WHERE id = $1`, [loanId]);
+    if (!loanRows.length) throw new Error('Loan not found');
+    const loan = loanRows[0];
+    const curAdvance = parseFloat(loan.advance_balance || '0');
+    if (curAdvance <= 0) throw new Error('No advance balance to distribute');
+
+    const totalRequested = allocations.reduce((s, a) => s + a.amount, 0);
+    if (totalRequested <= 0) throw new Error('No amount to distribute');
+
+    const allSchedules: any[] = await amortizationScheduleRepo.query(
+      `SELECT * FROM amortization_schedules WHERE loan_id = $1 ORDER BY installment_no ASC`, [loanId]
+    );
+
+    // Find source payments (ones with advance_amount > 0) to link allocations
+    const sourcePayments: any[] = await paymentRepo.query(
+      `SELECT id FROM payments WHERE loan_id = $1 AND advance_amount > 0 ORDER BY created_at ASC`, [loanId]
+    );
+
+    const client = await pool.connect();
+    try {
+      await client.query('SET search_path TO public');
+      await client.query('BEGIN');
+
+      let updatedTotal = 0;
+      let remainingAdvance = curAdvance;
+      const allocRecords: { paymentId: string; scheduleId: string; amount: number }[] = [];
+      for (const alloc of allocations) {
+        if (alloc.amount <= 0 || remainingAdvance <= 0) continue;
+        const schedule = allSchedules.find((s: any) => s.id === alloc.scheduleId);
+        if (!schedule) continue;
+
+        const currentPaid = parseFloat(schedule.paid_amount);
+        const totalDue = parseFloat(schedule.total_due);
+        const shortage = Math.max(0, totalDue - currentPaid);
+        const applied = Math.min(alloc.amount, shortage, remainingAdvance);
+
+        const newPaid = currentPaid + applied;
+        const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
+
+        await client.query(
+          `UPDATE amortization_schedules SET paid_amount = $1, status = $2, paid_at = $3, updated_at = NOW() WHERE id = $4`,
+          [newPaid, newStatus, newStatus === 'paid' ? new Date() : null, schedule.id]
+        );
+
+        updatedTotal += applied;
+        remainingAdvance -= applied;
+        allocRecords.push({ paymentId: sourcePayments[0]?.id || loan.id, scheduleId: schedule.id, amount: applied });
+      }
+
+      if (allocRecords.length > 0) {
+        for (const ar of allocRecords) {
+          await client.query(
+            `INSERT INTO payment_allocations (payment_id, schedule_id, amount, allocated_to) VALUES ($1,$2,$3,'advance_distribution')`,
+            [ar.paymentId, ar.scheduleId, ar.amount]
+          );
+        }
+      }
+
+      const newAdvance = curAdvance - updatedTotal;
+      await client.query(
+        `UPDATE loans SET advance_balance = $1, updated_at = NOW() WHERE id = $2`,
+        [newAdvance, loanId]
+      );
+
+      await client.query('COMMIT');
+      return { distributedAmount: updatedTotal, newAdvanceBalance: newAdvance, newOutstandingBalance: parseFloat(loan.outstanding_balance) };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 

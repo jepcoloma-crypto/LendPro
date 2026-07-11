@@ -14,6 +14,12 @@ export class PaymentController {
       const myShift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
       if (!myShift) throw new AppError(400, 'No open shift found. Please open a cashier shift before accepting a payment.');
 
+      const shiftDate = new Date(myShift.opened_at).toISOString().slice(0, 10);
+      const today = new Date().toISOString().slice(0, 10);
+      if (shiftDate !== today) {
+        throw new AppError(400, `Your open shift is dated ${shiftDate} but today is ${today}. Close the current shift first, then open a new shift for ${today}.`);
+      }
+
       const payment = await paymentService.receivePayment(req.body, req.user!.userId);
       await autoRecordTransaction({
         userId: req.user!.userId,

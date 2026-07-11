@@ -12,6 +12,10 @@ export class PaymentService {
     const receiptNumber = generateReceiptNumber();
     const outstandingBalance = parseFloat(loan.outstanding_balance);
     const amount = parseFloat(data.amount);
+    if (isNaN(amount) || amount <= 0) throw new Error('Invalid payment amount');
+    if (amount > outstandingBalance) {
+      throw new Error(`Payment amount (${amount.toFixed(2)}) exceeds outstanding balance (${outstandingBalance.toFixed(2)}). Reduce the payment amount.`);
+    }
 
     if (data.allocations && Array.isArray(data.allocations) && data.allocations.length > 0) {
       return this.receiveWithAllocations(data, loan, userId, paymentNumber, receiptNumber);
@@ -104,6 +108,7 @@ export class PaymentService {
       allocRemaining -= applied;
     }
 
+    const advanceAmount = Math.max(0, allocRemaining);
     totalPrincipal = Math.round(totalPrincipal * 100) / 100;
     totalInterest = Math.round(totalInterest * 100) / 100;
 
@@ -114,9 +119,9 @@ export class PaymentService {
       await writeClient.query('BEGIN');
 
       const { rows: [payment] } = await writeClient.query(
-        `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'completed',$14,$15) RETURNING *`,
-        [paymentNumber, data.loanId, loan.borrower_id, netForSchedules + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount,
+        `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, advance_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'completed',$14,$15,$16) RETURNING *`,
+        [paymentNumber, data.loanId, loan.borrower_id, netForSchedules + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount, advanceAmount,
          data.paymentMethod || 'cash', data.referenceNumber || null, data.paymentDate || new Date(), userId, receiptNumber,
          data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
       );
@@ -138,10 +143,13 @@ export class PaymentService {
         );
       }
 
-      const newBalance = Math.max(0, outstandingBalance - totalAllocated);
+      const netReduction = totalAllocated + advanceAmount;
+      const newBalance = Math.max(0, outstandingBalance - netReduction);
+      let curAdvance = parseFloat(loan.advance_balance || '0');
+      if (advanceAmount > 0) curAdvance += advanceAmount;
       await writeClient.query(
-        `UPDATE loans SET outstanding_balance = $1, updated_at = NOW() WHERE id = $2`,
-        [newBalance, data.loanId]
+        `UPDATE loans SET outstanding_balance = $1, advance_balance = $2, updated_at = NOW() WHERE id = $3`,
+        [newBalance, curAdvance, data.loanId]
       );
 
       if (newBalance <= 0) {
@@ -222,7 +230,13 @@ export class PaymentService {
     totalPrincipal = Math.round(totalPrincipal * 100) / 100;
     totalInterest = Math.round(totalInterest * 100) / 100;
 
+    const outstandingBalance = parseFloat(loan.outstanding_balance);
+    if (totalAllocAmount > outstandingBalance) {
+      throw new Error(`Total allocation (${totalAllocAmount.toFixed(2)}) exceeds outstanding balance (${outstandingBalance.toFixed(2)}). Reduce the payment amount.`);
+    }
+
     const penaltyAmount = parseFloat(data.penaltyAmount) || 0;
+    let totalAdvance = 0;
 
     // Execute all writes in a single transaction
     const writeClient = await pool.connect();
@@ -231,9 +245,9 @@ export class PaymentService {
       await writeClient.query('BEGIN');
 
       const { rows: [payment] } = await writeClient.query(
-        `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'completed',$14,$15) RETURNING *`,
-        [paymentNumber, data.loanId, loan.borrower_id, totalAllocAmount + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount,
+        `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, advance_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'completed',$14,$15,$16) RETURNING *`,
+        [paymentNumber, data.loanId, loan.borrower_id, totalAllocAmount + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount, 0,
          data.paymentMethod || 'cash', data.referenceNumber || null, data.paymentDate || new Date(), userId, receiptNumber,
          data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
       );
@@ -267,29 +281,19 @@ export class PaymentService {
         }
       }
 
-      let overflow: { [scheduleId: string]: number } = {};
       for (const alloc of data.allocations) {
-        overflow[alloc.scheduleId] = (overflow[alloc.scheduleId] || 0) + (parseFloat(alloc.amount) || 0);
-      }
-
-      let remainingOverflow = 0;
-      for (const schedule of allSchedules.rows) {
-        let allocAmount = overflow[schedule.id] || 0;
-        if (remainingOverflow > 0) {
-          allocAmount += remainingOverflow;
-          remainingOverflow = 0;
-        }
+        const allocAmount = parseFloat(alloc.amount) || 0;
         if (allocAmount <= 0) continue;
+        const schedule = scheduleMap.get(alloc.scheduleId);
+        if (!schedule) continue;
 
         const currentPaid = parseFloat(schedule.paid_amount);
         const totalDue = parseFloat(schedule.total_due);
         const shortage = Math.max(0, totalDue - currentPaid);
 
-        let applied = allocAmount;
-        if (allocAmount > shortage) {
-          applied = shortage;
-          remainingOverflow = allocAmount - shortage;
-        }
+        const applied = Math.min(allocAmount, shortage);
+        const excess = allocAmount - applied;
+        if (excess > 0) totalAdvance += excess;
 
         const newPaid = currentPaid + applied;
         const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : schedule.status);
@@ -305,35 +309,21 @@ export class PaymentService {
         );
       }
 
-      if (remainingOverflow > 0) {
-        for (const schedule of allSchedules.rows) {
-          if (remainingOverflow <= 0) break;
-          if (schedule.status === 'paid') continue;
-          const currentPaid = parseFloat(schedule.paid_amount);
-          const totalDue = parseFloat(schedule.total_due);
-          const shortage = Math.max(0, totalDue - currentPaid);
-          const applied = Math.min(remainingOverflow, shortage);
-          if (applied <= 0) continue;
-
-          const newPaid = currentPaid + applied;
-          const newStatus = newPaid >= totalDue - 0.005 ? 'paid' : 'partial';
-          await writeClient.query(
-            `UPDATE amortization_schedules SET paid_amount = $1, status = $2, paid_at = $3, updated_at = NOW() WHERE id = $4`,
-            [newPaid, newStatus, newStatus === 'paid' ? paymentDate : null, schedule.id]
-          );
-          await writeClient.query(
-            `INSERT INTO payment_allocations (payment_id, schedule_id, amount, allocated_to) VALUES ($1,$2,$3,'principal')`,
-            [payment.id, schedule.id, applied]
-          );
-          remainingOverflow -= applied;
-        }
+      if (totalAdvance > 0) {
+        await writeClient.query(
+          `UPDATE payments SET advance_amount = $1 WHERE id = $2`,
+          [totalAdvance, payment.id]
+        );
       }
 
       const outstandingBalance = parseFloat(loan.outstanding_balance);
-      const newBalance = Math.max(0, outstandingBalance - totalAllocAmount);
+      const netReduction = totalAllocAmount;
+      const newBalance = Math.max(0, outstandingBalance - netReduction);
+      let curAdvance = parseFloat(loan.advance_balance || '0');
+      if (totalAdvance > 0) curAdvance += totalAdvance;
       await writeClient.query(
-        `UPDATE loans SET outstanding_balance = $1, updated_at = NOW() WHERE id = $2`,
-        [newBalance, data.loanId]
+        `UPDATE loans SET outstanding_balance = $1, advance_balance = $2, updated_at = NOW() WHERE id = $3`,
+        [newBalance, curAdvance, data.loanId]
       );
 
       const allPaid = allSchedules.rows.every((s: any) => s.status === 'paid');
@@ -357,6 +347,7 @@ export class PaymentService {
       }
 
       await writeClient.query('COMMIT');
+      payment.advance_amount = totalAdvance;
       return payment;
     } catch (err) {
       await writeClient.query('ROLLBACK').catch(() => {});

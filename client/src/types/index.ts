@@ -180,6 +180,7 @@ export interface Loan {
   collector_id?: string;
   collector_name?: string;
   previous_balance?: number;
+  advance_balance?: number;
   schedule?: AmortizationSchedule[];
   payments?: Payment[];
 }

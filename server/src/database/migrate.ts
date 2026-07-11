@@ -308,6 +308,12 @@ const runMigrations = async () => {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='pickup_id') THEN
           ALTER TABLE payments ADD COLUMN pickup_id UUID REFERENCES collector_pickups(id);
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='advance_amount') THEN
+          ALTER TABLE payments ADD COLUMN advance_amount NUMERIC(15,2) DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='loans' AND column_name='advance_balance') THEN
+          ALTER TABLE loans ADD COLUMN advance_balance NUMERIC(15,2) DEFAULT 0;
+        END IF;
       END $$;
     `);
 

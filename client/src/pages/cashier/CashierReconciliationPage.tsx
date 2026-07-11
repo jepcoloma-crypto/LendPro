@@ -75,7 +75,7 @@ export const CashierReconciliationPage = () => {
   const [pickupTab, setPickupTab] = useState<'new' | 'history' | 'outstanding'>('new');
 
   const [openShiftModal, setOpenShiftModal] = useState(false);
-  const [openShiftForm, setOpenShiftForm] = useState({ opening_float: 0, branch_id: null as string | null });
+  const [openShiftForm, setOpenShiftForm] = useState({ opening_float: 0, branch_id: null as string | null, opened_at: new Date() });
   const [openShiftBranches, setOpenShiftBranches] = useState<any[]>([]);
   const [closeModal, setCloseModal] = useState(false);
   const [closeForm, setCloseForm] = useState({ actual_cash: 0, notes: '' });
@@ -161,8 +161,7 @@ export const CashierReconciliationPage = () => {
   useEffect(() => { fetchMyShift(); }, [fetchMyShift, activeTab]);
   useEffect(() => { fetchShifts(); }, [fetchShifts]);
   useEffect(() => { if (activeTab === 'close') fetchClosedShifts(); }, [activeTab, fetchClosedShifts]);
-  useEffect(() => { fetchTransactions(); fetchCounts(); fetchReconciliations(); fetchApprovals(); }, [activeTab, fetchTransactions, fetchCounts, fetchReconciliations, fetchApprovals]);
-  useEffect(() => { if (activeTab === 'approvals') fetchPending(); }, [activeTab, fetchPending]);
+  useEffect(() => { fetchTransactions(); fetchCounts(); fetchReconciliations(); fetchApprovals(); fetchPending(); }, [activeTab, fetchTransactions, fetchCounts, fetchReconciliations, fetchApprovals, fetchPending]);
 
   const fetchDashStats = useCallback(async () => {
     try { const { data } = await api.get('/cashier-sessions/dashboard/stats'); setDashStats(data.data); } catch { setDashStats(null); }
@@ -244,7 +243,7 @@ export const CashierReconciliationPage = () => {
   // ========== SHIFT OPEN ==========
   const handleOpenShift = async () => {
     try {
-      await api.post('/cashier-sessions/open', { opening_float: openShiftForm.opening_float || 0, branch_id: openShiftForm.branch_id });
+      await api.post('/cashier-sessions/open', { opening_float: openShiftForm.opening_float || 0, branch_id: openShiftForm.branch_id, opened_at: openShiftForm.opened_at.toISOString() });
       setOpenShiftModal(false);
       toaster.push(<Message type="success">Shift opened</Message>, { placement: 'topEnd' });
       fetchMyShift(); fetchShifts();
@@ -520,11 +519,13 @@ ${transactions.map((t: any, i: number) => `<tr>
     <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700 pb-1 overflow-x-auto">
       {TABS.map(tab => {
         const Icon = tab.icon;
+        const pendingCount = tab.key === 'approvals' ? pendingRecs.length : 0;
         return (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t transition-colors whitespace-nowrap
               ${activeTab === tab.key ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}>
             <Icon className="w-4 h-4" />{tab.label}
+            {pendingCount > 0 && <span className="ml-1.5 bg-amber-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center leading-tight">{pendingCount}</span>}
           </button>
         );
       })}
@@ -599,7 +600,7 @@ ${transactions.map((t: any, i: number) => `<tr>
           <div className="flex items-center gap-4">
             <div><span className="text-xs text-gray-500">Status</span><div className="font-medium text-gray-400">No open shift</div></div>
             <div className="ml-auto">
-              <Button size="sm" appearance="primary" onClick={async () => { try { const { data } = await api.get('/branches'); setOpenShiftBranches(data.data || []); } catch {} setOpenShiftForm({ opening_float: 0, branch_id: (user as any)?.branchId || null }); setOpenShiftModal(true); }}><Plus className="w-3.5 h-3.5 mr-1" />Open Shift</Button>
+              <Button size="sm" appearance="primary" onClick={async () => { try { const { data } = await api.get('/branches'); setOpenShiftBranches(data.data || []); } catch {}                setOpenShiftForm({ opening_float: 0, branch_id: (user as any)?.branchId || null, opened_at: new Date() }); setOpenShiftModal(true); }}><Plus className="w-3.5 h-3.5 mr-1" />Open Shift</Button>
             </div>
           </div>
         )}
@@ -829,7 +830,7 @@ ${transactions.map((t: any, i: number) => `<tr>
                 <Form fluid>
                   <Form.Group>
                     <Form.ControlLabel>Actual Cash on Hand</Form.ControlLabel>
-                    <InputNumber value={closeForm.actual_cash} onChange={(v: any) => setCloseForm((p: any) => ({ ...p, actual_cash: Number(v) || 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
+                    <input type="number" step="0.01" min="0" value={closeForm.actual_cash} onChange={(e: any) => setCloseForm((p: any) => ({ ...p, actual_cash: parseFloat(e.target.value) || 0 }))} className="rs-input" style={{ width: '100%' }} />
                   </Form.Group>
                   <Form.Group>
                     <Form.ControlLabel>Notes</Form.ControlLabel>
@@ -1087,16 +1088,20 @@ ${transactions.map((t: any, i: number) => `<tr>
           <Form fluid>
             <Form.Group>
               <Form.ControlLabel>Branch</Form.ControlLabel>
-              <SelectPicker data={openShiftBranches.map((b: any) => ({ label: `${b.name} (${b.code})`, value: b.id }))} value={openShiftForm.branch_id} onChange={(v) => setOpenShiftForm((prev: any) => ({ ...prev, branch_id: v }))} style={{ width: '100%' }} block placeholder="Select branch..." />
+              <SelectPicker data={openShiftBranches.map((b: any) => ({ label: `${b.name} (${b.code})`, value: b.id }))} value={openShiftForm.branch_id} onChange={(v) => setOpenShiftForm((prev: any) => ({ ...prev, branch_id: v }))} style={{ width: '100%' }} block placeholder="Select branch..." disabled={!!(user as any)?.branchId} searchable={false} />
             </Form.Group>
             <Form.Group>
               <Form.ControlLabel>Opening Float (Cash on Hand)</Form.ControlLabel>
               <InputNumber value={openShiftForm.opening_float} onChange={(v: any) => setOpenShiftForm((prev: any) => ({ ...prev, opening_float: Number(v) || 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
             </Form.Group>
+            <Form.Group>
+              <Form.ControlLabel>Shift Date</Form.ControlLabel>
+              <DatePicker value={openShiftForm.opened_at} onChange={(v: any) => v && setOpenShiftForm((prev: any) => ({ ...prev, opened_at: v }))} format="yyyy-MM-dd" oneTap style={{ width: '100%' }} />
+            </Form.Group>
           </Form>
         </Modal.Body>
         <Modal.Footer>
-          <Button appearance="primary" onClick={handleOpenShift}><DollarSign className="w-4 h-4 mr-1" />Start Shift</Button>
+          <Button appearance="primary" onClick={handleOpenShift} disabled={!openShiftForm.opening_float || Number(openShiftForm.opening_float) <= 0}><DollarSign className="w-4 h-4 mr-1" />Start Shift</Button>
           <Button appearance="subtle" onClick={() => setOpenShiftModal(false)}>Cancel</Button>
         </Modal.Footer>
       </Modal>
@@ -1117,7 +1122,7 @@ ${transactions.map((t: any, i: number) => `<tr>
               <Form fluid>
                 <Form.Group>
                   <Form.ControlLabel>Actual Cash on Hand *</Form.ControlLabel>
-                  <InputNumber value={closeForm.actual_cash} onChange={(v: any) => setCloseForm((p: any) => ({ ...p, actual_cash: Number(v) || 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
+                  <input type="number" step="0.01" min="0" value={closeForm.actual_cash} onChange={(e: any) => setCloseForm((p: any) => ({ ...p, actual_cash: parseFloat(e.target.value) || 0 }))} className="rs-input" style={{ width: '100%' }} />
                 </Form.Group>
                 <Form.Group>
                   <Form.ControlLabel>Notes</Form.ControlLabel>

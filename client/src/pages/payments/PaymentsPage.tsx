@@ -63,6 +63,9 @@ export const PaymentsPage = () => {
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payLoanId, setPayLoanId] = useState<string | null>(null);
   const [payCollectorId, setPayCollectorId] = useState<string | null>(null);
+  const [distributeOpen, setDistributeOpen] = useState(false);
+  const [distributeScheduleIds, setDistributeScheduleIds] = useState<Record<string, boolean>>({});
+  const [distributing, setDistributing] = useState(false);
   const [search, setSearch] = useState('');
   const limit = 20;
 
@@ -156,6 +159,10 @@ export const PaymentsPage = () => {
   }, [payDate]);
 
   const handleReceivePayment = async () => {
+    if (!formValue.amount || parseFloat(formValue.amount) <= 0) {
+      toaster.push(<Message type="warning">Enter a payment amount</Message>, { placement: 'topEnd' });
+      return;
+    }
     try {
       const { data: res } = await paymentsApi.create({ ...formValue, paymentDate: formValue.paymentDate ? toDateString(new Date(formValue.paymentDate)) : undefined });
       if (voidPaymentId && res?.data?.id) {
@@ -172,7 +179,7 @@ export const PaymentsPage = () => {
     }
   };
 
-  const openInstallmentModal = async (preSelectedLoanId?: string) => {
+  const openInstallmentModal = async (preSelectedLoanId?: string, autoDistribute?: boolean) => {
     const loanId = preSelectedLoanId || formValue.loanId || searchParams.get('loanId');
     if (!loanId) {
       setPayLoan(null);
@@ -220,6 +227,18 @@ export const PaymentsPage = () => {
       setPayReference('');
       setPayCollectorId(isCollector ? loan.collector_id || null : null);
       setInstModalOpen(true);
+      if (autoDistribute && Number(loan.advance_balance) > 0) {
+        const advanceBal = Number(loan.advance_balance);
+        const ids: Record<string, boolean> = {};
+        let remaining = advanceBal;
+        const unpaid = schedule.filter((s: any) => s.status !== 'paid').sort((a: any, b: any) => a.installment_no - b.installment_no);
+        for (const s of unpaid) {
+          if (remaining <= 0) break;
+          ids[s.id] = true;
+          remaining -= Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0));
+        }
+        setTimeout(() => { setDistributeScheduleIds(ids); setDistributeOpen(true); }, 300);
+      }
     } catch { toaster.push(<Message type="error">Failed to load loan schedule</Message>, { placement: 'topEnd' }); }
   };
 
@@ -255,6 +274,38 @@ export const PaymentsPage = () => {
     } catch (err: any) {
       toaster.push(<Message type="error">{err?.response?.data?.error || 'Payment failed'}</Message>, { placement: 'topEnd' });
     } finally { setPaySubmitting(false); }
+  };
+
+  const handleDistributeAdvance = async () => {
+    if (!payLoan) return;
+    const selected = Object.entries(distributeScheduleIds).filter(([, v]) => v).map(([id]) => {
+      const s = paySchedule.find((sch: any) => sch.id === id);
+      const shortage = s ? Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0)) : 0;
+      return { scheduleId: id, amount: shortage };
+    });
+    if (selected.length === 0) {
+      toaster.push(<Message type="warning">Select at least one installment</Message>, { placement: 'topEnd' });
+      return;
+    }
+    setDistributing(true);
+    try {
+      const { data } = await loansApi.distributeAdvance(payLoan.id, { allocations: selected });
+      const updatedPayLoan = { ...payLoan, advance_balance: data.data.newAdvanceBalance, outstanding_balance: data.data.newOutstandingBalance };
+
+      // Reload schedule to get accurate state after distribution
+      const { data: freshData } = await loansApi.getById(payLoan.id);
+      const freshLoan = freshData.data;
+      const freshSchedule = (freshLoan.schedule || []).filter((s: any) => s.status !== 'paid');
+
+      setPayLoan(updatedPayLoan);
+      setPaySchedule(freshSchedule);
+      setDistributeOpen(false);
+      setDistributeScheduleIds({});
+      setInstModalOpen(false);
+      toaster.push(<Message type="success">{formatCurrency(data.data.distributedAmount)} distributed from advance balance</Message>, { placement: 'topEnd' });
+    } catch (err: any) {
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Distribution failed'}</Message>, { placement: 'topEnd' });
+    } finally { setDistributing(false); }
   };
 
   const viewDetails = async (id: string) => {
@@ -449,6 +500,17 @@ export const PaymentsPage = () => {
               <Form.ControlLabel>Amount *</Form.ControlLabel>
               <InputNumber value={formValue.amount} onChange={(v) => setFormValue({ ...formValue, amount: v })} style={{ width: '100%' }} min={0} step={0.01} />
             </Form.Group>
+            {formValue.loanId && (() => { const sl = loans.find(l => l.id === formValue.loanId); const ab = Number(sl?.advance_balance || 0); const ob = Number(sl?.outstanding_balance || 0); const isOverpaid = ab >= ob; return ab > 0 ? (
+              <div className={`${isOverpaid ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'} border rounded-md p-2.5 text-sm mb-3 ${isOverpaid ? 'text-amber-800' : 'text-blue-800'}`}>
+                <div className="flex items-center justify-between">
+                  <span><strong>Advance Balance:</strong> {formatCurrency(ab)}</span>
+                  <Button size="sm" appearance="link" onClick={() => { setModalOpen(false); setVoidPaymentId(null); openInstallmentModal(undefined, true); }}>
+                    Distribute Advance
+                  </Button>
+                </div>
+                {isOverpaid && <p className="mt-1 text-xs font-medium text-amber-700">Loan is fully covered by advance balance. Payment is blocked until advance is distributed.</p>}
+              </div>
+            ) : null; })()}
             <Form.Group>
               <Form.ControlLabel>Payment Method *</Form.ControlLabel>
               <SelectPicker data={[
@@ -482,7 +544,14 @@ export const PaymentsPage = () => {
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <Button onClick={handleReceivePayment} appearance="primary">Receive Payment</Button>
+          {(() => {
+            if (!formValue.loanId) return null;
+            const sl = loans.find(l => l.id === formValue.loanId);
+            if (!sl) return null;
+            return Number(sl.advance_balance) >= Number(sl.outstanding_balance)
+              ? <Button appearance="primary" disabled>Loan Covered by Advance</Button>
+              : <Button onClick={handleReceivePayment} appearance="primary">Receive Payment</Button>;
+          })()}
           <Button onClick={() => { setModalOpen(false); setVoidPaymentId(null); }} appearance="subtle">Cancel</Button>
         </Modal.Footer>
       </Modal>
@@ -502,6 +571,24 @@ export const PaymentsPage = () => {
                   label: `${l.loan_number} - ${l.borrower_name} (${formatCurrency(l.outstanding_balance)})`,
                   value: l.id,
                 }))} onChange={(v) => { if (v) openInstallmentModal(v); }} style={{ width: '100%' }} placeholder="Choose an active loan..." />
+              </div>
+            )}
+            {payLoan && Number(payLoan.advance_balance) > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-2.5 text-sm text-blue-800 mb-3 flex items-center justify-between">
+                <span><strong>Advance Balance:</strong> {formatCurrency(payLoan.advance_balance)} — available as credit</span>
+                <Button size="sm" appearance="primary" color="blue" onClick={() => {
+                  const advanceBal = Number(payLoan.advance_balance);
+                  const ids: Record<string, boolean> = {};
+                  let remaining = advanceBal;
+                  const sorted = [...paySchedule].sort((a: any, b: any) => a.installment_no - b.installment_no);
+                  for (const s of sorted) {
+                    if (remaining <= 0) break;
+                    ids[s.id] = true;
+                    remaining -= Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0));
+                  }
+                  setDistributeScheduleIds(ids);
+                  setDistributeOpen(true);
+                }}>Distribute Advance</Button>
               </div>
             )}
             <div className="overflow-x-auto">
@@ -575,6 +662,37 @@ export const PaymentsPage = () => {
         <Modal.Footer>
           <Button appearance="primary" onClick={handleInstallmentSubmit} loading={paySubmitting}>Record Payment</Button>
           <Button appearance="subtle" onClick={() => setInstModalOpen(false)}>Cancel</Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal open={distributeOpen} onClose={() => { setDistributeOpen(false); setDistributeScheduleIds({}); }} size="sm">
+        <Modal.Header><Modal.Title>Distribute Advance Balance</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {payLoan && (
+            <div className="space-y-3">
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-2.5 text-sm text-blue-800">
+                Available Advance Balance: <strong>{formatCurrency(payLoan.advance_balance)}</strong>
+              </div>
+              <p className="text-sm text-gray-600">Select installments to apply the advance credit to:</p>
+              <div className="max-h-64 overflow-y-auto border rounded-md divide-y">
+                {paySchedule.map((s: any) => {
+                  const shortage = Math.max(0, parseFloat(s.total_due) - parseFloat(s.paid_amount || 0));
+                  return shortage > 0 ? (
+                    <label key={s.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm">
+                      <input type="checkbox" checked={distributeScheduleIds[s.id] || false}
+                        onChange={(e) => setDistributeScheduleIds((prev: any) => ({ ...prev, [s.id]: e.target.checked }))} className="w-4 h-4" />
+                      <span className="flex-1">#{s.installment_no} — Due {new Date(s.due_date).toLocaleDateString()}</span>
+                      <span className="text-gray-500">Shortage: {formatCurrency(shortage)}</span>
+                    </label>
+                  ) : null;
+                })}
+              </div>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button appearance="primary" color="blue" onClick={handleDistributeAdvance} loading={distributing}>Apply Advance</Button>
+          <Button appearance="subtle" onClick={() => { setDistributeOpen(false); setDistributeScheduleIds({}); }}>Cancel</Button>
         </Modal.Footer>
       </Modal>
 

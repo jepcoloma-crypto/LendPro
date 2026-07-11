@@ -143,6 +143,7 @@ export const loansApi = {
   writeOff: (id: string, data: any) => api.post(`/loans/${id}/write-off`, data),
   restructure: (id: string, data: any) => api.post(`/loans/${id}/restructure`, data),
   previewRestructure: (data: any) => api.post('/loans/preview-restructure', data),
+  distributeAdvance: (id: string, data: any) => api.post(`/loans/${id}/distribute-advance`, data),
 };
 
 // Payments

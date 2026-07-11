@@ -116,7 +116,8 @@ router.put('/loans/:id', authenticate, auditLog('update', 'loan'), loanControlle
 router.post('/loans/:id/write-off', authenticate, authorize('super-admin', 'admin'), auditLog('write-off', 'loan'), loanController.writeOffLoan.bind(loanController));
 router.post('/loans/preview-restructure', authenticate, authorize('super-admin', 'admin'), loanController.previewRestructure.bind(loanController));
 router.post('/loans/:id/restructure', authenticate, authorize('super-admin', 'admin'), auditLog('restructure', 'loan'), loanController.restructureLoan.bind(loanController));
-router.delete('/loans/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager'), auditLog('delete', 'loan'), loanController.deleteLoan.bind(loanController));
+  router.post('/loans/:id/distribute-advance', authenticate, authorize('super-admin', 'admin', 'branch-manager'), auditLog('distribute-advance', 'loan'), loanController.distributeAdvance.bind(loanController));
+  router.delete('/loans/:id', authenticate, authorize('super-admin', 'admin', 'branch-manager'), auditLog('delete', 'loan'), loanController.deleteLoan.bind(loanController));
 
 // Payments
 router.get('/payments', authenticate, paymentController.getPayments.bind(paymentController));

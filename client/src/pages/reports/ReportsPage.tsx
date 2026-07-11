@@ -496,7 +496,7 @@ export const ReportsPage = () => {
       }
       html += `</tbody></table>
       <div class="section-title">Payment History</div>
-      <table><thead><tr><th>Date</th><th>Ref/Payment #</th><th class="text-right">Amount</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Penalty</th><th class="text-center">Method</th></tr></thead><tbody>`;
+      <table><thead><tr><th>Date</th><th>Ref/Payment #</th><th class="text-right">Amount</th><th class="text-right">Principal</th><th class="text-right">Interest</th><th class="text-right">Penalty</th><th class="text-right">Advance</th><th class="text-center">Method</th></tr></thead><tbody>`;
       for (const p of payments) {
         html += `<tr>
           <td>${new Date(p.payment_date).toLocaleDateString()}</td>
@@ -505,6 +505,7 @@ export const ReportsPage = () => {
           <td class="text-right">${formatCurrency(p.principal_amount)}</td>
           <td class="text-right">${formatCurrency(p.interest_amount)}</td>
           <td class="text-right">${parseFloat(p.penalty_amount) > 0 ? `<span class="text-red">${formatCurrency(p.penalty_amount)}</span>` : formatCurrency(0)}</td>
+          <td class="text-right">${parseFloat(p.advance_amount || 0) > 0 ? formatCurrency(p.advance_amount) : '-'}</td>
           <td class="text-center">${p.payment_method}</td>
         </tr>`;
       }
@@ -512,6 +513,7 @@ export const ReportsPage = () => {
       <div class="summary-cards">
         <div class="summary-card"><p class="label">Total Payments</p><p class="value">${formatCurrency(totalPaid)}</p></div>
         <div class="summary-card"><p class="label">Total Penalties</p><p class="value" style="color:#dc2626">${formatCurrency(totalPenalty)}</p></div>
+        ${Number(loan.advance_balance) > 0 ? `<div class="summary-card"><p class="label">Advance Balance</p><p class="value" style="color:#2563eb">${formatCurrency(loan.advance_balance)}</p></div>` : ''}
         <div class="summary-card"><p class="label">Outstanding Balance</p><p class="value" style="color:#059669">${formatCurrency(loan.outstanding_balance)}</p></div>
       </div>
       <div class="signatures">

@@ -178,6 +178,7 @@ export interface Payment {
   principal_amount: number;
   interest_amount: number;
   penalty_amount: number;
+  advance_amount: number;
   payment_method: string;
   reference_number: string | null;
   payment_date: Date;
