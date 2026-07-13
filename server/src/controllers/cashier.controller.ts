@@ -21,13 +21,23 @@ export class CashierController {
 
       const shiftDate = opened_at ? new Date(opened_at) : new Date();
       const today = new Date();
-      const maxPast = new Date(today);
-      maxPast.setDate(maxPast.getDate() - 3);
+      const todayDay = today.getUTCDay();
+      const allowedDates: string[] = [];
+      const d = new Date(today);
+      if (todayDay === 1) { // Monday — allow Fri, Sat, Sun, Mon
+        for (let i = 0; i <= 3; i++) {
+          const dt = new Date(d);
+          dt.setUTCDate(dt.getUTCDate() - i);
+          allowedDates.push(dt.toISOString().slice(0, 10));
+        }
+      } else { // Other days — allow today and yesterday only
+        allowedDates.push(d.toISOString().slice(0, 10));
+        d.setUTCDate(d.getUTCDate() - 1);
+        allowedDates.push(d.toISOString().slice(0, 10));
+      }
       const shiftDateStr = shiftDate.toISOString().slice(0, 10);
-      const todayStr = today.toISOString().slice(0, 10);
-      const maxPastStr = maxPast.toISOString().slice(0, 10);
-      if (shiftDateStr < maxPastStr || shiftDateStr > todayStr) {
-        throw new Error(`Shift date must be between ${maxPastStr} and ${todayStr}. Cannot backdate further.`);
+      if (!allowedDates.includes(shiftDateStr)) {
+        throw new Error(`Shift date must be ${allowedDates.join(', ')}. Cannot backdate further.`);
       }
 
       const shift = await cashierSessionRepo.create({
