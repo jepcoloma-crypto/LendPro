@@ -78,7 +78,7 @@ export const CashierReconciliationPage = () => {
   const [openShiftForm, setOpenShiftForm] = useState({ opening_float: 0, branch_id: null as string | null, opened_at: new Date() });
   const [openShiftBranches, setOpenShiftBranches] = useState<any[]>([]);
   const [closeModal, setCloseModal] = useState(false);
-  const [closeForm, setCloseForm] = useState({ actual_cash: 0, notes: '' });
+  const [closeForm, setCloseForm] = useState({ actual_cash: 0, notes: '', variance_reason: '' });
   const [countModal, setCountModal] = useState(false);
   const [countForm, setCountForm] = useState<Record<string, any>>({});
   const [reconModal, setReconModal] = useState(false);
@@ -544,7 +544,7 @@ ${transactions.map((t: any, i: number) => `<tr>
             <span className="px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-sm font-medium flex items-center gap-1">
               <DollarSign className="w-4 h-4" /> {formatCurrency(myShift.expected_cash)}
             </span>
-            <Button color="orange" appearance="primary" onClick={() => { setCloseForm({ actual_cash: parseFloat(myShift.expected_cash) || 0, notes: '' }); setCloseModal(true); }}>
+            <Button color="orange" appearance="primary" onClick={() => { setCloseForm({ actual_cash: parseFloat(myShift.expected_cash) || 0, notes: '', variance_reason: '' }); setCloseModal(true); }}>
               <Clock className="w-4 h-4 mr-1" />Close Shift
             </Button>
           </>}
@@ -835,6 +835,10 @@ ${transactions.map((t: any, i: number) => `<tr>
                   <Form.Group>
                     <Form.ControlLabel>Notes</Form.ControlLabel>
                     <textarea className="rs-input w-full" rows={2} value={closeForm.notes} onChange={(e: any) => setCloseForm((p: any) => ({ ...p, notes: e.target.value }))} />
+                  </Form.Group>
+                  <Form.Group>
+                    <Form.ControlLabel>Variance Reason <span className="text-red-500">*</span></Form.ControlLabel>
+                    <textarea className="rs-input w-full" rows={2} value={closeForm.variance_reason} onChange={(e: any) => setCloseForm((p: any) => ({ ...p, variance_reason: e.target.value }))} placeholder="Explain any difference between actual and expected cash" />
                   </Form.Group>
                 </Form>
                 <div className="flex gap-2">
@@ -1127,6 +1131,10 @@ ${transactions.map((t: any, i: number) => `<tr>
                 <Form.Group>
                   <Form.ControlLabel>Notes</Form.ControlLabel>
                   <textarea className="rs-input w-full" rows={2} value={closeForm.notes} onChange={(e: any) => setCloseForm((p: any) => ({ ...p, notes: e.target.value }))} />
+                </Form.Group>
+                <Form.Group>
+                  <Form.ControlLabel>Variance Reason <span className="text-red-500">*</span></Form.ControlLabel>
+                  <textarea className="rs-input w-full" rows={2} value={closeForm.variance_reason} onChange={(e: any) => setCloseForm((p: any) => ({ ...p, variance_reason: e.target.value }))} placeholder="Explain any difference between actual and expected cash" />
                 </Form.Group>
               </Form>
             </div>
