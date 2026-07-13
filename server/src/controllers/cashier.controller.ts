@@ -21,13 +21,13 @@ export class CashierController {
 
       const shiftDate = opened_at ? new Date(opened_at) : new Date();
       const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
+      const maxPast = new Date(today);
+      maxPast.setDate(maxPast.getDate() - 3);
       const shiftDateStr = shiftDate.toISOString().slice(0, 10);
       const todayStr = today.toISOString().slice(0, 10);
-      const yesterdayStr = yesterday.toISOString().slice(0, 10);
-      if (shiftDateStr !== todayStr && shiftDateStr !== yesterdayStr) {
-        throw new Error(`Shift date must be today (${todayStr}) or yesterday (${yesterdayStr}). Cannot backdate further.`);
+      const maxPastStr = maxPast.toISOString().slice(0, 10);
+      if (shiftDateStr < maxPastStr || shiftDateStr > todayStr) {
+        throw new Error(`Shift date must be between ${maxPastStr} and ${todayStr}. Cannot backdate further.`);
       }
 
       const shift = await cashierSessionRepo.create({
