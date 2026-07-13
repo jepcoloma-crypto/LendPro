@@ -710,6 +710,143 @@ export class AdminController {
       next(error instanceof AppError ? error : new AppError(400, error.message));
     }
   }
+
+  // ==================== DATA INTEGRITY SCAN ====================
+
+  async dataIntegrityScan(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const issues: any[] = [];
+
+      // 1. Orphaned payments (no loan)
+      const orphanPayments = await paymentRepo.query(
+        `SELECT p.id, p.payment_number, p.amount, p.loan_id FROM payments p WHERE p.loan_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.id = p.loan_id)`
+      );
+      orphanPayments.forEach((r: any) => issues.push({
+        type: 'orphaned_payment',
+        severity: 'high',
+        entity: `Payment ${r.payment_number}`,
+        detail: `References loan ${r.loan_id} which does not exist`,
+        amount: parseFloat(r.amount) || 0,
+        id: r.id,
+      }));
+
+      // 2. Orphaned payment allocations (no payment)
+      const orphanAllocs = await paymentAllocationRepo.query(
+        `SELECT pa.id, pa.payment_id, pa.amount FROM payment_allocations pa WHERE NOT EXISTS (SELECT 1 FROM payments p WHERE p.id = pa.payment_id)`
+      );
+      orphanAllocs.forEach((r: any) => issues.push({
+        type: 'orphaned_allocation',
+        severity: 'medium',
+        entity: `Allocation ${r.id?.slice(0, 8)}`,
+        detail: `References payment ${r.payment_id} which does not exist`,
+        amount: parseFloat(r.amount) || 0,
+        id: r.id,
+      }));
+
+      // 3. Orphaned allocations (no schedule)
+      const orphanSchedAllocs = await paymentAllocationRepo.query(
+        `SELECT pa.id, pa.payment_id, pa.schedule_id, pa.amount FROM payment_allocations pa WHERE NOT EXISTS (SELECT 1 FROM amortization_schedules s WHERE s.id = pa.schedule_id)`
+      );
+      orphanSchedAllocs.forEach((r: any) => issues.push({
+        type: 'orphaned_allocation_schedule',
+        severity: 'medium',
+        entity: `Allocation ${r.id?.slice(0, 8)}`,
+        detail: `References schedule ${r.schedule_id} which does not exist`,
+        amount: parseFloat(r.amount) || 0,
+        id: r.id,
+      }));
+
+      // 4. Orphaned cash transactions (no shift)
+      const orphanTxns = await cashTransactionRepo.query(
+        `SELECT ct.id, ct.description, ct.amount FROM cash_transactions ct WHERE NOT EXISTS (SELECT 1 FROM cashier_sessions cs WHERE cs.id = ct.shift_id)`
+      );
+      orphanTxns.forEach((r: any) => issues.push({
+        type: 'orphaned_cash_txn',
+        severity: 'high',
+        entity: `Cash Transaction ${r.id?.slice(0, 8)}`,
+        detail: r.description || 'No shift reference',
+        amount: parseFloat(r.amount) || 0,
+        id: r.id,
+      }));
+
+      // 5. Mismatched loan balances (outstanding_balance != sum of schedule balances)
+      const balanceIssues = await loanRepo.query(
+        `SELECT l.id, l.loan_number, l.outstanding_balance,
+                COALESCE(SUM(s.balance), 0) as sum_schedule_balance
+         FROM loans l
+         LEFT JOIN amortization_schedules s ON s.loan_id = l.id
+         WHERE l.status NOT IN ('written-off', 'pending')
+         GROUP BY l.id, l.loan_number, l.outstanding_balance
+         HAVING ABS(l.outstanding_balance - COALESCE(SUM(s.balance), 0)) > 0.01`
+      );
+      balanceIssues.forEach((r: any) => issues.push({
+        type: 'balance_mismatch',
+        severity: 'high',
+        entity: `Loan ${r.loan_number}`,
+        detail: `Outstanding balance (${parseFloat(r.outstanding_balance).toFixed(2)}) ≠ sum of schedule balances (${parseFloat(r.sum_schedule_balance).toFixed(2)})`,
+        amount: Math.abs(parseFloat(r.outstanding_balance) - parseFloat(r.sum_schedule_balance)),
+        id: r.id,
+      }));
+
+      // 6. Schedules past maturity still pending
+      const pastDueSchedules = await amortizationScheduleRepo.query(
+        `SELECT s.id, s.loan_id, s.installment_no, s.due_date, s.total_due, s.paid_amount, l.loan_number
+         FROM amortization_schedules s
+         JOIN loans l ON l.id = s.loan_id
+         WHERE s.due_date < CURRENT_DATE AND s.status = 'pending' AND l.status NOT IN ('written-off', 'closed')`
+      );
+      pastDueSchedules.forEach((r: any) => issues.push({
+        type: 'past_due_pending',
+        severity: 'low',
+        entity: `Loan ${r.loan_number} #${r.installment_no}`,
+        detail: `Due ${new Date(r.due_date).toLocaleDateString()} still pending, total_due=${parseFloat(r.total_due).toFixed(2)}`,
+        amount: parseFloat(r.total_due) - (parseFloat(r.paid_amount) || 0),
+        id: r.id,
+      }));
+
+      // 7. Loans that should be closed (outstanding_balance <= 0 but status != 'closed')
+      const shouldBeClosed = await loanRepo.query(
+        `SELECT id, loan_number, outstanding_balance, status FROM loans WHERE outstanding_balance <= 0 AND status NOT IN ('closed', 'written-off', 'pending')`
+      );
+      shouldBeClosed.forEach((r: any) => issues.push({
+        type: 'should_be_closed',
+        severity: 'medium',
+        entity: `Loan ${r.loan_number}`,
+        detail: `Outstanding balance is ${parseFloat(r.outstanding_balance).toFixed(2)} but status is '${r.status}'`,
+        amount: 0,
+        id: r.id,
+      }));
+
+      res.json({ success: true, data: issues, meta: { total: issues.length, by_severity: { high: issues.filter(i => i.severity === 'high').length, medium: issues.filter(i => i.severity === 'medium').length, low: issues.filter(i => i.severity === 'low').length } } });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
+  // ==================== CONNECTION MONITOR ====================
+
+  async getConnections(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const connections = await pool.query(`
+        SELECT pid, usename, application_name, client_addr, client_port, state, query, query_start, state_change, wait_event_type, wait_event
+        FROM pg_stat_activity WHERE pid <> pg_backend_pid() ORDER BY query_start DESC NULLS LAST
+      `);
+      res.json({ success: true, data: connections.rows });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
+  async killConnection(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const pid = parseInt(paramStr(req.params.pid));
+      if (!pid) throw new AppError(400, 'PID is required');
+      await pool.query(`SELECT pg_terminate_backend($1)`, [pid]);
+      res.json({ success: true, message: `Connection ${pid} terminated` });
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
+    }
+  }
 }
 
 export const adminController = new AdminController();

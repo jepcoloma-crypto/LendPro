@@ -1,12 +1,116 @@
 import { useState, useEffect, useRef } from 'react';
-import { Panel, Button, toaster, Message, Modal, Loader, Tag, Checkbox, CheckboxGroup } from 'rsuite';
+import { Panel, Button, toaster, Message, Modal, Loader, Tag, Checkbox, CheckboxGroup, Table } from 'rsuite';
 import api, { utilitiesApi, cancellationRequestsApi } from '../../services/api';
-import { RefreshCw, Trash2, HeartPulse, Database, Download, Upload, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Trash2, HeartPulse, Database, Download, Upload, AlertTriangle, Search, XCircle } from 'lucide-react';
 import { AuditLogsPage } from '../audit-logs/AuditLogsPage';
 import { LoginHistoryPage } from '../audit-logs/LoginHistoryPage';
 import { PendingApprovalsPage } from '../audit-logs/PendingApprovalsPage';
 import { SettingsPage } from '../settings/SettingsPage';
 import { AdminToolsTab } from './AdminToolsTab';
+import { formatCurrency } from '../../utils/format';
+
+const { Column, HeaderCell, Cell } = Table;
+
+// ==================== DATA INTEGRITY SCANNER ====================
+const DataIntegrityScanner = () => {
+  const [issues, setIssues] = useState<any[]>([]);
+  const [meta, setMeta] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const scan = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/admin/data-integrity');
+      setIssues(data.data || []);
+      setMeta(data.meta);
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Scan failed'}</Message>, { placement: 'topEnd' }); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-3">
+        <Button appearance="primary" onClick={scan} loading={loading}><Search className="w-4 h-4 mr-1" />Run Scan</Button>
+        {meta && (
+          <div className="flex gap-2 text-sm">
+            <Tag color="red">{meta.by_severity.high} High</Tag>
+            <Tag color="orange">{meta.by_severity.medium} Medium</Tag>
+            <Tag color="blue">{meta.by_severity.low} Low</Tag>
+            <span className="text-gray-500">{meta.total} total issues</span>
+          </div>
+        )}
+      </div>
+      {issues.length > 0 && (
+        <Table data={issues} virtualized height={300} rowHeight={45} loading={loading}>
+          <Column width={150}><HeaderCell>Type</HeaderCell><Cell>{(r: any) => <Tag color={r.severity === 'high' ? 'red' : r.severity === 'medium' ? 'orange' : 'blue'}>{r.type.replace(/_/g, ' ')}</Tag>}</Cell></Column>
+          <Column width={90}><HeaderCell>Severity</HeaderCell><Cell>{(r: any) => <Tag color={r.severity === 'high' ? 'red' : r.severity === 'medium' ? 'orange' : 'blue'}>{r.severity}</Tag>}</Cell></Column>
+          <Column width={200}><HeaderCell>Entity</HeaderCell><Cell dataKey="entity" /></Column>
+          <Column width={400}><HeaderCell>Detail</HeaderCell><Cell dataKey="detail" /></Column>
+          <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => r.amount ? formatCurrency(r.amount) : '-'}</Cell></Column>
+        </Table>
+      )}
+      {!loading && issues.length === 0 && meta && (
+        <p className="text-green-600 text-sm">No issues found. System data is clean.</p>
+      )}
+    </div>
+  );
+};
+
+// ==================== CONNECTION MONITOR ====================
+const ConnectionMonitor = () => {
+  const [connections, setConnections] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [killing, setKilling] = useState<number | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/admin/connections');
+      setConnections(data.data || []);
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const kill = async (pid: number) => {
+    setKilling(pid);
+    try {
+      await api.delete(`/admin/connections/${pid}`);
+      toaster.push(<Message type="success">Connection {pid} terminated</Message>, { placement: 'topEnd' });
+      load();
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+    finally { setKilling(null); }
+  };
+
+  const formatQuery = (q: string) => {
+    if (!q) return '-';
+    return q.length > 80 ? q.slice(0, 80) + '...' : q;
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <Button appearance="primary" onClick={load} loading={loading}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button>
+        <span className="text-sm text-gray-500">{connections.length} connection(s)</span>
+      </div>
+      <Table data={connections} virtualized height={300} rowHeight={45} loading={loading}>
+        <Column width={60}><HeaderCell>PID</HeaderCell><Cell dataKey="pid" /></Column>
+        <Column width={100}><HeaderCell>User</HeaderCell><Cell dataKey="usename" /></Column>
+        <Column width={120}><HeaderCell>App</HeaderCell><Cell dataKey="application_name" /></Column>
+        <Column width={80}><HeaderCell>State</HeaderCell><Cell>{(r: any) => <Tag color={r.state === 'active' ? 'green' : r.state === 'idle' ? 'orange' : 'blue'}>{r.state || '-'}</Tag>}</Cell></Column>
+        <Column width={350}><HeaderCell>Query</HeaderCell><Cell>{(r: any) => <span className="text-xs font-mono">{formatQuery(r.query)}</span>}</Cell></Column>
+        <Column width={140}><HeaderCell>Started</HeaderCell><Cell>{(r: any) => r.query_start ? new Date(r.query_start).toLocaleString() : '-'}</Cell></Column>
+        <Column width={120}><HeaderCell>Wait Event</HeaderCell><Cell>{(r: any) => r.wait_event_type ? `${r.wait_event_type}: ${r.wait_event}` : '-'}</Cell></Column>
+        <Column width={100}><HeaderCell>Action</HeaderCell><Cell>{(r: any) => (
+          <Button size="sm" color="red" appearance="ghost" onClick={() => kill(r.pid)} loading={killing === r.pid} disabled={r.state === 'active' && r.query?.includes('pg_stat_activity')}>
+            <XCircle className="w-3.5 h-3.5" />
+          </Button>
+        )}</Cell></Column>
+      </Table>
+    </div>
+  );
+};
 
 const MODULE_OPTIONS = [
   { label: 'Borrowers', value: 'borrowers', desc: 'Borrowers, co-makers, documents' },
@@ -347,6 +451,18 @@ const SystemToolsTab = () => {
           )}
         </Modal.Footer>
       </Modal>
+
+      {/* Data Integrity Scan */}
+      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<span><Database className="w-4 h-4 mr-1 inline" />Data Integrity Scan</span>}>
+        <p className="text-sm text-gray-500 mb-3">Detect orphaned records, balance mismatches, and schedules past maturity still marked pending.</p>
+        <DataIntegrityScanner />
+      </Panel>
+
+      {/* Connection Monitor */}
+      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<span><HeartPulse className="w-4 h-4 mr-1 inline" />Connection Monitor</span>}>
+        <p className="text-sm text-gray-500 mb-3">View active database connections and kill long-running idle queries.</p>
+        <ConnectionMonitor />
+      </Panel>
 
       {/* Clear Confirmation */}
       <Modal open={clearOpen} onClose={() => setClearOpen(false)} size="sm">

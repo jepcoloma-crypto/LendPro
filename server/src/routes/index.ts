@@ -297,6 +297,9 @@ router.put('/admin/shifts/:id/force-close', authenticate, authorize('super-admin
 router.put('/admin/shifts/:id/reopen', authenticate, authorize('super-admin'), auditLog('reopen', 'shift'), adminController.reopenShift.bind(adminController));
 router.delete('/admin/shifts/:id', authenticate, authorize('super-admin'), auditLog('delete', 'shift'), adminController.deleteShift.bind(adminController));
 router.post('/admin/shifts/:id/move-transactions', authenticate, authorize('super-admin'), auditLog('move-transactions', 'shift'), adminController.moveShiftTransactions.bind(adminController));
+router.get('/admin/data-integrity', authenticate, authorize('super-admin'), adminController.dataIntegrityScan.bind(adminController));
+router.get('/admin/connections', authenticate, authorize('super-admin'), adminController.getConnections.bind(adminController));
+router.delete('/admin/connections/:pid', authenticate, authorize('super-admin'), auditLog('kill-connection', 'database'), adminController.killConnection.bind(adminController));
 
 // Notifications
 router.get('/notifications', authenticate, notificationController.getAll.bind(notificationController));
