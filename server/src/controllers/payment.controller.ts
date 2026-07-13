@@ -16,8 +16,21 @@ export class PaymentController {
 
       const shiftDate = new Date(myShift.opened_at).toISOString().slice(0, 10);
       const paymentDate = req.body.paymentDate ? new Date(req.body.paymentDate).toISOString().slice(0, 10) : shiftDate;
-      if (shiftDate !== paymentDate) {
-        throw new AppError(400, `Your open shift is dated ${shiftDate} but the payment date is ${paymentDate}. Close the current shift first, then open a new shift for ${paymentDate}.`);
+
+      // Allow Friday/Saturday payments on a Monday shift (weekend grace period)
+      const shiftDay = new Date(myShift.opened_at).getUTCDay();
+      const allowedDates: string[] = [shiftDate];
+      if (shiftDay === 1) { // Monday
+        const sat = new Date(myShift.opened_at);
+        sat.setUTCDate(sat.getUTCDate() - 2);
+        allowedDates.push(sat.toISOString().slice(0, 10));
+        const fri = new Date(myShift.opened_at);
+        fri.setUTCDate(fri.getUTCDate() - 3);
+        allowedDates.push(fri.toISOString().slice(0, 10));
+      }
+
+      if (!allowedDates.includes(paymentDate)) {
+        throw new AppError(400, `Your open shift is dated ${shiftDate} but the payment date is ${paymentDate}.${shiftDay === 1 ? ` Only Friday (${allowedDates[2]}), Saturday (${allowedDates[1]}), or Monday (${shiftDate}) are allowed.` : ` Only ${shiftDate} is allowed.`}`);
       }
       if (!req.body.paymentDate) {
         req.body.paymentDate = shiftDate;
