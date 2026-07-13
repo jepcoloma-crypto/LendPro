@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Panel, Button, toaster, Message, Modal, Input, InputNumber, Table, Tag, Badge } from 'rsuite';
 import api from '../../services/api';
-import { Search, XCircle, Edit3, RefreshCw, ArrowRight, Trash2 } from 'lucide-react';
+import { Search, XCircle, Edit3, RefreshCw, ArrowRight, Trash2, Calendar, AlertTriangle } from 'lucide-react';
 import { formatCurrency } from '../../utils/format';
 
 const { Column, HeaderCell, Cell } = Table;
@@ -330,6 +330,218 @@ const CashTransactionAdmin = () => {
   );
 };
 
+// ==================== LOAN QUICK FIX ====================
+const LoanQuickFix = () => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loans, setLoans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedLoan, setSelectedLoan] = useState<any>(null);
+  const [editModal, setEditModal] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
+  const [editLoading, setEditLoading] = useState(false);
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [schedModal, setSchedModal] = useState(false);
+  const [schedLoading, setSchedLoading] = useState(false);
+
+  const searchLoans = async () => {
+    if (!searchTerm.trim()) return;
+    setLoading(true);
+    try {
+      const { data } = await api.get('/loans', { params: { search: searchTerm, limit: 20 } });
+      setLoans(data.data || []);
+    } catch { toaster.push(<Message type="error">Search failed</Message>, { placement: 'topEnd' }); }
+    finally { setLoading(false); }
+  };
+
+  const openEdit = (loan: any) => {
+    setSelectedLoan(loan);
+    setEditForm({
+      maturity_date: loan.maturity_date ? new Date(loan.maturity_date).toISOString().slice(0, 10) : '',
+      release_date: loan.release_date ? new Date(loan.release_date).toISOString().slice(0, 10) : '',
+      status: loan.status,
+      principal_amount: loan.principal_amount,
+      outstanding_balance: loan.outstanding_balance,
+      interest_amount: loan.interest_amount,
+      total_amount: loan.total_amount,
+    });
+    setEditModal(true);
+  };
+
+  const handleEdit = async () => {
+    setEditLoading(true);
+    try {
+      const body: any = {};
+      if (editForm.maturity_date !== (selectedLoan.maturity_date ? new Date(selectedLoan.maturity_date).toISOString().slice(0, 10) : '')) body.maturity_date = editForm.maturity_date;
+      if (editForm.release_date !== (selectedLoan.release_date ? new Date(selectedLoan.release_date).toISOString().slice(0, 10) : '')) body.release_date = editForm.release_date;
+      if (editForm.status !== selectedLoan.status) body.status = editForm.status;
+      if (parseFloat(editForm.principal_amount) !== parseFloat(selectedLoan.principal_amount)) body.principal_amount = editForm.principal_amount;
+      if (parseFloat(editForm.outstanding_balance) !== parseFloat(selectedLoan.outstanding_balance)) body.outstanding_balance = editForm.outstanding_balance;
+      if (parseFloat(editForm.interest_amount) !== parseFloat(selectedLoan.interest_amount)) body.interest_amount = editForm.interest_amount;
+      if (parseFloat(editForm.total_amount) !== parseFloat(selectedLoan.total_amount)) body.total_amount = editForm.total_amount;
+
+      if (Object.keys(body).length === 0) { toaster.push(<Message type="warning">No changes made</Message>, { placement: 'topEnd' }); return; }
+      await api.put(`/admin/loans/${selectedLoan.id}/adjust`, body);
+      toaster.push(<Message type="success">Loan updated</Message>, { placement: 'topEnd' });
+      setEditModal(false);
+      searchLoans();
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+    finally { setEditLoading(false); }
+  };
+
+  const openSchedules = async (loan: any) => {
+    setSelectedLoan(loan);
+    setSchedLoading(true);
+    try {
+      const { data } = await api.get(`/loans/${loan.id}/schedule`);
+      setSchedules((data.data || []).map((s: any) => ({ ...s, _due_date: new Date(s.due_date).toISOString().slice(0, 10) })));
+      setSchedModal(true);
+    } catch { toaster.push(<Message type="error">Failed to load schedules</Message>, { placement: 'topEnd' }); }
+    finally { setSchedLoading(false); }
+  };
+
+  const handleSchedSave = async () => {
+    setSchedLoading(true);
+    try {
+      const payload = schedules.map(s => ({
+        id: s.id,
+        due_date: s._due_date,
+        principal: s.principal,
+        interest: s.interest,
+        total_due: s.total_due,
+        paid_amount: s.paid_amount,
+        status: s.status,
+        balance: s.balance,
+      }));
+      await api.post(`/admin/loans/${selectedLoan.id}/adjust-schedule`, { schedules: payload });
+      toaster.push(<Message type="success">Schedules updated</Message>, { placement: 'topEnd' });
+      setSchedModal(false);
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+    finally { setSchedLoading(false); }
+  };
+
+  const updateSched = (i: number, field: string, value: any) => {
+    const copy = [...schedules];
+    (copy[i] as any)[field] = value;
+    setSchedules(copy);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <Input placeholder="Search loan number or borrower..." value={searchTerm} onChange={setSearchTerm}
+          onPressEnter={searchLoans} style={{ maxWidth: 400 }} />
+        <Button appearance="primary" onClick={searchLoans} loading={loading}><Search className="w-4 h-4 mr-1" />Search</Button>
+      </div>
+
+      {loans.length > 0 && (
+        <Table data={loans} virtualized height={300} rowHeight={45} loading={loading} className="mb-4">
+          <Column width={160}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+          <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
+          <Column width={140}><HeaderCell>Balance</HeaderCell><Cell>{(r: any) => formatCurrency(r.outstanding_balance)}</Cell></Column>
+          <Column width={100}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.status === 'active' ? 'green' : r.status === 'closed' ? 'blue' : r.status === 'written-off' ? 'red' : 'orange'}>{r.status}</Tag>}</Cell></Column>
+          <Column width={140}><HeaderCell>Maturity</HeaderCell><Cell>{(r: any) => r.maturity_date ? new Date(r.maturity_date).toLocaleDateString() : '-'}</Cell></Column>
+          <Column width={200}><HeaderCell>Actions</HeaderCell><Cell>{(r: any) => (
+            <div className="flex gap-1">
+              <Button size="sm" color="blue" appearance="ghost" onClick={() => openEdit(r)}><Edit3 className="w-3.5 h-3.5" />Edit</Button>
+              <Button size="sm" color="violet" appearance="ghost" onClick={() => openSchedules(r)}><Calendar className="w-3.5 h-3.5" />Schedules</Button>
+            </div>
+          )}</Cell></Column>
+        </Table>
+      )}
+
+      {/* Edit Loan Modal */}
+      <Modal open={editModal} onClose={() => setEditModal(false)} size="sm">
+        <Modal.Header><Modal.Title>Edit Loan</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <p className="mb-3 text-sm text-gray-600">Editing <strong>{selectedLoan?.loan_number}</strong></p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium">Maturity Date</label>
+              <input type="date" className="rs-input" value={editForm.maturity_date} onChange={(e: any) => setEditForm((f: any) => ({ ...f, maturity_date: e.target.value }))} style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Release Date</label>
+              <input type="date" className="rs-input" value={editForm.release_date} onChange={(e: any) => setEditForm((f: any) => ({ ...f, release_date: e.target.value }))} style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Status</label>
+              <select className="rs-input" value={editForm.status} onChange={(e: any) => setEditForm((f: any) => ({ ...f, status: e.target.value }))} style={{ width: '100%' }}>
+                <option value="active">Active</option>
+                <option value="closed">Closed</option>
+                <option value="written-off">Written Off</option>
+                <option value="pending">Pending</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Principal Amount</label>
+              <InputNumber value={editForm.principal_amount} onChange={(v: any) => setEditForm((f: any) => ({ ...f, principal_amount: v ?? 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Outstanding Balance</label>
+              <InputNumber value={editForm.outstanding_balance} onChange={(v: any) => setEditForm((f: any) => ({ ...f, outstanding_balance: v ?? 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Interest Amount</label>
+              <InputNumber value={editForm.interest_amount} onChange={(v: any) => setEditForm((f: any) => ({ ...f, interest_amount: v ?? 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Total Amount</label>
+              <InputNumber value={editForm.total_amount} onChange={(v: any) => setEditForm((f: any) => ({ ...f, total_amount: v ?? 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button color="blue" appearance="primary" onClick={handleEdit} loading={editLoading}><Edit3 className="w-4 h-4 mr-1" />Save Changes</Button>
+          <Button onClick={() => setEditModal(false)} appearance="subtle">Close</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Schedules Modal */}
+      <Modal open={schedModal} onClose={() => setSchedModal(false)} size="lg">
+        <Modal.Header><Modal.Title>Adjust Schedules - {selectedLoan?.loan_number}</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {schedLoading && schedules.length === 0 ? <p className="text-center py-4">Loading schedules...</p> : (
+            <div className="max-h-96 overflow-y-auto space-y-1">
+              <div className="flex gap-2 text-xs font-bold text-gray-500 px-2 py-1 border-b">
+                <span className="w-8">#</span>
+                <span className="w-24">Due Date</span>
+                <span className="w-24">Principal</span>
+                <span className="w-24">Interest</span>
+                <span className="w-24">Total Due</span>
+                <span className="w-24">Paid</span>
+                <span className="w-24">Balance</span>
+                <span className="w-20">Status</span>
+              </div>
+              {schedules.map((s, i) => (
+                <div key={s.id} className="flex gap-2 items-center px-2 py-1 bg-gray-50 dark:bg-gray-700 rounded text-sm">
+                  <span className="w-8">{s.installment_no}</span>
+                  <input type="date" className="rs-input" value={s._due_date} onChange={(e) => updateSched(i, '_due_date', e.target.value)} style={{ width: 110 }} />
+                  <InputNumber value={String(s.principal)} onChange={(v: any) => updateSched(i, 'principal', parseFloat(v) || 0)} min={0} step={0.01} style={{ width: 100 }} />
+                  <InputNumber value={String(s.interest)} onChange={(v: any) => updateSched(i, 'interest', parseFloat(v) || 0)} min={0} step={0.01} style={{ width: 100 }} />
+                  <InputNumber value={String(s.total_due)} onChange={(v: any) => updateSched(i, 'total_due', parseFloat(v) || 0)} min={0} step={0.01} style={{ width: 100 }} />
+                  <InputNumber value={String(s.paid_amount)} onChange={(v: any) => updateSched(i, 'paid_amount', parseFloat(v) || 0)} min={0} step={0.01} style={{ width: 100 }} />
+                  <InputNumber value={String(s.balance)} onChange={(v: any) => updateSched(i, 'balance', parseFloat(v) || 0)} min={0} step={0.01} style={{ width: 100 }} />
+                  <select className="rs-input" value={s.status} onChange={(e) => updateSched(i, 'status', e.target.value)} style={{ width: 90 }}>
+                    <option value="pending">pending</option>
+                    <option value="partial">partial</option>
+                    <option value="paid">paid</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button color="violet" appearance="primary" onClick={handleSchedSave} loading={schedLoading}>
+            <RefreshCw className="w-4 h-4 mr-1" />Save Schedules
+          </Button>
+          <Button onClick={() => setSchedModal(false)} appearance="subtle">Close</Button>
+        </Modal.Footer>
+      </Modal>
+    </div>
+  );
+};
+
 // ==================== MAIN TAB EXPORT ====================
 export const AdminToolsTab = () => {
   const [subTab, setSubTab] = useState('payments');
@@ -340,6 +552,7 @@ export const AdminToolsTab = () => {
         {[
           { key: 'payments', label: 'Payment Corrector' },
           { key: 'cash', label: 'Cash Transactions' },
+          { key: 'loans', label: 'Loan Quick Fix' },
         ].map(t => (
           <button key={t.key} onClick={() => setSubTab(t.key)}
             className={`text-sm px-3 py-1.5 rounded-t font-medium transition-colors ${subTab === t.key ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -357,6 +570,12 @@ export const AdminToolsTab = () => {
         <Panel bordered header={<span><Trash2 className="w-4 h-4 mr-1 inline" />Cash Transaction Admin</span>}>
           <p className="text-sm text-gray-500 mb-4">View, delete, or reassign cash transactions to correct shifts.</p>
           <CashTransactionAdmin />
+        </Panel>
+      )}
+      {subTab === 'loans' && (
+        <Panel bordered header={<span><AlertTriangle className="w-4 h-4 mr-1 inline" />Loan Quick Fix</span>}>
+          <p className="text-sm text-gray-500 mb-4">Edit loan details (maturity date, status, amounts) or adjust amortization schedules.</p>
+          <LoanQuickFix />
         </Panel>
       )}
     </div>

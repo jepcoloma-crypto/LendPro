@@ -290,6 +290,8 @@ router.post('/admin/payments/:id/re-allocate', authenticate, authorize('super-ad
 router.get('/admin/cash-transactions', authenticate, authorize('super-admin'), adminController.listCashTransactions.bind(adminController));
 router.delete('/admin/cash-transactions/:id', authenticate, authorize('super-admin'), auditLog('delete', 'cash_transaction'), adminController.deleteCashTransaction.bind(adminController));
 router.put('/admin/cash-transactions/:id/reassign', authenticate, authorize('super-admin'), auditLog('reassign', 'cash_transaction'), adminController.reassignCashTransaction.bind(adminController));
+router.put('/admin/loans/:id/adjust', authenticate, authorize('super-admin'), auditLog('adjust', 'loan'), adminController.adjustLoan.bind(adminController));
+router.post('/admin/loans/:id/adjust-schedule', authenticate, authorize('super-admin'), auditLog('adjust-schedule', 'loan'), adminController.adjustLoanSchedule.bind(adminController));
 
 // Notifications
 router.get('/notifications', authenticate, notificationController.getAll.bind(notificationController));

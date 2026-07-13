@@ -416,6 +416,101 @@ export class AdminController {
       next(error instanceof AppError ? error : new AppError(400, error.message));
     }
   }
+
+  // ==================== LOAN QUICK FIX ====================
+
+  async adjustLoan(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const { maturity_date, status, release_date, principal_amount, outstanding_balance, interest_amount, total_amount } = req.body;
+
+      const loan = await loanRepo.findById(id);
+      if (!loan) throw new AppError(404, 'Loan not found');
+
+      const updates: string[] = [];
+      const params: any[] = [];
+      let idx = 1;
+
+      if (maturity_date) { updates.push(`maturity_date = $${idx++}`); params.push(new Date(maturity_date).toISOString()); }
+      if (release_date) { updates.push(`release_date = $${idx++}`); params.push(new Date(release_date).toISOString()); }
+      if (status) { updates.push(`status = $${idx++}`); params.push(status); }
+      if (principal_amount !== undefined) { updates.push(`principal_amount = $${idx++}`); params.push(parseFloat(principal_amount)); }
+      if (outstanding_balance !== undefined) { updates.push(`outstanding_balance = $${idx++}`); params.push(parseFloat(outstanding_balance)); }
+      if (interest_amount !== undefined) { updates.push(`interest_amount = $${idx++}`); params.push(parseFloat(interest_amount)); }
+      if (total_amount !== undefined) { updates.push(`total_amount = $${idx++}`); params.push(parseFloat(total_amount)); }
+
+      if (updates.length === 0) throw new AppError(400, 'No fields to update');
+
+      params.push(id);
+      await pool.query(
+        `UPDATE loans SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${idx}`,
+        params
+      );
+
+      const updated = await loanRepo.findById(id);
+      res.json({ success: true, data: updated, message: 'Loan updated' });
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
+    }
+  }
+
+  async adjustLoanSchedule(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const { schedules } = req.body;
+
+      if (!Array.isArray(schedules) || schedules.length === 0) {
+        throw new AppError(400, 'Schedules array is required');
+      }
+
+      const loan = await loanRepo.findById(id);
+      if (!loan) throw new AppError(404, 'Loan not found');
+
+      const client = await pool.connect();
+      try {
+        await client.query('SET search_path TO public');
+        await client.query('BEGIN');
+
+        for (const sched of schedules) {
+          if (!sched.id) throw new AppError(400, 'Each schedule must have an id');
+          const setClauses: string[] = [];
+          const schedParams: any[] = [];
+          let sIdx = 1;
+
+          if (sched.due_date) { setClauses.push(`due_date = $${sIdx++}`); schedParams.push(new Date(sched.due_date).toISOString().slice(0, 10)); }
+          if (sched.principal !== undefined) { setClauses.push(`principal = $${sIdx++}`); schedParams.push(parseFloat(sched.principal)); }
+          if (sched.interest !== undefined) { setClauses.push(`interest = $${sIdx++}`); schedParams.push(parseFloat(sched.interest)); }
+          if (sched.total_due !== undefined) { setClauses.push(`total_due = $${sIdx++}`); schedParams.push(parseFloat(sched.total_due)); }
+          if (sched.paid_amount !== undefined) { setClauses.push(`paid_amount = $${sIdx++}`); schedParams.push(parseFloat(sched.paid_amount)); }
+          if (sched.status) { setClauses.push(`status = $${sIdx++}`); schedParams.push(sched.status); }
+          if (sched.balance !== undefined) { setClauses.push(`balance = $${sIdx++}`); schedParams.push(parseFloat(sched.balance)); }
+
+          if (setClauses.length === 0) continue;
+
+          schedParams.push(sched.id);
+          await client.query(
+            `UPDATE amortization_schedules SET ${setClauses.join(', ')}, updated_at = NOW() WHERE id = $${sIdx}`,
+            schedParams
+          );
+        }
+
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      const { rows: updatedSchedules } = await pool.query(
+        `SELECT * FROM amortization_schedules WHERE loan_id = $1 ORDER BY installment_no`,
+        [id]
+      );
+      res.json({ success: true, data: updatedSchedules, message: 'Schedules updated' });
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
+    }
+  }
 }
 
 export const adminController = new AdminController();
