@@ -292,6 +292,11 @@ router.delete('/admin/cash-transactions/:id', authenticate, authorize('super-adm
 router.put('/admin/cash-transactions/:id/reassign', authenticate, authorize('super-admin'), auditLog('reassign', 'cash_transaction'), adminController.reassignCashTransaction.bind(adminController));
 router.put('/admin/loans/:id/adjust', authenticate, authorize('super-admin'), auditLog('adjust', 'loan'), adminController.adjustLoan.bind(adminController));
 router.post('/admin/loans/:id/adjust-schedule', authenticate, authorize('super-admin'), auditLog('adjust-schedule', 'loan'), adminController.adjustLoanSchedule.bind(adminController));
+router.get('/admin/shifts', authenticate, authorize('super-admin'), adminController.listShifts.bind(adminController));
+router.put('/admin/shifts/:id/force-close', authenticate, authorize('super-admin'), auditLog('force-close', 'shift'), adminController.forceCloseShift.bind(adminController));
+router.put('/admin/shifts/:id/reopen', authenticate, authorize('super-admin'), auditLog('reopen', 'shift'), adminController.reopenShift.bind(adminController));
+router.delete('/admin/shifts/:id', authenticate, authorize('super-admin'), auditLog('delete', 'shift'), adminController.deleteShift.bind(adminController));
+router.post('/admin/shifts/:id/move-transactions', authenticate, authorize('super-admin'), auditLog('move-transactions', 'shift'), adminController.moveShiftTransactions.bind(adminController));
 
 // Notifications
 router.get('/notifications', authenticate, notificationController.getAll.bind(notificationController));

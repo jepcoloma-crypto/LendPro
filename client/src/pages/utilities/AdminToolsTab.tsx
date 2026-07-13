@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Panel, Button, toaster, Message, Modal, Input, InputNumber, Table, Tag, Badge } from 'rsuite';
+import { Panel, Button, toaster, Message, Modal, Input, InputNumber, Table, Tag, Badge, SelectPicker } from 'rsuite';
 import api from '../../services/api';
-import { Search, XCircle, Edit3, RefreshCw, ArrowRight, Trash2, Calendar, AlertTriangle } from 'lucide-react';
+import { Search, XCircle, Edit3, RefreshCw, ArrowRight, Trash2, Calendar, AlertTriangle, Lock, Unlock, Move, Eye } from 'lucide-react';
 import { formatCurrency } from '../../utils/format';
 
 const { Column, HeaderCell, Cell } = Table;
@@ -542,6 +542,260 @@ const LoanQuickFix = () => {
   );
 };
 
+// ==================== SHIFT MANAGER ====================
+const ShiftManager = () => {
+  const [shifts, setShifts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filters, setFilters] = useState({ status: '', date_from: '', date_to: '' });
+  const [selectedShift, setSelectedShift] = useState<any>(null);
+  const [closeModal, setCloseModal] = useState(false);
+  const [closeForm, setCloseForm] = useState({ actual_cash: 0, variance_reason: '' });
+  const [closeLoading, setCloseLoading] = useState(false);
+  const [openShifts, setOpenShifts] = useState<any[]>([]);
+  const [moveModal, setMoveModal] = useState(false);
+  const [targetShiftId, setTargetShiftId] = useState('');
+  const [moveLoading, setMoveLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const loadShifts = async () => {
+    setLoading(true);
+    try {
+      const params: any = { limit: 50 };
+      if (filters.status) params.status = filters.status;
+      if (filters.date_from) params.date_from = filters.date_from;
+      if (filters.date_to) params.date_to = filters.date_to;
+      const { data } = await api.get('/admin/shifts', { params });
+      setShifts(data.data || []);
+      const open = (data.data || []).filter((s: any) => s.status === 'open');
+      setOpenShifts(open);
+    } catch { toaster.push(<Message type="error">Failed to load shifts</Message>, { placement: 'topEnd' }); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { loadShifts(); }, []);
+
+  const handleForceClose = async () => {
+    setCloseLoading(true);
+    try {
+      await api.put(`/admin/shifts/${selectedShift.id}/force-close`, closeForm);
+      toaster.push(<Message type="success">Shift force-closed</Message>, { placement: 'topEnd' });
+      setCloseModal(false);
+      loadShifts();
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+    finally { setCloseLoading(false); }
+  };
+
+  const handleReopen = async (shift: any) => {
+    try {
+      await api.put(`/admin/shifts/${shift.id}/reopen`);
+      toaster.push(<Message type="success">Shift reopened</Message>, { placement: 'topEnd' });
+      loadShifts();
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+  };
+
+  const handleDelete = async () => {
+    setDeleteLoading(true);
+    try {
+      await api.delete(`/admin/shifts/${selectedShift.id}`);
+      toaster.push(<Message type="success">Shift deleted</Message>, { placement: 'topEnd' });
+      setDeleteConfirm(false);
+      loadShifts();
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+    finally { setDeleteLoading(false); }
+  };
+
+  const handleMove = async () => {
+    if (!targetShiftId) return;
+    setMoveLoading(true);
+    try {
+      await api.post(`/admin/shifts/${selectedShift.id}/move-transactions`, { target_shift_id: targetShiftId });
+      toaster.push(<Message type="success">Transactions moved</Message>, { placement: 'topEnd' });
+      setMoveModal(false);
+      loadShifts();
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+    finally { setMoveLoading(false); }
+  };
+
+  const formattedDate = (d: string) => d ? new Date(d).toLocaleString() : '-';
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 flex-wrap">
+        <select className="rs-input" value={filters.status} onChange={(e: any) => setFilters(f => ({ ...f, status: e.target.value }))} style={{ width: 130 }}>
+          <option value="">All Status</option>
+          <option value="open">Open</option>
+          <option value="closed">Closed</option>
+        </select>
+        <input type="date" className="rs-input" value={filters.date_from} onChange={(e: any) => setFilters(f => ({ ...f, date_from: e.target.value }))} style={{ width: 150 }} />
+        <input type="date" className="rs-input" value={filters.date_to} onChange={(e: any) => setFilters(f => ({ ...f, date_to: e.target.value }))} style={{ width: 150 }} />
+        <Button appearance="primary" onClick={loadShifts} loading={loading}><Search className="w-4 h-4 mr-1" />Search</Button>
+      </div>
+
+      <Table data={shifts} virtualized height={400} rowHeight={45} loading={loading}>
+        <Column width={160}><HeaderCell>User</HeaderCell><Cell dataKey="user_name" /></Column>
+        <Column width={160}><HeaderCell>Opened</HeaderCell><Cell>{(r: any) => formattedDate(r.opened_at)}</Cell></Column>
+        <Column width={160}><HeaderCell>Closed</HeaderCell><Cell>{(r: any) => formattedDate(r.closed_at)}</Cell></Column>
+        <Column width={90}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.status === 'open' ? 'green' : 'red'}>{r.status}</Tag>}</Cell></Column>
+        <Column width={100}><HeaderCell>Float</HeaderCell><Cell>{(r: any) => formatCurrency(r.opening_float)}</Cell></Column>
+        <Column width={100}><HeaderCell>Expected</HeaderCell><Cell>{(r: any) => formatCurrency(r.expected_cash)}</Cell></Column>
+        <Column width={80}><HeaderCell>Txns</HeaderCell><Cell dataKey="txn_count" /></Column>
+        <Column width={100}><HeaderCell>Txn Total</HeaderCell><Cell>{(r: any) => formatCurrency(r.txn_total)}</Cell></Column>
+        <Column width={280}><HeaderCell>Actions</HeaderCell><Cell>{(r: any) => (
+          <div className="flex gap-1">
+            {r.status === 'open' && <Button size="sm" color="orange" appearance="ghost" onClick={() => { setSelectedShift(r); setCloseForm({ actual_cash: parseFloat(r.expected_cash) || 0, variance_reason: '' }); setCloseModal(true); }}><Lock className="w-3.5 h-3.5" />Close</Button>}
+            {r.status === 'closed' && <Button size="sm" color="green" appearance="ghost" onClick={() => handleReopen(r)}><Unlock className="w-3.5 h-3.5" />Reopen</Button>}
+            <Button size="sm" color="blue" appearance="ghost" onClick={() => { setSelectedShift(r); setTargetShiftId(''); setMoveModal(true); }}><Move className="w-3.5 h-3.5" />Move Txns</Button>
+            <Button size="sm" color="red" appearance="ghost" onClick={() => { setSelectedShift(r); setDeleteConfirm(true); }}><Trash2 className="w-3.5 h-3.5" />Delete</Button>
+          </div>
+        )}</Cell></Column>
+      </Table>
+
+      {/* Force Close Modal */}
+      <Modal open={closeModal} onClose={() => setCloseModal(false)} size="sm">
+        <Modal.Header><Modal.Title>Force Close Shift</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <p className="text-sm text-gray-600 mb-3">Closing shift for <strong>{selectedShift?.user_name}</strong> opened {selectedShift?.opened_at ? new Date(selectedShift.opened_at).toLocaleString() : '-'}</p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium">Actual Cash</label>
+              <InputNumber value={closeForm.actual_cash} onChange={(v: any) => setCloseForm(f => ({ ...f, actual_cash: parseFloat(v) || 0 }))} min={0} step={0.01} style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Variance Reason (if needed)</label>
+              <Input as="textarea" rows={2} value={closeForm.variance_reason} onChange={(v: any) => setCloseForm(f => ({ ...f, variance_reason: v }))} placeholder="Explain any difference" />
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button color="orange" appearance="primary" onClick={handleForceClose} loading={closeLoading}><Lock className="w-4 h-4 mr-1" />Force Close</Button>
+          <Button onClick={() => setCloseModal(false)} appearance="subtle">Cancel</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Move Transactions Modal */}
+      <Modal open={moveModal} onClose={() => setMoveModal(false)} size="sm">
+        <Modal.Header><Modal.Title>Move Transactions</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <p className="text-sm text-gray-600 mb-3">Move all transactions from <strong>{selectedShift?.user_name}'s</strong> shift ({formattedDate(selectedShift?.opened_at)}) to another shift</p>
+          <label className="text-sm font-medium">Target Shift</label>
+          <select className="rs-input" value={targetShiftId} onChange={(e: any) => setTargetShiftId(e.target.value)} style={{ width: '100%' }}>
+            <option value="">Select shift...</option>
+            {shifts.filter((s: any) => s.id !== selectedShift?.id).map((s: any) => (
+              <option key={s.id} value={s.id}>[{s.status}] {s.user_name} - {formattedDate(s.opened_at)}</option>
+            ))}
+          </select>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button color="blue" appearance="primary" onClick={handleMove} loading={moveLoading} disabled={!targetShiftId}><Move className="w-4 h-4 mr-1" />Move</Button>
+          <Button onClick={() => setMoveModal(false)} appearance="subtle">Cancel</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Delete Confirm */}
+      <Modal open={deleteConfirm} onClose={() => setDeleteConfirm(false)} size="sm">
+        <Modal.Header><Modal.Title>Delete Shift</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <p>Delete shift for <strong>{selectedShift?.user_name}</strong> opened {formattedDate(selectedShift?.opened_at)}?</p>
+          <p className="text-sm text-red-500 mt-2">This will permanently delete all transactions, counts, reconciliations, and approval history for this shift.</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button color="red" appearance="primary" onClick={handleDelete} loading={deleteLoading}><Trash2 className="w-4 h-4 mr-1" />Delete</Button>
+          <Button onClick={() => setDeleteConfirm(false)} appearance="subtle">Cancel</Button>
+        </Modal.Footer>
+      </Modal>
+    </div>
+  );
+};
+
+// ==================== AUDIT LOG ADMIN ====================
+const AuditLogAdmin = () => {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filters, setFilters] = useState({ action: '', entity_type: '', date_from: '', date_to: '' });
+  const [selectedLog, setSelectedLog] = useState<any>(null);
+  const [detailModal, setDetailModal] = useState(false);
+
+  const adminActions = ['force-cancel', 'adjust', 're-allocate', 'delete', 'reassign', 'force-close', 'reopen', 'move-transactions', 'adjust-schedule'];
+
+  const loadLogs = async () => {
+    setLoading(true);
+    try {
+      const params: any = { limit: 50, sortBy: 'created_at', sortOrder: 'DESC' };
+      if (filters.action) params.action = filters.action;
+      if (filters.entity_type) params.entity_type = filters.entity_type;
+      if (filters.date_from) params.date_from = filters.date_from;
+      if (filters.date_to) params.date_to = filters.date_to;
+      const { data } = await api.get('/audit-logs', { params });
+      setLogs((data.data || []).filter((l: any) => adminActions.includes(l.action)));
+    } catch { toaster.push(<Message type="error">Failed to load audit logs</Message>, { placement: 'topEnd' }); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { loadLogs(); }, []);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 flex-wrap">
+        <select className="rs-input" value={filters.action} onChange={(e: any) => setFilters(f => ({ ...f, action: e.target.value }))} style={{ width: 150 }}>
+          <option value="">All Actions</option>
+          {adminActions.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select className="rs-input" value={filters.entity_type} onChange={(e: any) => setFilters(f => ({ ...f, entity_type: e.target.value }))} style={{ width: 150 }}>
+          <option value="">All Entities</option>
+          <option value="payment">Payment</option>
+          <option value="loan">Loan</option>
+          <option value="shift">Shift</option>
+          <option value="cash_transaction">Cash Transaction</option>
+        </select>
+        <input type="date" className="rs-input" value={filters.date_from} onChange={(e: any) => setFilters(f => ({ ...f, date_from: e.target.value }))} style={{ width: 150 }} />
+        <input type="date" className="rs-input" value={filters.date_to} onChange={(e: any) => setFilters(f => ({ ...f, date_to: e.target.value }))} style={{ width: 150 }} />
+        <Button appearance="primary" onClick={loadLogs} loading={loading}><Search className="w-4 h-4 mr-1" />Search</Button>
+      </div>
+
+      <Table data={logs} virtualized height={400} rowHeight={45} loading={loading}>
+        <Column width={120}><HeaderCell>Action</HeaderCell><Cell>{(r: any) => <Tag color={r.action === 'force-cancel' ? 'red' : r.action === 'delete' ? 'red' : r.action === 'adjust' ? 'blue' : 'violet'}>{r.action}</Tag>}</Cell></Column>
+        <Column width={120}><HeaderCell>Entity</HeaderCell><Cell>{(r: any) => <Tag>{r.entity_type}</Tag>}</Cell></Column>
+        <Column width={200}><HeaderCell>User</HeaderCell><Cell dataKey="user_name" /></Column>
+        <Column width={200}><HeaderCell>Description</HeaderCell><Cell>{(r: any) => {
+          const ov = typeof r.old_values === 'string' ? JSON.parse(r.old_values) : (r.old_values || {});
+          const nv = typeof r.new_values === 'string' ? JSON.parse(r.new_values) : (r.new_values || {});
+          return <span className="text-sm">{ov.payment_number || ov.loan_number || ov.id?.slice(0, 8) || '-'}</span>;
+        }}</Cell></Column>
+        <Column width={180}><HeaderCell>Timestamp</HeaderCell><Cell>{(r: any) => new Date(r.created_at).toLocaleString()}</Cell></Column>
+        <Column width={100}><HeaderCell>IP</HeaderCell><Cell dataKey="ip_address" /></Column>
+        <Column width={100}><HeaderCell>Details</HeaderCell><Cell>{(r: any) => (
+          <Button size="sm" appearance="ghost" onClick={() => { setSelectedLog(r); setDetailModal(true); }}><Eye className="w-3.5 h-3.5" /></Button>
+        )}</Cell></Column>
+      </Table>
+
+      <Modal open={detailModal} onClose={() => setDetailModal(false)} size="md">
+        <Modal.Header><Modal.Title>Audit Detail</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {selectedLog && (
+            <div className="text-sm space-y-2">
+              <div><strong>Action:</strong> {selectedLog.action}</div>
+              <div><strong>Entity:</strong> {selectedLog.entity_type} / {selectedLog.entity_id}</div>
+              <div><strong>User:</strong> {selectedLog.user_name} ({selectedLog.user_id})</div>
+              <div><strong>IP:</strong> {selectedLog.ip_address || '-'}</div>
+              <div><strong>Time:</strong> {new Date(selectedLog.created_at).toLocaleString()}</div>
+              {selectedLog.old_values && (
+                <div><strong>Old Values:</strong><pre className="text-xs bg-gray-100 dark:bg-gray-700 p-2 rounded mt-1 overflow-auto max-h-40">{JSON.stringify(typeof selectedLog.old_values === 'string' ? JSON.parse(selectedLog.old_values) : selectedLog.old_values, null, 2)}</pre></div>
+              )}
+              {selectedLog.new_values && (
+                <div><strong>New Values:</strong><pre className="text-xs bg-gray-100 dark:bg-gray-700 p-2 rounded mt-1 overflow-auto max-h-40">{JSON.stringify(typeof selectedLog.new_values === 'string' ? JSON.parse(selectedLog.new_values) : selectedLog.new_values, null, 2)}</pre></div>
+              )}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button onClick={() => setDetailModal(false)} appearance="subtle">Close</Button>
+        </Modal.Footer>
+      </Modal>
+    </div>
+  );
+};
+
 // ==================== MAIN TAB EXPORT ====================
 export const AdminToolsTab = () => {
   const [subTab, setSubTab] = useState('payments');
@@ -553,6 +807,8 @@ export const AdminToolsTab = () => {
           { key: 'payments', label: 'Payment Corrector' },
           { key: 'cash', label: 'Cash Transactions' },
           { key: 'loans', label: 'Loan Quick Fix' },
+          { key: 'shifts', label: 'Shift Manager' },
+          { key: 'audit', label: 'Audit Log' },
         ].map(t => (
           <button key={t.key} onClick={() => setSubTab(t.key)}
             className={`text-sm px-3 py-1.5 rounded-t font-medium transition-colors ${subTab === t.key ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -576,6 +832,18 @@ export const AdminToolsTab = () => {
         <Panel bordered header={<span><AlertTriangle className="w-4 h-4 mr-1 inline" />Loan Quick Fix</span>}>
           <p className="text-sm text-gray-500 mb-4">Edit loan details (maturity date, status, amounts) or adjust amortization schedules.</p>
           <LoanQuickFix />
+        </Panel>
+      )}
+      {subTab === 'shifts' && (
+        <Panel bordered header={<span><Lock className="w-4 h-4 mr-1 inline" />Shift Manager</span>}>
+          <p className="text-sm text-gray-500 mb-4">Force-close, reopen, or delete shifts; move transactions between shifts.</p>
+          <ShiftManager />
+        </Panel>
+      )}
+      {subTab === 'audit' && (
+        <Panel bordered header={<span><Eye className="w-4 h-4 mr-1 inline" />Audit Log</span>}>
+          <p className="text-sm text-gray-500 mb-4">Searchable history of all admin corrections with timestamps.</p>
+          <AuditLogAdmin />
         </Panel>
       )}
     </div>

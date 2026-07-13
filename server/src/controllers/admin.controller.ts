@@ -149,7 +149,7 @@ export class AdminController {
             const oldTxnAmt = parseFloat(txn.amount) || 0;
             const newTxnAmt = oldTxnAmt + diff;
             await client.query(
-              `UPDATE cash_transactions SET amount = $1, updated_at = NOW() WHERE id = $2`,
+              `UPDATE cash_transactions SET amount = $1 WHERE id = $2`,
               [newTxnAmt, txn.id]
             );
             await client.query(
@@ -384,7 +384,7 @@ export class AdminController {
         await client.query('BEGIN');
 
         await client.query(
-          `UPDATE cash_transactions SET shift_id = $1, updated_at = NOW() WHERE id = $2`,
+          `UPDATE cash_transactions SET shift_id = $1 WHERE id = $2`,
           [shift_id, id]
         );
 
@@ -507,6 +507,205 @@ export class AdminController {
         [id]
       );
       res.json({ success: true, data: updatedSchedules, message: 'Schedules updated' });
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
+    }
+  }
+
+  // ==================== SHIFT MANAGER ====================
+
+  async listShifts(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const pagination = parsePagination(req.query);
+      const { status, date_from, date_to, user_id } = req.query;
+      const conditions: string[] = [];
+      const params: any[] = [];
+      let idx = 1;
+
+      if (status) { conditions.push(`cs.status = $${idx++}`); params.push(status); }
+      if (date_from) { conditions.push(`cs.opened_at >= $${idx++}`); params.push(date_from); }
+      if (date_to) { conditions.push(`cs.opened_at <= $${idx++}`); params.push(new Date(date_to as string + 'T23:59:59Z').toISOString()); }
+      if (user_id) { conditions.push(`cs.user_id = $${idx++}`); params.push(user_id); }
+
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const countResult = await cashierSessionRepo.query(
+        `SELECT COUNT(*) as total FROM cashier_sessions cs ${where}`, params
+      );
+      const total = parseInt(countResult[0]?.total) || 0;
+
+      const offset = ((pagination.page - 1) * pagination.limit);
+      params.push(pagination.limit);
+      params.push(offset);
+
+      const rows = await cashierSessionRepo.query(
+        `SELECT cs.*, u.first_name || ' ' || u.last_name as user_name,
+                (SELECT COUNT(*) FROM cash_transactions WHERE shift_id = cs.id) as txn_count,
+                (SELECT COALESCE(SUM(amount),0) FROM cash_transactions WHERE shift_id = cs.id) as txn_total
+         FROM cashier_sessions cs
+         JOIN users u ON u.id = cs.user_id
+         ${where}
+         ORDER BY cs.opened_at DESC
+         LIMIT $${idx++} OFFSET $${idx++}`,
+        params
+      );
+
+      res.json({ success: true, data: rows, pagination: { ...pagination, total } });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
+  async forceCloseShift(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const { actual_cash, notes, variance_reason } = req.body;
+
+      const shift = await cashierSessionRepo.findById(id);
+      if (!shift) throw new AppError(404, 'Shift not found');
+      if (shift.status !== 'open') throw new AppError(400, 'Shift is not open');
+
+      // Recompute expected_cash from transactions
+      const txns = await cashTransactionRepo.query(
+        `SELECT direction, payment_method, COALESCE(SUM(amount),0) as total
+         FROM cash_transactions WHERE shift_id = $1 GROUP BY direction, payment_method`,
+        [id]
+      );
+      let cashIn = 0, cashOut = 0;
+      for (const t of txns) {
+        const amt = parseFloat(t.total) || 0;
+        if (t.direction === 'in') { cashIn += amt; }
+        else { cashOut += amt; }
+      }
+      const openingFloat = parseFloat(shift.opening_float) || 0;
+      const expectedCash = openingFloat + cashIn - cashOut;
+      const actual = actual_cash !== undefined ? parseFloat(actual_cash) : expectedCash;
+
+      await cashierSessionRepo.update(id, {
+        actual_cash: actual,
+        expected_cash: expectedCash,
+        over_short: actual - expectedCash,
+        closed_at: new Date().toISOString(),
+        status: 'closed',
+        notes: notes || `Force-closed by admin. ${variance_reason ? 'Reason: ' + variance_reason : ''}`,
+      });
+
+      const updated = await cashierSessionRepo.findById(id);
+      res.json({ success: true, data: updated, message: 'Shift force-closed' });
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
+    }
+  }
+
+  async reopenShift(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const shift = await cashierSessionRepo.findById(id);
+      if (!shift) throw new AppError(404, 'Shift not found');
+      if (shift.status !== 'closed') throw new AppError(400, 'Only closed shifts can be reopened');
+
+      await cashierSessionRepo.update(id, {
+        status: 'open',
+        closed_at: null,
+        actual_cash: null,
+        over_short: 0,
+        notes: (shift.notes || '') + ' | Reopened by admin',
+      });
+
+      res.json({ success: true, message: 'Shift reopened' });
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
+    }
+  }
+
+  async deleteShift(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const shift = await cashierSessionRepo.findById(id);
+      if (!shift) throw new AppError(404, 'Shift not found');
+
+      const client = await pool.connect();
+      try {
+        await client.query('SET search_path TO public');
+        await client.query('BEGIN');
+
+        await client.query(`DELETE FROM approval_history WHERE shift_id = $1`, [id]);
+        await client.query(`DELETE FROM cash_reconciliations WHERE shift_id = $1`, [id]);
+        await client.query(`DELETE FROM cash_counts WHERE shift_id = $1`, [id]);
+        await client.query(`DELETE FROM cash_transactions WHERE shift_id = $1`, [id]);
+        await client.query(`DELETE FROM cashier_sessions WHERE id = $1`, [id]);
+
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      res.json({ success: true, message: 'Shift and all related records deleted' });
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
+    }
+  }
+
+  async moveShiftTransactions(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const { target_shift_id } = req.body;
+      if (!target_shift_id) throw new AppError(400, 'target_shift_id is required');
+
+      const sourceShift = await cashierSessionRepo.findById(id);
+      if (!sourceShift) throw new AppError(404, 'Source shift not found');
+      const targetShift = await cashierSessionRepo.findById(target_shift_id);
+      if (!targetShift) throw new AppError(404, 'Target shift not found');
+
+      const client = await pool.connect();
+      let txnCount = 0;
+      try {
+        await client.query('SET search_path TO public');
+        await client.query('BEGIN');
+
+        // Get all transactions from source shift
+        const { rows: txns } = await client.query(
+          `SELECT id, direction, amount FROM cash_transactions WHERE shift_id = $1`, [id]
+        );
+        txnCount = txns.length;
+
+        // Move transactions to target shift
+        await client.query(
+          `UPDATE cash_transactions SET shift_id = $1 WHERE shift_id = $2`,
+          [target_shift_id, id]
+        );
+
+        // Recalculate expected_cash on both shifts
+        let sourceDelta = 0;
+        let targetDelta = 0;
+        for (const txn of txns) {
+          const amt = parseFloat(txn.amount) || 0;
+          const delta = txn.direction === 'in' ? amt : -amt;
+          sourceDelta -= delta;
+          targetDelta += delta;
+        }
+
+        await client.query(
+          `UPDATE cashier_sessions SET expected_cash = expected_cash + $1 WHERE id = $2`,
+          [sourceDelta, id]
+        );
+        await client.query(
+          `UPDATE cashier_sessions SET expected_cash = expected_cash + $1 WHERE id = $2`,
+          [targetDelta, target_shift_id]
+        );
+
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      res.json({ success: true, message: `${txnCount} transactions moved to target shift` });
     } catch (error: any) {
       next(error instanceof AppError ? error : new AppError(400, error.message));
     }
