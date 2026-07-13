@@ -24,8 +24,8 @@ export class CashierController {
       const todayDay = today.getUTCDay();
       const allowedDates: string[] = [];
       const d = new Date(today);
-      if (todayDay === 1) { // Monday — allow Fri, Sat, Sun, Mon
-        for (let i = 0; i <= 3; i++) {
+      if (todayDay === 1) { // Monday — allow Sat, Sun, Mon
+        for (let i = 0; i <= 2; i++) {
           const dt = new Date(d);
           dt.setUTCDate(dt.getUTCDate() - i);
           allowedDates.push(dt.toISOString().slice(0, 10));
