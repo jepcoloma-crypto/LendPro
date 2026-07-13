@@ -6,6 +6,7 @@ import { AuditLogsPage } from '../audit-logs/AuditLogsPage';
 import { LoginHistoryPage } from '../audit-logs/LoginHistoryPage';
 import { PendingApprovalsPage } from '../audit-logs/PendingApprovalsPage';
 import { SettingsPage } from '../settings/SettingsPage';
+import { AdminToolsTab } from './AdminToolsTab';
 
 const MODULE_OPTIONS = [
   { label: 'Borrowers', value: 'borrowers', desc: 'Borrowers, co-makers, documents' },
@@ -408,6 +409,7 @@ export const UtilitiesPage = () => {
           { key: 'login-history', label: 'Login History' },
           { key: 'approvals', label: `Pending Approvals${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
           { key: 'settings', label: 'Settings' },
+          { key: 'admin', label: 'Admin Tools' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`text-sm px-3 py-1.5 rounded-t font-medium transition-colors ${tab === t.key ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -420,6 +422,7 @@ export const UtilitiesPage = () => {
       {tab === 'login-history' && <LoginHistoryPage />}
       {tab === 'approvals' && <PendingApprovalsPage />}
       {tab === 'settings' && <SettingsPage />}
+      {tab === 'admin' && <AdminToolsTab />}
     </div>
   );
 };

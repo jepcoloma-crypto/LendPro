@@ -22,6 +22,7 @@ import { cashflowController } from '../controllers/cashflow.controller';
 import { cancellationController } from '../controllers/cancellation.controller';
 import { cashierController } from '../controllers/cashier.controller';
 import { pickupController } from '../controllers/pickup.controller';
+import { adminController } from '../controllers/admin.controller';
 import { auditLogRepo } from '../repositories';
 
 
@@ -280,6 +281,15 @@ router.post('/utilities/clear-data', authenticate, authorize('super-admin'), uti
 router.get('/utilities/backup', authenticate, authorize('super-admin'), utilityController.backupDatabase.bind(utilityController));
 router.post('/utilities/restore', authenticate, authorize('super-admin'), upload.single('file'), utilityController.restoreDatabase.bind(utilityController));
 router.get('/login-history', authenticate, authorize('super-admin'), utilityController.getLoginHistory.bind(utilityController));
+
+// Admin Utilities (super-admin only)
+router.get('/admin/payments/:id/allocations', authenticate, authorize('super-admin'), adminController.getPaymentAllocations.bind(adminController));
+router.put('/admin/payments/:id/force-cancel', authenticate, authorize('super-admin'), auditLog('force-cancel', 'payment'), adminController.forceCancelPayment.bind(adminController));
+router.put('/admin/payments/:id/adjust', authenticate, authorize('super-admin'), auditLog('adjust', 'payment'), adminController.adjustPayment.bind(adminController));
+router.post('/admin/payments/:id/re-allocate', authenticate, authorize('super-admin'), auditLog('re-allocate', 'payment'), adminController.reAllocatePayment.bind(adminController));
+router.get('/admin/cash-transactions', authenticate, authorize('super-admin'), adminController.listCashTransactions.bind(adminController));
+router.delete('/admin/cash-transactions/:id', authenticate, authorize('super-admin'), auditLog('delete', 'cash_transaction'), adminController.deleteCashTransaction.bind(adminController));
+router.put('/admin/cash-transactions/:id/reassign', authenticate, authorize('super-admin'), auditLog('reassign', 'cash_transaction'), adminController.reassignCashTransaction.bind(adminController));
 
 // Notifications
 router.get('/notifications', authenticate, notificationController.getAll.bind(notificationController));
