@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Panel, Button, toaster, Message, Modal, Input, InputNumber, Table, Tag, Badge, SelectPicker, Loader, Form } from 'rsuite';
-import api, { settingsApi } from '../../services/api';
-import { Search, XCircle, Edit3, RefreshCw, ArrowRight, Trash2, Calendar, AlertTriangle, Lock, Unlock, Move, Eye, Save, Settings } from 'lucide-react';
+import { Panel, Button, toaster, Message, Modal, Input, InputNumber, Table, Tag } from 'rsuite';
+import api from '../../services/api';
+import { Search, XCircle, Edit3, RefreshCw, ArrowRight, Trash2, Calendar, AlertTriangle, Lock, Unlock, Move, Eye } from 'lucide-react';
 import { formatCurrency } from '../../utils/format';
 
 const { Column, HeaderCell, Cell } = Table;
@@ -796,100 +796,6 @@ const AuditLogAdmin = () => {
   );
 };
 
-// ==================== SYSTEM CONFIG EDITOR ====================
-const SystemConfigEditor = () => {
-  const [settings, setSettings] = useState<Record<string, string>>({});
-  const [form, setForm] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  const FIELDS = [
-    { section: 'Company Information', key: 'company_name', label: 'Company Name', type: 'text' },
-    { section: 'Company Information', key: 'company_address', label: 'Company Address', type: 'text' },
-    { section: 'Company Information', key: 'company_phone', label: 'Company Phone', type: 'text' },
-    { section: 'Company Information', key: 'company_email', label: 'Company Email', type: 'text' },
-    { section: 'Company Information', key: 'business_permit_number', label: 'Business Permit / SEC No.', type: 'text' },
-    { section: 'Company Information', key: 'tax_id', label: 'Tax ID (TIN)', type: 'text' },
-    { section: 'Company Information', key: 'logo_url', label: 'Logo URL', type: 'text' },
-    { section: 'Company Information', key: 'currency_symbol', label: 'Currency Symbol', type: 'text' },
-    { section: 'Loan Configuration', key: 'default_interest_rate', label: 'Default Interest Rate (%)', type: 'number', min: 0, max: 100, step: 0.25 },
-    { section: 'Loan Configuration', key: 'default_penalty_rate', label: 'Default Penalty Rate (%)', type: 'number', min: 0, max: 100, step: 0.25 },
-    { section: 'Loan Configuration', key: 'grace_period', label: 'Grace Period (Days)', type: 'number', min: 0, step: 1 },
-    { section: 'Loan Configuration', key: 'penalty_grace_period', label: 'Penalty Grace Period (Days)', type: 'number', min: 0, step: 1 },
-    { section: 'Loan Configuration', key: 'payment_reminder_days', label: 'Payment Reminder (Days Before Due)', type: 'number', min: 0, step: 1 },
-    { section: 'Loan Configuration', key: 'loan_approval_levels', label: 'Loan Approval Levels', type: 'number', min: 1, step: 1 },
-    { section: 'Loan Configuration', key: 'auto_generate_loan_number', label: 'Auto-Generate Loan Numbers', type: 'boolean' },
-    { section: 'Cash / Variance', key: 'cash_variance_threshold', label: 'Cash Variance Auto-Approve Threshold (₱)', type: 'number', min: 0, step: 0.01 },
-    { section: 'Notifications', key: 'enable_sms_notifications', label: 'Enable SMS Notifications', type: 'boolean' },
-    { section: 'Notifications', key: 'enable_email_notifications', label: 'Enable Email Notifications', type: 'boolean' },
-    { section: 'Numbering Prefixes', key: 'loan_number_prefix', label: 'Loan Number Prefix', type: 'text' },
-    { section: 'Numbering Prefixes', key: 'application_number_prefix', label: 'Application Number Prefix', type: 'text' },
-    { section: 'Numbering Prefixes', key: 'payment_number_prefix', label: 'Payment Number Prefix', type: 'text' },
-    { section: 'Numbering Prefixes', key: 'receipt_prefix', label: 'Receipt Prefix', type: 'text' },
-    { section: 'Numbering Prefixes', key: 'borrower_code_prefix', label: 'Borrower Code Prefix', type: 'text' },
-  ];
-
-  useEffect(() => {
-    const fetch = async () => {
-      try {
-        const { data } = await settingsApi.getAll();
-        setSettings(data.data || {});
-        setForm(data.data || {});
-      } catch { toaster.push(<Message type="error">Failed to load settings</Message>, { placement: 'topEnd' }); }
-      finally { setLoading(false); }
-    };
-    fetch();
-  }, []);
-
-  const set = (key: string, value: string) => setForm((f: any) => ({ ...f, [key]: value }));
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await settingsApi.update(form);
-      setSettings({ ...form });
-      toaster.push(<Message type="success">Configuration saved</Message>, { placement: 'topEnd' });
-    } catch { toaster.push(<Message type="error">Failed to save</Message>, { placement: 'topEnd' }); }
-    finally { setSaving(false); }
-  };
-
-  if (loading) return <div className="flex justify-center p-12"><Loader size="lg" /></div>;
-
-  const sections = [...new Set(FIELDS.map(f => f.section))];
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">Edit system-wide configuration values. Changes take effect immediately.</p>
-        <Button appearance="primary" onClick={handleSave} loading={saving}><Save className="w-4 h-4 mr-1" />Save All</Button>
-      </div>
-
-      {sections.map(section => (
-        <Panel key={section} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={section}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {FIELDS.filter(f => f.section === section).map(field => (
-              <Form.Group key={field.key}>
-                <Form.ControlLabel>{field.label}</Form.ControlLabel>
-                {field.type === 'boolean' ? (
-                  <select className="rs-input" value={form[field.key] || 'false'} onChange={(e: any) => set(field.key, e.target.value)} style={{ width: '100%' }}>
-                    <option value="true">Enabled</option>
-                    <option value="false">Disabled</option>
-                  </select>
-                ) : field.type === 'number' ? (
-                  <InputNumber value={form[field.key] || '0'} onChange={(v: any) => set(field.key, String(v ?? 0))}
-                    min={field.min} max={field.max} step={field.step || 1} style={{ width: '100%' }} />
-                ) : (
-                  <input className="rs-input w-full" value={form[field.key] || ''} onChange={(e: any) => set(field.key, e.target.value)} />
-                )}
-              </Form.Group>
-            ))}
-          </div>
-        </Panel>
-      ))}
-    </div>
-  );
-};
-
 // ==================== MAIN TAB EXPORT ====================
 export const AdminToolsTab = () => {
   const [subTab, setSubTab] = useState('payments');
@@ -902,7 +808,6 @@ export const AdminToolsTab = () => {
           { key: 'cash', label: 'Cash Transactions' },
           { key: 'loans', label: 'Loan Quick Fix' },
           { key: 'shifts', label: 'Shift Manager' },
-          { key: 'config', label: 'System Config' },
           { key: 'audit', label: 'Audit Log' },
         ].map(t => (
           <button key={t.key} onClick={() => setSubTab(t.key)}
@@ -933,11 +838,6 @@ export const AdminToolsTab = () => {
         <Panel bordered header={<span><Lock className="w-4 h-4 mr-1 inline" />Shift Manager</span>}>
           <p className="text-sm text-gray-500 mb-4">Force-close, reopen, or delete shifts; move transactions between shifts.</p>
           <ShiftManager />
-        </Panel>
-      )}
-      {subTab === 'config' && (
-        <Panel bordered header={<span><Settings className="w-4 h-4 mr-1 inline" />System Configuration</span>}>
-          <SystemConfigEditor />
         </Panel>
       )}
       {subTab === 'audit' && (

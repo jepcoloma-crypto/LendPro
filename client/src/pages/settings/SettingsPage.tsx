@@ -4,8 +4,58 @@ import { settingsApi } from '../../services/api';
 import { clearCompanySettingsCache } from '../../utils/companySettings';
 import { Save } from 'lucide-react';
 
+const SECTIONS = [
+  {
+    header: 'Company Information',
+    fields: [
+      { key: 'company_name', label: 'Company Name', type: 'text' },
+      { key: 'company_address', label: 'Company Address', type: 'text' },
+      { key: 'company_phone', label: 'Company Phone', type: 'text' },
+      { key: 'company_email', label: 'Company Email', type: 'text' },
+      { key: 'business_permit_number', label: 'Business Permit / SEC No.', type: 'text' },
+      { key: 'tax_id', label: 'Tax ID (TIN)', type: 'text' },
+      { key: 'logo_url', label: 'Logo URL', type: 'text' },
+      { key: 'currency_symbol', label: 'Currency Symbol', type: 'text' },
+    ],
+  },
+  {
+    header: 'Loan Configuration',
+    fields: [
+      { key: 'default_interest_rate', label: 'Default Interest Rate (%)', type: 'number', min: 0, max: 100, step: 0.25 },
+      { key: 'default_penalty_rate', label: 'Default Penalty Rate (%)', type: 'number', min: 0, max: 100, step: 0.25 },
+      { key: 'grace_period', label: 'Grace Period (Days)', type: 'number', min: 0 },
+      { key: 'penalty_grace_period', label: 'Penalty Grace Period (Days)', type: 'number', min: 0 },
+      { key: 'payment_reminder_days', label: 'Payment Reminder (Days Before Due)', type: 'number', min: 0 },
+      { key: 'loan_approval_levels', label: 'Loan Approval Levels', type: 'number', min: 1 },
+      { key: 'auto_generate_loan_number', label: 'Auto-Generate Loan Numbers', type: 'boolean' },
+    ],
+  },
+  {
+    header: 'Cash / Variance',
+    fields: [
+      { key: 'cash_variance_threshold', label: 'Cash Variance Auto-Approve Threshold (₱)', type: 'number', min: 0, step: 0.01 },
+    ],
+  },
+  {
+    header: 'Notifications',
+    fields: [
+      { key: 'enable_sms_notifications', label: 'Enable SMS Notifications', type: 'boolean' },
+      { key: 'enable_email_notifications', label: 'Enable Email Notifications', type: 'boolean' },
+    ],
+  },
+  {
+    header: 'Numbering Prefixes',
+    fields: [
+      { key: 'loan_number_prefix', label: 'Loan Number Prefix', type: 'text' },
+      { key: 'application_number_prefix', label: 'Application Number Prefix', type: 'text' },
+      { key: 'payment_number_prefix', label: 'Payment Number Prefix', type: 'text' },
+      { key: 'receipt_prefix', label: 'Receipt Prefix', type: 'text' },
+      { key: 'borrower_code_prefix', label: 'Borrower Code Prefix', type: 'text' },
+    ],
+  },
+];
+
 export const SettingsPage = () => {
-  const [settings, setSettings] = useState<Record<string, string>>({});
   const [formValue, setFormValue] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -14,7 +64,6 @@ export const SettingsPage = () => {
     const fetch = async () => {
       try {
         const { data } = await settingsApi.getAll();
-        setSettings(data.data || {});
         setFormValue(data.data || {});
       } catch { toaster.push(<Message type="error">Failed to load settings</Message>, { placement: 'topEnd' }); }
       finally { setLoading(false); }
@@ -32,6 +81,8 @@ export const SettingsPage = () => {
     finally { setSaving(false); }
   };
 
+  const set = (key: string, value: any) => setFormValue((prev: any) => ({ ...prev, [key]: value }));
+
   if (loading) return <div className="flex justify-center p-12"><Loader size="lg" /></div>;
 
   return (
@@ -44,71 +95,30 @@ export const SettingsPage = () => {
         <Button appearance="primary" onClick={handleSave} loading={saving} startIcon={<Save className="w-4 h-4" />}>Save Settings</Button>
       </div>
 
-      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="General Settings">
-        <Form fluid formValue={formValue} onChange={(v: any) => setFormValue((prev: any) => ({ ...prev, ...v }))}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Form.Group>
-              <Form.ControlLabel>Company Name</Form.ControlLabel>
-              <input className="rs-input w-full" value={formValue.company_name || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, company_name: e.target.value }))} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Company Address</Form.ControlLabel>
-              <input className="rs-input w-full" value={formValue.company_address || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, company_address: e.target.value }))} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Company Phone</Form.ControlLabel>
-              <input className="rs-input w-full" value={formValue.company_phone || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, company_phone: e.target.value }))} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Company Email</Form.ControlLabel>
-              <input className="rs-input w-full" type="email" value={formValue.company_email || ''} onChange={(e) => setFormValue((prev: any) => ({ ...prev, company_email: e.target.value }))} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Default Interest Rate (%)</Form.ControlLabel>
-              <InputNumber value={parseFloat(formValue.default_interest_rate || '0')} onChange={(v) => setFormValue((prev: any) => ({ ...prev, default_interest_rate: String(v) }))} min={0} max={100} step={0.25} style={{ width: '100%' }} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Default Penalty Rate (%)</Form.ControlLabel>
-              <InputNumber value={parseFloat(formValue.default_penalty_rate || '0')} onChange={(v) => setFormValue((prev: any) => ({ ...prev, default_penalty_rate: String(v) }))} min={0} max={100} step={0.25} style={{ width: '100%' }} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Grace Period (Days)</Form.ControlLabel>
-              <InputNumber value={parseInt(formValue.grace_period || '0')} onChange={(v) => setFormValue((prev: any) => ({ ...prev, grace_period: String(v) }))} min={0} style={{ width: '100%' }} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Payment Reminder (Days Before)</Form.ControlLabel>
-              <InputNumber value={parseInt(formValue.payment_reminder_days || '0')} onChange={(v) => setFormValue((prev: any) => ({ ...prev, payment_reminder_days: String(v) }))} min={0} style={{ width: '100%' }} />
-            </Form.Group>
-          </div>
-        </Form>
-      </Panel>
-
-      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Numbering Prefixes">
-        <Form fluid formValue={formValue} onChange={(v: any) => setFormValue((prev: any) => ({ ...prev, ...v }))}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Form.Group>
-              <Form.ControlLabel>Loan Number Prefix</Form.ControlLabel>
-              <input className="rs-input w-full" value={formValue.loan_number_prefix || 'LN-'} onChange={(e) => setFormValue((prev: any) => ({ ...prev, loan_number_prefix: e.target.value }))} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Application Number Prefix</Form.ControlLabel>
-              <input className="rs-input w-full" value={formValue.application_number_prefix || 'APP-'} onChange={(e) => setFormValue((prev: any) => ({ ...prev, application_number_prefix: e.target.value }))} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Payment Number Prefix</Form.ControlLabel>
-              <input className="rs-input w-full" value={formValue.payment_number_prefix || 'PAY-'} onChange={(e) => setFormValue((prev: any) => ({ ...prev, payment_number_prefix: e.target.value }))} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Receipt Number Prefix</Form.ControlLabel>
-              <input className="rs-input w-full" value={formValue.receipt_prefix || 'RCT-'} onChange={(e) => setFormValue((prev: any) => ({ ...prev, receipt_prefix: e.target.value }))} />
-            </Form.Group>
-            <Form.Group>
-              <Form.ControlLabel>Borrower Code Prefix</Form.ControlLabel>
-              <input className="rs-input w-full" value={formValue.borrower_code_prefix || 'B-'} onChange={(e) => setFormValue((prev: any) => ({ ...prev, borrower_code_prefix: e.target.value }))} />
-            </Form.Group>
-          </div>
-        </Form>
-      </Panel>
+      {SECTIONS.map(section => (
+        <Panel key={section.header} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={section.header}>
+          <Form fluid formValue={formValue} onChange={(v: any) => setFormValue((prev: any) => ({ ...prev, ...v }))}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {section.fields.map(field => (
+                <Form.Group key={field.key}>
+                  <Form.ControlLabel>{field.label}</Form.ControlLabel>
+                  {field.type === 'boolean' ? (
+                    <select className="rs-input" value={formValue[field.key] || 'false'} onChange={(e) => set(field.key, e.target.value)} style={{ width: '100%' }}>
+                      <option value="true">Enabled</option>
+                      <option value="false">Disabled</option>
+                    </select>
+                  ) : field.type === 'number' ? (
+                    <InputNumber value={parseFloat(formValue[field.key] || '0')} onChange={(v) => set(field.key, String(v ?? 0))}
+                      min={(field as any).min} max={(field as any).max} step={(field as any).step || 1} style={{ width: '100%' }} />
+                  ) : (
+                    <input className="rs-input w-full" value={formValue[field.key] || ''} onChange={(e) => set(field.key, e.target.value)} />
+                  )}
+                </Form.Group>
+              ))}
+            </div>
+          </Form>
+        </Panel>
+      ))}
     </div>
   );
 };
