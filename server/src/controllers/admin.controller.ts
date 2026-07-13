@@ -841,7 +841,9 @@ export class AdminController {
     try {
       const pid = parseInt(paramStr(req.params.pid));
       if (!pid) throw new AppError(400, 'PID is required');
-      await pool.query(`SELECT pg_terminate_backend($1)`, [pid]);
+      const result = await pool.query(`SELECT pg_terminate_backend($1) as terminated`, [pid]);
+      const terminated = result.rows[0]?.terminated;
+      if (!terminated) throw new AppError(403, 'Permission denied. This database user may not have privileges to terminate connections, or the connection may be managed by PgBouncer (port 6543). Try direct PostgreSQL (port 5432) or contact your database admin.');
       res.json({ success: true, message: `Connection ${pid} terminated` });
     } catch (error: any) {
       next(error instanceof AppError ? error : new AppError(400, error.message));
