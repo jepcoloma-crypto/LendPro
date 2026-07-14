@@ -660,8 +660,8 @@ export class ReportController {
            SUM(lc.amount) as total_amount
          FROM loan_charges lc
          JOIN loans l ON l.id = lc.loan_id
-         LEFT JOIN users u ON u.id = l.collector_id
-         LEFT JOIN branches b ON b.id = u.branch_id
+         LEFT JOIN borrowers br ON br.id = l.borrower_id
+         LEFT JOIN branches b ON b.id = br.branch_id
          WHERE l.status IN ('active', 'closed')
            AND ($1::date IS NULL OR l.release_date >= $1::date)
            AND ($2::date IS NULL OR l.release_date <= $2::date)
@@ -677,8 +677,8 @@ export class ReportController {
            SUM(lc.amount) as total_amount
          FROM loan_charges lc
          JOIN loans l ON l.id = lc.loan_id
-         LEFT JOIN users u ON u.id = l.collector_id
-         LEFT JOIN branches b ON b.id = u.branch_id
+         LEFT JOIN borrowers br ON br.id = l.borrower_id
+         LEFT JOIN branches b ON b.id = br.branch_id
          WHERE l.status IN ('active', 'closed')
            AND ($1::date IS NULL OR l.release_date >= $1::date)
            AND ($2::date IS NULL OR l.release_date <= $2::date)

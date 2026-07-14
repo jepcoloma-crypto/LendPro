@@ -101,6 +101,8 @@ export const CashierReconciliationPage = () => {
   // Filters
   const [shiftFilter, setShiftFilter] = useState<string | null>('open');
   const [txnFilter, setTxnFilter] = useState<string | null>(null);
+  const [txnDateFrom, setTxnDateFrom] = useState('');
+  const [txnDateTo, setTxnDateTo] = useState('');
 
   const fetchMyShift = useCallback(async () => {
     try {
@@ -125,10 +127,13 @@ export const CashierReconciliationPage = () => {
 
   const fetchTransactions = useCallback(async () => {
     try {
-      const { data } = await api.get('/cash-transactions', { params: { shift_id: myShift?.id, type: txnFilter } });
+      const params: any = { shift_id: myShift?.id, type: txnFilter };
+      if (txnDateFrom) params.date_from = txnDateFrom;
+      if (txnDateTo) params.date_to = txnDateTo;
+      const { data } = await api.get('/cash-transactions', { params });
       setTransactions(data.data || []);
     } catch { setTransactions([]); }
-  }, [myShift?.id, txnFilter]);
+  }, [myShift?.id, txnFilter, txnDateFrom, txnDateTo]);
 
   const fetchCounts = useCallback(async () => {
     try {
@@ -446,9 +451,10 @@ ${reportData.map((r:any) => `<tr>${Object.keys(reportData[0]).filter(k => !k.inc
     if (!transactions.length) { toaster.push(<Message type="warning">No transactions to print</Message>, { placement: 'topEnd' }); return; }
     const win = window.open('', '_blank');
     if (!win) return;
-    const typeLabel = txnFilter ? txnFilter.charAt(0).toUpperCase() + txnFilter.slice(1) : 'All';
+    const typeLabel = txnFilter ? txnFilter.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'All';
     const totalIn = transactions.filter((t: any) => t.direction === 'in').reduce((s: number, t: any) => s + (parseFloat(t.amount) || 0), 0);
     const totalOut = transactions.filter((t: any) => t.direction === 'out').reduce((s: number, t: any) => s + (parseFloat(t.amount) || 0), 0);
+    const dateRangeLabel = txnDateFrom || txnDateTo ? ` (${txnDateFrom || '…'} to ${txnDateTo || '…'})` : '';
     win.document.write(`<!DOCTYPE html><html><head><title>Cash Transactions</title>
 <style>body{font-family:'Segoe UI',Arial,sans-serif;font-size:10px;margin:10mm;color:#333;}
 h1{font-size:16px;text-align:center;margin-bottom:2px;}
@@ -467,7 +473,7 @@ tr:nth-child(even) td{background:#f8f8f8;}
 .footer .line{width:150px;border-top:1px solid #333;margin:25px auto 4px;}
 @media print{body{margin:8mm;}}</style></head><body>
 <h1>Prime Capital Lending Corp</h1>
-<div class="sub">Cash Transactions — ${typeLabel}<br>${new Date().toLocaleDateString()} | ${transactions.length} records</div>
+<div class="sub">Cash Transactions — ${typeLabel}${dateRangeLabel}<br>${new Date().toLocaleDateString()} | ${transactions.length} records</div>
 <div class="summary">
   <div class="summary-card"><div class="label">Total In</div><div class="value" style="color:#059669;">${formatCurrency(totalIn)}</div></div>
   <div class="summary-card"><div class="label">Total Out</div><div class="value" style="color:#dc2626;">${formatCurrency(totalOut)}</div></div>
@@ -691,14 +697,20 @@ ${transactions.map((t: any, i: number) => `<tr>
             <Button size="sm" appearance="ghost" onClick={exportTransactionsCsv} disabled={!transactions.length}><Download className="w-3.5 h-3.5 mr-1" />CSV</Button>
           </div>
         </div>}>
-          <div className="mb-3 flex gap-2">
+          <div className="mb-3 flex gap-2 items-center">
             <div style={{ width: 160 }}>
               <SelectPicker data={[
                 { label: 'All', value: null }, { label: 'Collection', value: 'collection' },
                 { label: 'Disbursement', value: 'disbursement' }, { label: 'Expense', value: 'expense' },
                 { label: 'Replenishment', value: 'replenishment' }, { label: 'Withdrawal', value: 'withdrawal' },
+                { label: 'Owner\'s Draw', value: 'owner_draw' },
               ]} placeholder="Type" searchable cleanable value={txnFilter} onChange={(v) => setTxnFilter(v || null)} style={{ width: '100%' }} />
             </div>
+            <span className="text-sm text-gray-500">From:</span>
+            <input type="date" className="rs-input" value={txnDateFrom} onChange={(e: any) => setTxnDateFrom(e.target.value)} style={{ width: 150 }} />
+            <span className="text-sm text-gray-500">To:</span>
+            <input type="date" className="rs-input" value={txnDateTo} onChange={(e: any) => setTxnDateTo(e.target.value)} style={{ width: 150 }} />
+            {(txnDateFrom || txnDateTo) && <Button size="sm" appearance="ghost" onClick={() => { setTxnDateFrom(''); setTxnDateTo(''); }}>Clear</Button>}
           </div>
           <Table data={transactions} virtualized height={350} rowHeight={45} loading={loading}>
             <Column width={160}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.created_at).toLocaleString()}</Cell></Column>
@@ -1358,6 +1370,7 @@ ${transactions.map((t: any, i: number) => `<tr>
                 { label: 'Collection', value: 'collection' },
                 { label: 'Disbursement', value: 'disbursement' },
                 { label: 'Expense', value: 'expense' },
+                { label: "Owner's Draw", value: 'owner_draw' },
                 { label: 'Other', value: 'other' },
               ]} block searchable={false} />
             </Form.Group>

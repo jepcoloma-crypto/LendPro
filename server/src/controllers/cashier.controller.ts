@@ -261,7 +261,7 @@ export class CashierController {
 
   async getTransactions(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { shift_id, type, direction } = req.query;
+      const { shift_id, type, direction, date_from, date_to } = req.query;
       let sql = `SELECT ct.*, l.loan_number, concat(b.first_name, ' ', b.last_name) as borrower_name
                  FROM cash_transactions ct
                  LEFT JOIN loans l ON l.id = ct.loan_id
@@ -272,6 +272,8 @@ export class CashierController {
       if (shift_id) { sql += ` AND ct.shift_id = $${idx++}`; params.push(shift_id); }
       if (type) { sql += ` AND ct.transaction_type = $${idx++}`; params.push(type); }
       if (direction) { sql += ` AND ct.direction = $${idx++}`; params.push(direction); }
+      if (date_from) { sql += ` AND ct.created_at >= $${idx++}::date`; params.push(date_from); }
+      if (date_to) { sql += ` AND ct.created_at <= $${idx++}::date + interval '1 day'`; params.push(date_to); }
       sql += ` ORDER BY ct.created_at DESC`;
       const rows = await cashTransactionRepo.query(sql, params);
       res.json({ success: true, data: rows });
