@@ -173,8 +173,8 @@ export const collectionsApi = {
 
 // Reports
 export const reportsApi = {
-  getAging: () => api.get('/reports/aging'),
-  getDelinquency: () => api.get('/reports/delinquency'),
+  getAging: (params?: any) => api.get('/reports/aging', { params }),
+  getDelinquency: (params?: any) => api.get('/reports/delinquency', { params }),
   getInterestIncome: (params?: any) => api.get('/reports/interest-income', { params }),
   getAmortization: (params?: any) => api.get('/reports/amortization', { params }),
   getCollectorPerformance: (params?: any) => api.get('/reports/collector-performance', { params }),

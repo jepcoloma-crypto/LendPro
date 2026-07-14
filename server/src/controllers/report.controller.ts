@@ -7,21 +7,31 @@ import { paramStr } from '../utils/helpers';
 export class ReportController {
   async getAgingReport(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      const { branchId } = req.query;
+      const conditions: string[] = ['COALESCE(a.paid_amount,0) < a.total_due'];
+      const params: any[] = [];
+      let idx = 1;
+      if (branchId) { conditions.push(`b.branch_id = $${idx++}`); params.push(branchId); }
+      const where = conditions.join(' AND ');
       const result = await amortizationScheduleRepo.query(
         `SELECT
            CASE
              WHEN a.due_date < CURRENT_DATE - INTERVAL '90 days' THEN '90+ Days'
              WHEN a.due_date < CURRENT_DATE - INTERVAL '60 days' THEN '61-90 Days'
              WHEN a.due_date < CURRENT_DATE - INTERVAL '30 days' THEN '31-60 Days'
-             WHEN a.due_date < CURRENT_DATE THEN '1-30 Days'
+             WHEN a.due_date < CURRENT_DATE - INTERVAL '5 days' THEN '1-30 Days'
+             WHEN a.due_date < CURRENT_DATE THEN '1-5 Days'
              ELSE 'Current'
            END as aging_bucket,
            COUNT(a.id) as count,
-           SUM(a.total_due - a.paid_amount) as total_amount
+           SUM(a.total_due - COALESCE(a.paid_amount,0)) as total_amount
          FROM amortization_schedules a
-         WHERE a.status IN ('pending', 'partial')
+         JOIN loans l ON l.id = a.loan_id
+         JOIN borrowers b ON b.id = l.borrower_id
+         WHERE ${where}
          GROUP BY aging_bucket
-         ORDER BY MIN(a.due_date)`
+         ORDER BY MIN(a.due_date)`,
+        params
       );
       res.json({ success: true, data: result });
     } catch (error: any) {
@@ -31,19 +41,28 @@ export class ReportController {
 
   async getDelinquencyReport(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      const { branchId } = req.query;
+      const conditions: string[] = ['a.due_date < CURRENT_DATE - INTERVAL \'5 days\'', 'COALESCE(a.paid_amount,0) < a.total_due'];
+      const params: any[] = [];
+      let idx = 1;
+      if (branchId) { conditions.push(`b.branch_id = $${idx++}`); params.push(branchId); }
+      const where = conditions.join(' AND ');
       const result = await collectionRepo.query(
-        `SELECT c.*, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
-                b.first_name || ' ' || b.last_name as borrower_name, b.mobile, b.borrower_code,
+        `SELECT l.id as loan_id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
+                bor.first_name || ' ' || bor.last_name as borrower_name, bor.mobile, bor.borrower_code,
+                COALESCE(branch.name, 'Unassigned') as branch_name,
+                CASE WHEN MAX(CURRENT_DATE - a.due_date) >= 5 THEN 'delinquent' ELSE 'overdue' END as computed_status,
                 COALESCE(SUM(a.total_due - COALESCE(a.paid_amount,0)), 0) as total_overdue,
                 COALESCE(MAX(CURRENT_DATE - a.due_date), 0)::int as days_overdue
          FROM loans l
-         JOIN borrowers b ON l.borrower_id = b.id
+         JOIN borrowers bor ON l.borrower_id = bor.id
          JOIN amortization_schedules a ON a.loan_id = l.id
-         LEFT JOIN collections c ON c.loan_id = l.id
-         WHERE a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due
-         GROUP BY c.id, l.id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
-                  b.first_name, b.last_name, b.mobile, b.borrower_code
-         ORDER BY MAX(CURRENT_DATE - a.due_date) DESC`
+         LEFT JOIN branches branch ON branch.id = bor.branch_id
+         WHERE ${where}
+         GROUP BY l.id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
+                  bor.first_name, bor.last_name, bor.mobile, bor.borrower_code, branch.name
+         ORDER BY MAX(CURRENT_DATE - a.due_date) DESC`,
+        params
       );
       res.json({ success: true, data: result });
     } catch (error: any) {

@@ -76,6 +76,10 @@ export const ReportsPage = () => {
   const [pastDueData, setPastDueData] = useState<any[]>([]);
   const [pastDueLoading, setPastDueLoading] = useState(false);
   const [pastDueBranchFilter, setPastDueBranchFilter] = useState<string | null>(null);
+  const [delinquencyBranchFilter, setDelinquencyBranchFilter] = useState<string | null>(null);
+  const [delinquencyLoading, setDelinquencyLoading] = useState(false);
+  const [agingBranchFilter, setAgingBranchFilter] = useState<string | null>(null);
+  const [agingLoading, setAgingLoading] = useState(false);
 
   const [appTypeData, setAppTypeData] = useState<any[]>([]);
   const [appTypeTotals, setAppTypeTotals] = useState<any[]>([]);
@@ -118,8 +122,8 @@ export const ReportsPage = () => {
       setLoading(true);
       try {
         const [aging, del, interest, amort, br, us, bra] = await Promise.all([
-          reportsApi.getAging(),
-          reportsApi.getDelinquency(),
+          reportsApi.getAging({}),
+          reportsApi.getDelinquency({}),
           reportsApi.getInterestIncome(),
           reportsApi.getAmortization(),
           borrowersApi.getAll({ limit: 1000 }),
@@ -153,6 +157,36 @@ export const ReportsPage = () => {
     };
     fetchInterest();
   }, [activeTab, interestBranchFilter, interestStartDate, interestEndDate]);
+
+  useEffect(() => {
+    const fetchAging = async () => {
+      if (activeTab !== 'aging') return;
+      setAgingLoading(true);
+      try {
+        const params: any = {};
+        if (agingBranchFilter) params.branchId = agingBranchFilter;
+        const { data } = await reportsApi.getAging(params);
+        setAgingData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load aging data</Message>, { placement: 'topEnd' }); }
+      finally { setAgingLoading(false); }
+    };
+    fetchAging();
+  }, [activeTab, agingBranchFilter]);
+
+  useEffect(() => {
+    const fetchDelinquency = async () => {
+      if (activeTab !== 'delinquency') return;
+      setDelinquencyLoading(true);
+      try {
+        const params: any = {};
+        if (delinquencyBranchFilter) params.branchId = delinquencyBranchFilter;
+        const { data } = await reportsApi.getDelinquency(params);
+        setDelinquencyData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load delinquency data</Message>, { placement: 'topEnd' }); }
+      finally { setDelinquencyLoading(false); }
+    };
+    fetchDelinquency();
+  }, [activeTab, delinquencyBranchFilter]);
 
   useEffect(() => {
     const fetchProcessingCharges = async () => {
@@ -755,9 +789,22 @@ export const ReportsPage = () => {
 
       {activeTab === 'aging' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Aging Summary">
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={
+            <div className="flex items-center gap-3">
+              <span className="font-semibold">Aging Summary</span>
+              <SelectPicker
+                placeholder="All branches"
+                data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                value={agingBranchFilter}
+                onChange={(v) => setAgingBranchFilter(v)}
+                style={{ width: 160 }}
+                cleanable
+                size="sm"
+              />
+            </div>
+          }>
             <div className="h-[300px]">
-              <Table data={agingData} loading={loading} height={300} rowHeight={45}>
+              <Table data={agingData} loading={agingLoading} height={300} rowHeight={45}>
                 <Column width={200}><HeaderCell>Bucket</HeaderCell><Cell dataKey="aging_bucket" /></Column>
                 <Column width={100}><HeaderCell>Count</HeaderCell><Cell dataKey="count" /></Column>
                 <Column width={150}><HeaderCell>Total Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_amount)}</Cell></Column>
@@ -775,26 +822,50 @@ export const ReportsPage = () => {
       )}
 
       {activeTab === 'delinquency' && (
-        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Delinquency Report">
-          <Table data={delinquencyData} loading={loading} height={500} rowHeight={45}>
-            <Column width={200}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
-            <Column width={130}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
-            <Column width={150}><HeaderCell>Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
-            <Column width={150}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => formatCurrency(r.outstanding_balance)}</Cell></Column>
-            <Column width={100}><HeaderCell>Days OD</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_overdue}</span>}</Cell></Column>
-            <Column width={110}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color="red">{r.status}</Tag>}</Cell></Column>
-          </Table>
-          <div className="flex justify-end gap-2 mt-3">
-            <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Delinquency Report', delinquencyData, [
-              { key: 'borrower_name', label: 'Borrower' },
-              { key: 'loan_number', label: 'Loan #' },
-              { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
-              { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
-              { key: 'days_overdue', label: 'Days OD' },
-              { key: 'status', label: 'Status' },
-            ])}>Print</Button>
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <div className="w-44">
+                <SelectPicker
+                  placeholder="All branches"
+                  data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                  value={delinquencyBranchFilter}
+                  onChange={(v) => setDelinquencyBranchFilter(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Delinquency Report', delinquencyData, [
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
+                { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
+                { key: 'total_overdue', label: 'Total Overdue', format: (v) => formatCurrency(v) },
+                { key: 'days_overdue', label: 'Days OD' },
+                { key: 'computed_status', label: 'Status' },
+              ])}>Print</Button>
+            </div>
           </div>
-        </Panel>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Delinquency Report (${delinquencyData.length})`}>
+            <Table data={delinquencyData} loading={delinquencyLoading} height={500} rowHeight={45}>
+              <Column width={200}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+              <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+              <Column width={130}><HeaderCell>Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
+              <Column width={130}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-semibold">{formatCurrency(r.outstanding_balance)}</span>}</Cell></Column>
+              <Column width={130}><HeaderCell>Total Overdue</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-medium">{formatCurrency(r.total_overdue)}</span>}</Cell></Column>
+              <Column width={100}><HeaderCell>Days OD</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_overdue}</span>}</Cell></Column>
+              <Column width={130}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={110}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color="red">{r.computed_status}</Tag>}</Cell></Column>
+            </Table>
+            {delinquencyData.length > 0 && (
+              <div className="flex justify-end px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-sm font-semibold">
+                <span>Total Outstanding: {formatCurrency(delinquencyData.reduce((s: number, r: any) => s + parseFloat(r.outstanding_balance || 0), 0))} &middot; {delinquencyData.length} loan{delinquencyData.length !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+          </Panel>
+        </div>
       )}
 
       {activeTab === 'past-due' && (
