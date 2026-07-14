@@ -56,15 +56,14 @@ export class ReportController {
       const { branchId } = req.query;
       const result = await paymentRepo.query(
         `SELECT DATE_TRUNC('month', p.payment_date) as month,
-                b.name as branch_name,
+                COALESCE(b.name, 'Unassigned') as branch_name,
                 SUM(p.interest_amount) as total_interest,
                 SUM(p.penalty_amount) as total_penalty,
                 COUNT(p.id) as transaction_count
          FROM payments p
          JOIN loans l ON l.id = p.loan_id
-         JOIN loan_applications la ON la.id = l.application_id
-         JOIN users u ON u.id = la.collector_id
-         JOIN branches b ON b.id = u.branch_id
+         JOIN borrowers br ON br.id = l.borrower_id
+         LEFT JOIN branches b ON b.id = br.branch_id
          WHERE p.status = 'completed'
            AND ($1::uuid IS NULL OR b.id = $1::uuid)
          GROUP BY DATE_TRUNC('month', p.payment_date), b.name
