@@ -1123,9 +1123,9 @@ export const ReportsPage = () => {
             <div className="flex gap-3">
               <DatePicker placeholder="Start date" value={branchPLStartDate} onChange={(v) => setBranchPLStartDate(v)} oneTap />
               <DatePicker placeholder="End date" value={branchPLEndDate} onChange={(v) => setBranchPLEndDate(v)} oneTap />
-              <div className="ml-2 flex gap-1 border rounded overflow-hidden">
-                <button onClick={() => setBranchPLView('branch')} className={`px-3 py-1.5 text-sm font-medium ${branchPLView === 'branch' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>By Branch</button>
-                <button onClick={() => setBranchPLView('monthly')} className={`px-3 py-1.5 text-sm font-medium ${branchPLView === 'monthly' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Monthly Trend</button>
+              <div className="ml-2 flex gap-1 border border-gray-300 dark:border-gray-600 rounded overflow-hidden">
+                <button onClick={() => setBranchPLView('branch')} className={`px-3 py-1.5 text-sm font-medium ${branchPLView === 'branch' ? 'bg-blue-600 text-white dark:bg-blue-700' : 'bg-white text-gray-700 dark:bg-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>By Branch</button>
+                <button onClick={() => setBranchPLView('monthly')} className={`px-3 py-1.5 text-sm font-medium ${branchPLView === 'monthly' ? 'bg-blue-600 text-white dark:bg-blue-700' : 'bg-white text-gray-700 dark:bg-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Monthly Trend</button>
               </div>
             </div>
             <div className="flex gap-3">
