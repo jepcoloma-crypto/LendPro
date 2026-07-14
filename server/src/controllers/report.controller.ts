@@ -767,35 +767,40 @@ export class ReportController {
   async getPastDue(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { branchId } = req.query;
+      const conditions: string[] = [
+        'a.due_date < CURRENT_DATE',
+        'a.due_date >= CURRENT_DATE - INTERVAL \'5 days\'',
+        'COALESCE(a.paid_amount,0) < a.total_due',
+        'l.status NOT IN (\'closed\', \'written-off\', \'cancelled\')'
+      ];
+      const params: any[] = [];
+      let idx = 1;
+      if (branchId) { conditions.push(`bor.branch_id = $${idx++}`); params.push(branchId); }
+      const where = conditions.join(' AND ');
       const rows = await paymentRepo.query(
         `SELECT
            l.id as loan_id,
            l.loan_number,
            l.principal_amount,
-           l.maturity_date,
            l.outstanding_balance,
-           l.status,
            l.release_date,
-           l.next_payment_date,
-           EXTRACT(DAY FROM (NOW() - l.maturity_date))::int as days_past_due,
-           br.id as borrower_id,
-           br.first_name || ' ' || br.last_name as borrower_name,
-           br.first_name,
-           br.last_name,
-           COALESCE(br.branch_id, u.branch_id) as branch_id,
-           COALESCE(b.name, 'Unassigned') as branch_name,
+           l.maturity_date,
+           bor.first_name || ' ' || bor.last_name as borrower_name,
+           COALESCE(branch.name, 'Unassigned') as branch_name,
            u.first_name || ' ' || u.last_name as collector_name,
+           COALESCE(SUM(a.total_due - COALESCE(a.paid_amount,0)), 0) as total_overdue,
+           COALESCE(MAX(CURRENT_DATE - a.due_date), 0)::int as days_overdue,
            (SELECT MAX(payment_date) FROM payments WHERE loan_id = l.id AND status = 'completed') as last_payment_date
          FROM loans l
-         JOIN borrowers br ON br.id = l.borrower_id
+         JOIN borrowers bor ON bor.id = l.borrower_id
          LEFT JOIN users u ON u.id = l.collector_id
-         LEFT JOIN branches b ON b.id = COALESCE(br.branch_id, u.branch_id)
-         WHERE l.status NOT IN ('closed', 'written-off', 'cancelled')
-           AND l.maturity_date <= NOW()
-           AND l.outstanding_balance > 0
-           AND ($1::uuid IS NULL OR COALESCE(br.branch_id, u.branch_id) = $1::uuid)
-         ORDER BY l.maturity_date, borrower_name`,
-        [branchId || null]
+         LEFT JOIN branches branch ON branch.id = bor.branch_id
+         JOIN amortization_schedules a ON a.loan_id = l.id
+         WHERE ${where}
+         GROUP BY l.id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date, l.maturity_date,
+                  bor.first_name, bor.last_name, branch.name, u.first_name, u.last_name
+         ORDER BY MAX(CURRENT_DATE - a.due_date) DESC, borrower_name`,
+        params
       );
       res.json({ success: true, data: rows });
     } catch (error: any) {

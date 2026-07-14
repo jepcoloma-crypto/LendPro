@@ -889,8 +889,8 @@ export const ReportsPage = () => {
                 { key: 'loan_number', label: 'Loan #' },
                 { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
                 { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
-                { key: 'maturity_date', label: 'Maturity', format: (v) => new Date(v).toLocaleDateString() },
-                { key: 'days_past_due', label: 'Days Past Due' },
+                { key: 'total_overdue', label: 'Total Overdue', format: (v) => formatCurrency(v) },
+                { key: 'days_overdue', label: 'Days OD' },
                 { key: 'branch_name', label: 'Branch' },
                 { key: 'collector_name', label: 'Collector' },
               ])}>Print</Button>
@@ -900,8 +900,8 @@ export const ReportsPage = () => {
                   { key: 'loan_number', label: 'Loan #' },
                   { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
                   { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
-                  { key: 'maturity_date', label: 'Maturity', format: (v) => new Date(v).toLocaleDateString() },
-                  { key: 'days_past_due', label: 'Days Past Due' },
+                  { key: 'total_overdue', label: 'Total Overdue', format: (v) => formatCurrency(v) },
+                  { key: 'days_overdue', label: 'Days OD' },
                   { key: 'branch_name', label: 'Branch' },
                   { key: 'collector_name', label: 'Collector' },
                   { key: 'last_payment_date', label: 'Last Payment', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
@@ -915,8 +915,8 @@ export const ReportsPage = () => {
               <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
               <Column width={120}><HeaderCell>Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
               <Column width={130}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-semibold">{formatCurrency(r.outstanding_balance)}</span>}</Cell></Column>
-              <Column width={110}><HeaderCell>Maturity</HeaderCell><Cell>{(r: any) => new Date(r.maturity_date).toLocaleDateString()}</Cell></Column>
-              <Column width={100}><HeaderCell>Days Past Due</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_past_due}</span>}</Cell></Column>
+              <Column width={130}><HeaderCell>Total Overdue</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-medium">{formatCurrency(r.total_overdue)}</span>}</Cell></Column>
+              <Column width={100}><HeaderCell>Days OD</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_overdue}</span>}</Cell></Column>
               <Column width={130}><HeaderCell>Last Payment</HeaderCell><Cell>{(r: any) => r.last_payment_date ? new Date(r.last_payment_date).toLocaleDateString() : <span className="text-gray-400">None</span>}</Cell></Column>
               <Column width={150}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
               <Column width={150}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
