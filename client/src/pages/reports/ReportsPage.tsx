@@ -46,6 +46,8 @@ export const ReportsPage = () => {
   const [processingChargesTotals, setProcessingChargesTotals] = useState<any[]>([]);
   const [processingChargesGrand, setProcessingChargesGrand] = useState<any>({});
   const [processingChargesLoading, setProcessingChargesLoading] = useState(false);
+  const [pcStartDate, setPcStartDate] = useState('');
+  const [pcEndDate, setPcEndDate] = useState('');
 
   const [cashFlowData, setCashFlowData] = useState<any>({ collections: [], otherIncome: [], disbursements: [], expenses: [] });
   const [cashFlowLoading, setCashFlowLoading] = useState(false);
@@ -151,7 +153,10 @@ export const ReportsPage = () => {
       if (activeTab !== 'processing-charges') return;
       setProcessingChargesLoading(true);
       try {
-        const { data } = await reportsApi.getProcessingCharges();
+        const params: any = {};
+        if (pcStartDate) params.startDate = pcStartDate;
+        if (pcEndDate) params.endDate = pcEndDate;
+        const { data } = await reportsApi.getProcessingCharges(params);
         setProcessingChargesData(data.data.details || []);
         setProcessingChargesTotals(data.data.totals || []);
         setProcessingChargesGrand(data.data.grandTotal || {});
@@ -159,7 +164,7 @@ export const ReportsPage = () => {
       finally { setProcessingChargesLoading(false); }
     };
     fetchProcessingCharges();
-  }, [activeTab]);
+  }, [activeTab, pcStartDate, pcEndDate]);
 
   useEffect(() => {
     const fetchPastDue = async () => {
@@ -887,7 +892,12 @@ export const ReportsPage = () => {
       {activeTab === 'processing-charges' && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <div></div>
+            <div className="flex gap-2 items-center">
+              <span className="text-sm text-gray-500">From:</span>
+              <input type="date" className="rs-input" value={pcStartDate} onChange={(e: any) => setPcStartDate(e.target.value)} style={{ width: 150 }} />
+              <span className="text-sm text-gray-500">To:</span>
+              <input type="date" className="rs-input" value={pcEndDate} onChange={(e: any) => setPcEndDate(e.target.value)} style={{ width: 150 }} />
+            </div>
             <div className="flex gap-3">
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Processing Charges Report', processingChargesData, [
                 { key: 'branch_name', label: 'Branch' },
