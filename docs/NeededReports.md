@@ -104,6 +104,15 @@ P&L CSV export uses `String(v)` instead of `formatCurrency(v)`, producing raw nu
 
 ## Completed Items
 
+### P1 — Fixed
+- **CSV Export** added to 5 tabs: Amortization Schedule, Collector Performance, Borrower Performance, Aging Report, Overdue List
+- **Shared state bug** fixed: Borrower Performance now uses its own `borrowerStartDate`/`borrowerEndDate` (was sharing `collectorStartDate`/`collectorEndDate`)
+- **Expected Collections**: exposed branch and collector filters (backend already supported)
+- **Loans Granted**: exposed branch filter (backend already supported)
+- **Disbursements**: exposed branch filter (backend already supported)
+- **Application Types**: exposed date range filter (backend already supported)
+
+### P2 & P3 — Done
 - Penalty waivers tracked in payments and displayed in P&L
 - Interest Income: date range filter + borrower branch join (was collector branch)
 - Delinquency Report: 5-day threshold, computed_status, branch filter

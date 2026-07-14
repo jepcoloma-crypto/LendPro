@@ -1265,6 +1265,7 @@ export const ReportsPage = () => {
                 cleanable
               />
             </div>
+            <div className="flex gap-2">
 <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
   let html = `<!DOCTYPE html><html><head><title>Amortization Report</title>
     <style>${printStyles}</style>
@@ -1355,6 +1356,7 @@ export const ReportsPage = () => {
     { key: 'previous_balance', label: 'Previous Balance' },
   ]);
 }}>Export CSV</Button>
+          </div>
           </div>
 
           {amortData.length === 0 ? (
