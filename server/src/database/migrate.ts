@@ -327,6 +327,10 @@ const runMigrations = async () => {
           );
           CREATE INDEX IF NOT EXISTS idx_idempotency_keys_key ON idempotency_keys(key);
         END IF;
+        -- Penalty waivers tracking for P&L
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name='penalty_waived') THEN
+          ALTER TABLE payments ADD COLUMN penalty_waived NUMERIC(15,2) DEFAULT 0;
+        END IF;
       END $$;
     `);
 

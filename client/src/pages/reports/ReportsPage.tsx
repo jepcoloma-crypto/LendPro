@@ -584,8 +584,8 @@ export const ReportsPage = () => {
     const data = branchPLView === 'monthly' ? branchPLMonthly : branchPLData;
     const period = `${branchPLStartDate ? branchPLStartDate.toLocaleDateString() : 'Start'} - ${branchPLEndDate ? branchPLEndDate.toLocaleDateString() : 'End'}`;
     const headers = branchPLView === 'monthly'
-      ? ['Month', 'Interest Income', 'Penalty Income', 'Processing Charges', 'Other Income', 'Total Income', 'Cost of Funds', 'Operating Expenses', 'Loan Loss Provision', 'Total Deductions', 'Net P&L']
-      : ['Branch', 'Interest Income', 'Penalty Income', 'Processing Charges', 'Other Income', 'Total Income', 'Cost of Funds', 'Operating Expenses', 'Loan Loss Provision', 'Total Deductions', 'Net P&L'];
+      ? ['Month', 'Interest Income', 'Penalty Income', 'Penalty Waivers', 'Processing Charges', 'Other Income', 'Total Income', 'Cost of Funds', 'Operating Expenses', 'Loan Loss Provision', 'Total Deductions', 'Net P&L']
+      : ['Branch', 'Interest Income', 'Penalty Income', 'Penalty Waivers', 'Processing Charges', 'Other Income', 'Total Income', 'Cost of Funds', 'Operating Expenses', 'Loan Loss Provision', 'Total Deductions', 'Net P&L'];
     let html = `<!DOCTYPE html><html><head><title>${title}</title>
       <style>${printStyles}</style></head><body>
       ${companyHeaderHtml(companyInfo)}
@@ -603,6 +603,7 @@ export const ReportsPage = () => {
         <td>${label}</td>
         <td class="right">${formatCurrency(row.interest_income)}</td>
         <td class="right">${formatCurrency(row.penalty_income)}</td>
+        <td class="right">${formatCurrency(row.penalty_waivers)}</td>
         <td class="right">${formatCurrency(row.charge_income)}</td>
         <td class="right">${formatCurrency(row.other_income)}</td>
         <td class="right">${formatCurrency(inc)}</td>
@@ -613,8 +614,8 @@ export const ReportsPage = () => {
         <td class="right ${net >= 0 ? 'green' : 'red'}">${formatCurrency(net)}</td>
       </tr>`;
     }
-    html += `<tr class="total"><td>TOTAL</td><td class="right">${formatCurrency(totalIncome)}</td><td></td><td></td><td></td>
-      <td class="right">${formatCurrency(totalIncome)}</td><td></td><td></td><td></td>
+    html += `<tr class="total"><td>TOTAL</td><td class="right">${formatCurrency(totalIncome)}</td><td></td><td></td><td></td><td></td>
+      <td class="right">${formatCurrency(totalIncome)}</td><td></td><td></td><td></td><td></td>
       <td class="right">${formatCurrency(totalDeductions)}</td>
       <td class="right ${totalNet >= 0 ? 'green' : 'red'}">${formatCurrency(totalNet)}</td></tr>`;
     html += `</tbody></table>
@@ -1134,6 +1135,7 @@ export const ReportsPage = () => {
                 { key: branchPLView === 'monthly' ? 'month' : 'branch_name', label: branchPLView === 'monthly' ? 'Month' : 'Branch' },
                 { key: 'interest_income', label: 'Interest Income', format: (v) => String(v) },
                 { key: 'penalty_income', label: 'Penalty Income', format: (v) => String(v) },
+                { key: 'penalty_waivers', label: 'Penalty Waivers', format: (v) => String(v) },
                 { key: 'charge_income', label: 'Processing Charges', format: (v) => String(v) },
                 { key: 'other_income', label: 'Other Income', format: (v) => String(v) },
                 { key: 'total_income', label: 'Total Income', format: (v) => String(v) },
@@ -1151,6 +1153,7 @@ export const ReportsPage = () => {
               <Column width={branchPLView === 'monthly' ? 120 : 160}><HeaderCell>{branchPLView === 'monthly' ? 'Month' : 'Branch'}</HeaderCell><Cell dataKey={branchPLView === 'monthly' ? 'month' : 'branch_name'} /></Column>
               <Column width={130} align="right"><HeaderCell>Interest Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.interest_income)}</span>}</Cell></Column>
               <Column width={130} align="right"><HeaderCell>Penalty Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.penalty_income)}</span>}</Cell></Column>
+              <Column width={130} align="right"><HeaderCell>Penalty Waivers</HeaderCell><Cell>{(r: any) => <span className="text-amber-600 font-medium">{formatCurrency(r.penalty_waivers)}</span>}</Cell></Column>
               <Column width={140} align="right"><HeaderCell>Processing Charges</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.charge_income)}</span>}</Cell></Column>
               <Column width={130} align="right"><HeaderCell>Other Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.other_income)}</span>}</Cell></Column>
               <Column width={130} align="right"><HeaderCell>Total Income</HeaderCell><Cell>{(r: any) => <span className="text-green-700 font-bold">{formatCurrency(r.total_income)}</span>}</Cell></Column>
@@ -1173,6 +1176,12 @@ export const ReportsPage = () => {
               <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">Cost of Funds</p>
               <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">
                 {formatCurrency((branchPLView === 'monthly' ? branchPLMonthly : branchPLData).reduce((s: number, r: any) => s + Number(r.cost_of_funds || 0), 0))}
+              </p>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800">
+              <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">Penalty Waivers</p>
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">
+                {formatCurrency((branchPLView === 'monthly' ? branchPLMonthly : branchPLData).reduce((s: number, r: any) => s + Number(r.penalty_waivers || 0), 0))}
               </p>
             </div>
             <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">

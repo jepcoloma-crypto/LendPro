@@ -39,24 +39,26 @@ export class PaymentService {
       totalOverdue += parseFloat(s.total_due) - parseFloat(s.paid_amount);
     }
 
-    let penaltyAmount = 0;
-
-    if (data.waivePenalty === true || data.waivePenalty === 'true') {
-      // penalty waived by user
-    } else {
-      const pValue = parseFloat(loan.penalty_value) || 0;
-      const maturedValue = parseFloat(loan.penalty_matured_value) || 0;
-
-      if (totalOverdue > 0) {
-        const maturityDate = loan.maturity_date ? new Date(loan.maturity_date) : null;
-        if (maturityDate && paymentDateNorm > new Date(maturityDate.getFullYear(), maturityDate.getMonth(), maturityDate.getDate())) {
-          const daysPast = Math.floor((paymentDateNorm.getTime() - new Date(maturityDate.getFullYear(), maturityDate.getMonth(), maturityDate.getDate()).getTime()) / (1000 * 60 * 60 * 24));
-          const monthsPast = daysPast / 30;
-          penaltyAmount = Math.round(totalOverdue * (maturedValue / 100) * monthsPast * 100) / 100;
-        } else if (pValue > 0) {
-          penaltyAmount = Math.round(totalOverdue * (pValue / 100) * 100) / 100;
-        }
+    // Always compute original penalty first for tracking waivers
+    let computedPenalty = 0;
+    const pValue = parseFloat(loan.penalty_value) || 0;
+    const maturedValue = parseFloat(loan.penalty_matured_value) || 0;
+    if (totalOverdue > 0) {
+      const maturityDate = loan.maturity_date ? new Date(loan.maturity_date) : null;
+      if (maturityDate && paymentDateNorm > new Date(maturityDate.getFullYear(), maturityDate.getMonth(), maturityDate.getDate())) {
+        const daysPast = Math.floor((paymentDateNorm.getTime() - new Date(maturityDate.getFullYear(), maturityDate.getMonth(), maturityDate.getDate()).getTime()) / (1000 * 60 * 60 * 24));
+        const monthsPast = daysPast / 30;
+        computedPenalty = Math.round(totalOverdue * (maturedValue / 100) * monthsPast * 100) / 100;
+      } else if (pValue > 0) {
+        computedPenalty = Math.round(totalOverdue * (pValue / 100) * 100) / 100;
       }
+    }
+
+    let penaltyAmount = computedPenalty;
+    let penaltyWaived = 0;
+    if (data.waivePenalty === true || data.waivePenalty === 'true') {
+      penaltyWaived = computedPenalty;
+      penaltyAmount = 0;
     }
 
     const netForSchedules = Math.max(0, amount - penaltyAmount);
@@ -126,9 +128,9 @@ export class PaymentService {
       }
 
       const { rows: [payment] } = await writeClient.query(
-        `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, advance_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'completed',$14,$15,$16) RETURNING *`,
-        [paymentNumber, data.loanId, loan.borrower_id, netForSchedules + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount, advanceAmount,
+        `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, penalty_waived, advance_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'completed',$15,$16,$17) RETURNING *`,
+        [paymentNumber, data.loanId, loan.borrower_id, netForSchedules + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount, penaltyWaived, advanceAmount,
          data.paymentMethod || 'cash', data.referenceNumber || null, data.paymentDate || new Date(), userId, receiptNumber,
          data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
       );
@@ -238,7 +240,32 @@ export class PaymentService {
       throw new Error(`Total allocation (${totalAllocAmount.toFixed(2)}) exceeds outstanding balance (${outstandingBalance.toFixed(2)}). Reduce the payment amount.`);
     }
 
+    // Always compute original penalty for waiver tracking
+    let computedPenalty = 0;
+    const loanPValue = parseFloat(loan.penalty_value) || 0;
+    const loanMaturedValue = parseFloat(loan.penalty_matured_value) || 0;
+    const paymentDateNorm2 = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
+    let totalOverdue2 = 0;
+    for (const s of allSchedules) {
+      if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
+      const dueDate = new Date(s.due_date);
+      const dueNorm = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+      if (dueNorm >= paymentDateNorm2) continue;
+      totalOverdue2 += parseFloat(s.total_due) - parseFloat(s.paid_amount);
+    }
+    if (totalOverdue2 > 0) {
+      const maturityDate = loan.maturity_date ? new Date(loan.maturity_date) : null;
+      if (maturityDate && paymentDateNorm2 > new Date(maturityDate.getFullYear(), maturityDate.getMonth(), maturityDate.getDate())) {
+        const daysPast = Math.floor((paymentDateNorm2.getTime() - new Date(maturityDate.getFullYear(), maturityDate.getMonth(), maturityDate.getDate()).getTime()) / (1000 * 60 * 60 * 24));
+        const monthsPast = daysPast / 30;
+        computedPenalty = Math.round(totalOverdue2 * (loanMaturedValue / 100) * monthsPast * 100) / 100;
+      } else if (loanPValue > 0) {
+        computedPenalty = Math.round(totalOverdue2 * (loanPValue / 100) * 100) / 100;
+      }
+    }
+
     const penaltyAmount = parseFloat(data.penaltyAmount) || 0;
+    const penaltyWaived = Math.max(0, computedPenalty - penaltyAmount);
     let totalAdvance = 0;
 
     // Execute all writes in a single transaction
@@ -248,9 +275,9 @@ export class PaymentService {
       await writeClient.query('BEGIN');
 
       const { rows: [payment] } = await writeClient.query(
-        `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, advance_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'completed',$14,$15,$16) RETURNING *`,
-        [paymentNumber, data.loanId, loan.borrower_id, totalAllocAmount + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount, 0,
+        `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, penalty_waived, advance_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'completed',$15,$16,$17) RETURNING *`,
+        [paymentNumber, data.loanId, loan.borrower_id, totalAllocAmount + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount, penaltyWaived, 0,
          data.paymentMethod || 'cash', data.referenceNumber || null, data.paymentDate || new Date(), userId, receiptNumber,
          data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
       );

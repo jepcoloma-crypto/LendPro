@@ -325,7 +325,8 @@ export class CashflowController {
         `SELECT COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
                 COALESCE(b.name, 'Unassigned') as branch_name,
                 COALESCE(SUM(p.interest_amount), 0) as interest_income,
-                COALESCE(SUM(p.penalty_amount), 0) as penalty_income
+                COALESCE(SUM(p.penalty_amount), 0) as penalty_income,
+                COALESCE(SUM(p.penalty_waived), 0) as penalty_waivers
          FROM payments p
          JOIN loans l ON l.id = p.loan_id
          JOIN borrowers br ON br.id = l.borrower_id
@@ -409,13 +410,14 @@ export class CashflowController {
       // Merge all data by branch
       const branchMap: Record<string, any> = {};
       const addBranch = (id: string, name: string) => {
-        if (!branchMap[id]) branchMap[id] = { branch_id: id, branch_name: name || 'Unassigned', interest_income: 0, penalty_income: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
+        if (!branchMap[id]) branchMap[id] = { branch_id: id, branch_name: name || 'Unassigned', interest_income: 0, penalty_income: 0, penalty_waivers: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
       };
 
       for (const r of loanIncome.rows) {
         addBranch(r.branch_id, r.branch_name);
         branchMap[r.branch_id].interest_income = parseFloat(r.interest_income) || 0;
         branchMap[r.branch_id].penalty_income = parseFloat(r.penalty_income) || 0;
+        branchMap[r.branch_id].penalty_waivers = parseFloat(r.penalty_waivers) || 0;
       }
       for (const r of charges.rows) {
         addBranch(r.branch_id, r.branch_name);
@@ -442,8 +444,8 @@ export class CashflowController {
       const rows = Object.values(branchMap).map((r: any) => ({
         ...r,
         total_income: r.interest_income + r.penalty_income + r.charge_income + r.other_income,
-        total_deductions: r.cost_of_funds + r.operating_expenses + r.loan_loss_provision,
-        net_pl: (r.interest_income + r.penalty_income + r.charge_income + r.other_income) - (r.cost_of_funds + r.operating_expenses + r.loan_loss_provision),
+        total_deductions: r.cost_of_funds + r.operating_expenses + r.loan_loss_provision + r.penalty_waivers,
+        net_pl: (r.interest_income + r.penalty_income + r.charge_income + r.other_income) - (r.cost_of_funds + r.operating_expenses + r.loan_loss_provision + r.penalty_waivers),
       })).sort((a: any, b: any) => a.branch_name.localeCompare(b.branch_name));
 
       // Monthly trend (company-wide)
@@ -460,7 +462,8 @@ export class CashflowController {
       const monthlyIncome = await pool.query(
         `SELECT to_char(p.payment_date, 'YYYY-MM') as month,
                 COALESCE(SUM(p.interest_amount), 0) as interest_income,
-                COALESCE(SUM(p.penalty_amount), 0) as penalty_income
+                COALESCE(SUM(p.penalty_amount), 0) as penalty_income,
+                COALESCE(SUM(p.penalty_waived), 0) as penalty_waivers
          FROM payments p
          WHERE p.status = 'completed'${mi.filter}
          GROUP BY month ORDER BY month`,
@@ -502,18 +505,18 @@ export class CashflowController {
       // Merge monthly data
       const monthMap: Record<string, any> = {};
       for (const r of monthlyIncome.rows) {
-        monthMap[r.month] = { month: r.month, interest_income: parseFloat(r.interest_income) || 0, penalty_income: parseFloat(r.penalty_income) || 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
+        monthMap[r.month] = { month: r.month, interest_income: parseFloat(r.interest_income) || 0, penalty_income: parseFloat(r.penalty_income) || 0, penalty_waivers: parseFloat(r.penalty_waivers) || 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
       }
       for (const r of monthlyCharges.rows) {
-        if (!monthMap[r.month]) monthMap[r.month] = { month: r.month, interest_income: 0, penalty_income: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
+        if (!monthMap[r.month]) monthMap[r.month] = { month: r.month, interest_income: 0, penalty_income: 0, penalty_waivers: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
         monthMap[r.month].charge_income = parseFloat(r.charge_income) || 0;
       }
       for (const r of monthlyOther.rows) {
-        if (!monthMap[r.month]) monthMap[r.month] = { month: r.month, interest_income: 0, penalty_income: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
+        if (!monthMap[r.month]) monthMap[r.month] = { month: r.month, interest_income: 0, penalty_income: 0, penalty_waivers: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
         monthMap[r.month].other_income = parseFloat(r.other_income) || 0;
       }
       for (const r of monthlyExpenses.rows) {
-        if (!monthMap[r.month]) monthMap[r.month] = { month: r.month, interest_income: 0, penalty_income: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
+        if (!monthMap[r.month]) monthMap[r.month] = { month: r.month, interest_income: 0, penalty_income: 0, penalty_waivers: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
         monthMap[r.month].cost_of_funds = parseFloat(r.cost_of_funds) || 0;
         monthMap[r.month].operating_expenses = parseFloat(r.operating_expenses) || 0;
       }
@@ -524,7 +527,7 @@ export class CashflowController {
         const mIncome = month.interest_income + month.penalty_income + month.charge_income + month.other_income;
         month.loan_loss_provision = totalIncome > 0 ? Math.round((mIncome / totalIncome) * totalProvision * 100) / 100 : 0;
         month.total_income = mIncome;
-        month.total_deductions = month.cost_of_funds + month.operating_expenses + month.loan_loss_provision;
+        month.total_deductions = month.cost_of_funds + month.operating_expenses + month.loan_loss_provision + month.penalty_waivers;
         month.net_pl = mIncome - month.total_deductions;
       }
 
