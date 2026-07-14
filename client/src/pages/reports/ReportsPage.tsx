@@ -865,7 +865,7 @@ export const ReportsPage = () => {
             </Table>
             {delinquencyData.length > 0 && (
               <div className="flex justify-end px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-sm font-semibold">
-                <span>Total Outstanding: {formatCurrency(delinquencyData.reduce((s: number, r: any) => s + parseFloat(r.outstanding_balance || 0), 0))} &middot; {delinquencyData.length} loan{delinquencyData.length !== 1 ? 's' : ''}</span>
+                <span>Total Outstanding: {formatCurrency(delinquencyData.reduce((s: number, r: any) => s + parseFloat(r.outstanding_balance || 0), 0))} &middot; Total Overdue: {formatCurrency(delinquencyData.reduce((s: number, r: any) => s + parseFloat(r.total_overdue || 0), 0))} &middot; {delinquencyData.length} loan{delinquencyData.length !== 1 ? 's' : ''}</span>
               </div>
             )}
           </Panel>
