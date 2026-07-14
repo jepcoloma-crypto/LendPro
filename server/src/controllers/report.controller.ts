@@ -42,7 +42,7 @@ export class ReportController {
   async getDelinquencyReport(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { branchId } = req.query;
-      const conditions: string[] = ['a.due_date < CURRENT_DATE - INTERVAL \'5 days\'', 'COALESCE(a.paid_amount,0) < a.total_due'];
+      const conditions: string[] = ['a.due_date < CURRENT_DATE', 'COALESCE(a.paid_amount,0) < a.total_due', 'l.status NOT IN (\'closed\', \'written-off\', \'cancelled\')'];
       const params: any[] = [];
       let idx = 1;
       if (branchId) { conditions.push(`bor.branch_id = $${idx++}`); params.push(branchId); }
@@ -53,14 +53,17 @@ export class ReportController {
                 COALESCE(branch.name, 'Unassigned') as branch_name,
                 CASE WHEN MAX(CURRENT_DATE - a.due_date) >= 5 THEN 'delinquent' ELSE 'overdue' END as computed_status,
                 COALESCE(SUM(a.total_due - COALESCE(a.paid_amount,0)), 0) as total_overdue,
-                COALESCE(MAX(CURRENT_DATE - a.due_date), 0)::int as days_overdue
+                COALESCE(MAX(CURRENT_DATE - a.due_date), 0)::int as days_overdue,
+                (SELECT MAX(payment_date) FROM payments WHERE loan_id = l.id AND status = 'completed') as last_payment_date,
+                u.first_name || ' ' || u.last_name as collector_name
          FROM loans l
          JOIN borrowers bor ON l.borrower_id = bor.id
          JOIN amortization_schedules a ON a.loan_id = l.id
          LEFT JOIN branches branch ON branch.id = bor.branch_id
+         LEFT JOIN users u ON u.id = l.collector_id
          WHERE ${where}
          GROUP BY l.id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
-                  bor.first_name, bor.last_name, bor.mobile, bor.borrower_code, branch.name
+                  bor.first_name, bor.last_name, bor.mobile, bor.borrower_code, branch.name, u.first_name, u.last_name
          ORDER BY MAX(CURRENT_DATE - a.due_date) DESC`,
         params
       );

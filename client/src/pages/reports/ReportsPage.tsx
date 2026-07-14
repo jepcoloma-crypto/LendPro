@@ -738,8 +738,7 @@ export const ReportsPage = () => {
     ]},
     { key: 'risk', label: 'Risk', tabs: [
       { key: 'aging', label: 'Aging Report' },
-      { key: 'delinquency', label: 'Delinquency' },
-      { key: 'past-due', label: 'Past Due Clients' },
+      { key: 'delinquency', label: 'Overdue List' },
     ]},
     { key: 'financial', label: 'Financial', tabs: [
       { key: 'interest', label: 'Interest Income' },
@@ -837,54 +836,7 @@ export const ReportsPage = () => {
               </div>
             </div>
             <div className="flex gap-3">
-              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Delinquency Report', delinquencyData, [
-                { key: 'borrower_name', label: 'Borrower' },
-                { key: 'loan_number', label: 'Loan #' },
-                { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
-                { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
-                { key: 'total_overdue', label: 'Total Overdue', format: (v) => formatCurrency(v) },
-                { key: 'days_overdue', label: 'Days OD' },
-                { key: 'computed_status', label: 'Status' },
-              ])}>Print</Button>
-            </div>
-          </div>
-          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Delinquency Report (${delinquencyData.length})`}>
-            <Table data={delinquencyData} loading={delinquencyLoading} height={500} rowHeight={45}>
-              <Column width={200}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
-              <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
-              <Column width={130}><HeaderCell>Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
-              <Column width={130}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-semibold">{formatCurrency(r.outstanding_balance)}</span>}</Cell></Column>
-              <Column width={130}><HeaderCell>Total Overdue</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-medium">{formatCurrency(r.total_overdue)}</span>}</Cell></Column>
-              <Column width={100}><HeaderCell>Days OD</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_overdue}</span>}</Cell></Column>
-              <Column width={130}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
-              <Column width={110}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color="red">{r.computed_status}</Tag>}</Cell></Column>
-            </Table>
-            {delinquencyData.length > 0 && (
-              <div className="flex justify-end px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-sm font-semibold">
-                <span>Total Outstanding: {formatCurrency(delinquencyData.reduce((s: number, r: any) => s + parseFloat(r.outstanding_balance || 0), 0))} &middot; {delinquencyData.length} loan{delinquencyData.length !== 1 ? 's' : ''}</span>
-              </div>
-            )}
-          </Panel>
-        </div>
-      )}
-
-      {activeTab === 'past-due' && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex gap-3">
-              <div className="w-52">
-                <SelectPicker
-                  placeholder="All branches"
-                  data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
-                  value={pastDueBranchFilter}
-                  onChange={(v) => setPastDueBranchFilter(v)}
-                  style={{ width: '100%' }}
-                  cleanable
-                />
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Past Due Clients', pastDueData, [
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Overdue List', delinquencyData, [
                 { key: 'borrower_name', label: 'Borrower' },
                 { key: 'loan_number', label: 'Loan #' },
                 { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
@@ -893,37 +845,27 @@ export const ReportsPage = () => {
                 { key: 'days_overdue', label: 'Days OD' },
                 { key: 'branch_name', label: 'Branch' },
                 { key: 'collector_name', label: 'Collector' },
+                { key: 'last_payment_date', label: 'Last Payment', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
+                { key: 'computed_status', label: 'Status' },
               ])}>Print</Button>
-              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
-                exportCSV(pastDueData, 'past-due-clients', [
-                  { key: 'borrower_name', label: 'Borrower' },
-                  { key: 'loan_number', label: 'Loan #' },
-                  { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
-                  { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
-                  { key: 'total_overdue', label: 'Total Overdue', format: (v) => formatCurrency(v) },
-                  { key: 'days_overdue', label: 'Days OD' },
-                  { key: 'branch_name', label: 'Branch' },
-                  { key: 'collector_name', label: 'Collector' },
-                  { key: 'last_payment_date', label: 'Last Payment', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
-                ]);
-              }}>Export CSV</Button>
             </div>
           </div>
-          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Past Due Clients (${pastDueData.length})`}>
-            <Table data={pastDueData} loading={pastDueLoading} height={500} rowHeight={45}>
-              <Column width={180}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Overdue List (${delinquencyData.length})`}>
+            <Table data={delinquencyData} loading={delinquencyLoading} height={500} rowHeight={45}>
+              <Column width={200}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
               <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
               <Column width={120}><HeaderCell>Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
               <Column width={130}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-semibold">{formatCurrency(r.outstanding_balance)}</span>}</Cell></Column>
               <Column width={130}><HeaderCell>Total Overdue</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-medium">{formatCurrency(r.total_overdue)}</span>}</Cell></Column>
-              <Column width={100}><HeaderCell>Days OD</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_overdue}</span>}</Cell></Column>
-              <Column width={130}><HeaderCell>Last Payment</HeaderCell><Cell>{(r: any) => r.last_payment_date ? new Date(r.last_payment_date).toLocaleDateString() : <span className="text-gray-400">None</span>}</Cell></Column>
-              <Column width={150}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
-              <Column width={150}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
+              <Column width={90}><HeaderCell>Days OD</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_overdue}</span>}</Cell></Column>
+              <Column width={130}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={120}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
+              <Column width={120}><HeaderCell>Last Payment</HeaderCell><Cell>{(r: any) => r.last_payment_date ? new Date(r.last_payment_date).toLocaleDateString() : <span className="text-gray-400">None</span>}</Cell></Column>
+              <Column width={110}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.computed_status === 'delinquent' ? 'red' : 'orange'}>{r.computed_status}</Tag>}</Cell></Column>
             </Table>
-            {pastDueData.length > 0 && (
+            {delinquencyData.length > 0 && (
               <div className="flex justify-end px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-sm font-semibold">
-                <span>Total Outstanding: {formatCurrency(pastDueData.reduce((sum: number, r: any) => sum + parseFloat(r.outstanding_balance || 0), 0))} &middot; {pastDueData.length} client{pastDueData.length !== 1 ? 's' : ''}</span>
+                <span>Total Outstanding: {formatCurrency(delinquencyData.reduce((s: number, r: any) => s + parseFloat(r.outstanding_balance || 0), 0))} &middot; {delinquencyData.length} loan{delinquencyData.length !== 1 ? 's' : ''}</span>
               </div>
             )}
           </Panel>
