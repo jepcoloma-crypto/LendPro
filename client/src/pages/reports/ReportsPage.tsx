@@ -897,6 +897,7 @@ export const ReportsPage = () => {
               <input type="date" className="rs-input" value={pcStartDate} onChange={(e: any) => setPcStartDate(e.target.value)} style={{ width: 150 }} />
               <span className="text-sm text-gray-500">To:</span>
               <input type="date" className="rs-input" value={pcEndDate} onChange={(e: any) => setPcEndDate(e.target.value)} style={{ width: 150 }} />
+              <Button size="sm" appearance="ghost" onClick={() => { setPcStartDate(''); setPcEndDate(''); }}>Clear</Button>
             </div>
             <div className="flex gap-3">
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Processing Charges Report', processingChargesData, [
