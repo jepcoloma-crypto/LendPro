@@ -53,7 +53,14 @@ export class ReportController {
 
   async getInterestIncomeReport(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { branchId } = req.query;
+      const { branchId, startDate, endDate } = req.query;
+      const conditions: string[] = ['p.status = \'completed\''];
+      const params: any[] = [];
+      let idx = 1;
+      if (branchId) { conditions.push(`b.id = $${idx++}`); params.push(branchId); }
+      if (startDate) { conditions.push(`p.payment_date >= $${idx++}`); params.push(startDate); }
+      if (endDate) { conditions.push(`p.payment_date <= $${idx++}`); params.push(endDate); }
+      const where = conditions.length ? conditions.join(' AND ') : '1=1';
       const result = await paymentRepo.query(
         `SELECT DATE_TRUNC('month', p.payment_date) as month,
                 COALESCE(b.name, 'Unassigned') as branch_name,
@@ -64,11 +71,10 @@ export class ReportController {
          JOIN loans l ON l.id = p.loan_id
          JOIN borrowers br ON br.id = l.borrower_id
          LEFT JOIN branches b ON b.id = br.branch_id
-         WHERE p.status = 'completed'
-           AND ($1::uuid IS NULL OR b.id = $1::uuid)
+         WHERE ${where}
          GROUP BY DATE_TRUNC('month', p.payment_date), b.name
          ORDER BY month DESC, b.name`,
-        [branchId || null]
+        params
       );
       res.json({ success: true, data: result });
     } catch (error: any) {

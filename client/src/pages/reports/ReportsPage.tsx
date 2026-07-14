@@ -15,6 +15,8 @@ export const ReportsPage = () => {
   const [agingData, setAgingData] = useState<any[]>([]);
   const [delinquencyData, setDelinquencyData] = useState<any[]>([]);
   const [interestData, setInterestData] = useState<any[]>([]);
+  const [interestStartDate, setInterestStartDate] = useState<Date | null>(null);
+  const [interestEndDate, setInterestEndDate] = useState<Date | null>(null);
   const [amortData, setAmortData] = useState<any[]>([]);
   const [borrowers, setBorrowers] = useState<any[]>([]);
   const [borrowerFilter, setBorrowerFilter] = useState<string | null>(null);
@@ -143,12 +145,14 @@ export const ReportsPage = () => {
       try {
         const params: any = {};
         if (interestBranchFilter) params.branchId = interestBranchFilter;
+        if (interestStartDate) params.startDate = interestStartDate.toISOString().split('T')[0];
+        if (interestEndDate) params.endDate = interestEndDate.toISOString().split('T')[0];
         const { data } = await reportsApi.getInterestIncome(params);
         setInterestData(data.data || []);
       } catch { toaster.push(<Message type="error">Failed to load interest data</Message>, { placement: 'topEnd' }); }
     };
     fetchInterest();
-  }, [activeTab, interestBranchFilter]);
+  }, [activeTab, interestBranchFilter, interestStartDate, interestEndDate]);
 
   useEffect(() => {
     const fetchProcessingCharges = async () => {
@@ -859,7 +863,7 @@ export const ReportsPage = () => {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div className="flex gap-3">
-              <div className="w-52">
+              <div className="w-44">
                 <SelectPicker
                   placeholder="All branches"
                   data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
@@ -869,6 +873,11 @@ export const ReportsPage = () => {
                   cleanable
                 />
               </div>
+              <DatePicker placeholder="Start date" value={interestStartDate} onChange={(v) => setInterestStartDate(v)} oneTap />
+              <DatePicker placeholder="End date" value={interestEndDate} onChange={(v) => setInterestEndDate(v)} oneTap />
+              {(interestStartDate || interestEndDate) && (
+                <Button size="sm" appearance="ghost" onClick={() => { setInterestStartDate(null); setInterestEndDate(null); }}>Clear</Button>
+              )}
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Interest Income Report', interestData, [
                 { key: 'month', label: 'Month', format: (v) => new Date(v).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) },
                 { key: 'branch_name', label: 'Branch' },
