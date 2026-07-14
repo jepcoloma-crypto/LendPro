@@ -253,7 +253,7 @@ router.delete('/income/:id', authenticate, cashflowController.deleteIncome.bind(
 router.get('/reports/cash-flow', authenticate, cashflowController.getCashFlow.bind(cashflowController));
 router.get('/reports/expense-report', authenticate, cashflowController.getExpenseReport.bind(cashflowController));
 router.get('/reports/income-report', authenticate, cashflowController.getIncomeReport.bind(cashflowController));
-router.get('/reports/branch-pl', authenticate, cashflowController.getBranchPL.bind(cashflowController));
+router.get('/reports/branch-pl', authenticate, authorize('super-admin', 'admin'), cashflowController.getBranchPL.bind(cashflowController));
 router.get('/reports/borrower-master-list', authenticate, reportController.getBorrowerMasterList.bind(reportController));
 
 // Settings (super-admin only)

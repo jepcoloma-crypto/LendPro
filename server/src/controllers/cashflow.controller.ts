@@ -309,13 +309,18 @@ export class CashflowController {
   async getBranchPL(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { startDate, endDate } = req.query;
-      let dateFilter = '';
-      const params: any[] = [];
-      let idx = 1;
-      if (startDate) { dateFilter += ` AND p.payment_date >= $${idx++}`; params.push(startDate); }
-      if (endDate) { dateFilter += ` AND p.payment_date <= $${idx++}`; params.push(endDate); }
 
-      // Interest & Penalty income per branch (via borrower's branch)
+      const buildDateFilter = (prefix: string, column: string, idxStart: number) => {
+        let filter = '';
+        const p: any[] = [];
+        let i = idxStart;
+        if (startDate) { filter += ` AND ${prefix}.${column} >= $${i++}`; p.push(startDate); }
+        if (endDate) { filter += ` AND ${prefix}.${column} <= $${i++}`; p.push(endDate); }
+        return { filter, params: p, nextIdx: i };
+      };
+
+      // Interest & Penalty income per branch
+      const li = buildDateFilter('p', 'payment_date', 1);
       const loanIncome = await pool.query(
         `SELECT COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
                 COALESCE(b.name, 'Unassigned') as branch_name,
@@ -325,18 +330,14 @@ export class CashflowController {
          JOIN loans l ON l.id = p.loan_id
          JOIN borrowers br ON br.id = l.borrower_id
          LEFT JOIN branches b ON b.id = br.branch_id
-         WHERE p.status = 'completed'${dateFilter}
+         WHERE p.status = 'completed'${li.filter}
          GROUP BY b.id, b.name
          ORDER BY branch_name`,
-        params
+        li.params
       );
 
-      // Processing charges per branch (from loan release charges)
-      let chargeDateFilter = '';
-      const chargeParams: any[] = [];
-      let ci = 1;
-      if (startDate) { chargeDateFilter += ` AND l.release_date >= $${ci++}`; chargeParams.push(startDate); }
-      if (endDate) { chargeDateFilter += ` AND l.release_date <= $${ci++}`; chargeParams.push(endDate); }
+      // Processing charges per branch
+      const ch = buildDateFilter('l', 'release_date', 1);
       const charges = await pool.query(
         `SELECT COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
                 COALESCE(b.name, 'Unassigned') as branch_name,
@@ -345,49 +346,70 @@ export class CashflowController {
          JOIN loans l ON l.id = lc.loan_id
          JOIN borrowers br ON br.id = l.borrower_id
          LEFT JOIN branches b ON b.id = br.branch_id
-         WHERE 1=1${chargeDateFilter}
+         WHERE 1=1${ch.filter}
          GROUP BY b.id, b.name`,
-        chargeParams
+        ch.params
       );
 
       // Other income per branch
-      let oiDateFilter = '';
-      const oiParams: any[] = [];
-      let oi = 1;
-      if (startDate) { oiDateFilter += ` AND date >= $${oi++}`; oiParams.push(startDate); }
-      if (endDate) { oiDateFilter += ` AND date <= $${oi++}`; oiParams.push(endDate); }
+      const oi = buildDateFilter('o', 'date', 1);
       const otherIncome = await pool.query(
         `SELECT COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
                 COALESCE(b.name, 'Unassigned') as branch_name,
                 COALESCE(SUM(o.amount), 0) as other_income
          FROM other_income o
          LEFT JOIN branches b ON b.id = o.branch_id
-         WHERE 1=1${oiDateFilter}
+         WHERE 1=1${oi.filter}
          GROUP BY b.id, b.name`,
-        oiParams
+        oi.params
       );
 
-      // Operating expenses per branch
-      let expDateFilter = '';
-      const expParams: any[] = [];
-      let ei = 1;
-      if (startDate) { expDateFilter += ` AND date >= $${ei++}`; expParams.push(startDate); }
-      if (endDate) { expDateFilter += ` AND date <= $${ei++}`; expParams.push(endDate); }
-      const expenses = await pool.query(
+      // Cost of Funds per branch (expenses with category = 'Cost of Funds')
+      const cof = buildDateFilter('e', 'date', 1);
+      const costOfFunds = await pool.query(
         `SELECT COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
                 COALESCE(b.name, 'Unassigned') as branch_name,
-                COALESCE(SUM(e.amount), 0) as total_expenses
+                COALESCE(SUM(e.amount), 0) as cost_of_funds
          FROM operating_expenses e
          LEFT JOIN branches b ON b.id = e.branch_id
-         WHERE 1=1${expDateFilter}
+         WHERE e.category = 'Cost of Funds'${cof.filter}
          GROUP BY b.id, b.name`,
-        expParams
+        cof.params
+      );
+
+      // All other operating expenses per branch
+      const op = buildDateFilter('e', 'date', 1);
+      const otherExpenses = await pool.query(
+        `SELECT COALESCE(b.id, '00000000-0000-0000-0000-000000000000') as branch_id,
+                COALESCE(b.name, 'Unassigned') as branch_name,
+                COALESCE(SUM(e.amount), 0) as operating_expenses
+         FROM operating_expenses e
+         LEFT JOIN branches b ON b.id = e.branch_id
+         WHERE e.category != 'Cost of Funds'${op.filter}
+         GROUP BY b.id, b.name`,
+        op.params
+      );
+
+      // Loan Loss Provision: delinquent outstanding * provision rate
+      const provisionRate = 0.50; // 50% default; could be stored in system_settings
+      const prov = await pool.query(
+        `SELECT COALESCE(br.branch_id, '00000000-0000-0000-0000-000000000000') as branch_id,
+                COALESCE(b.name, 'Unassigned') as branch_name,
+                COALESCE(SUM(a.total_due - COALESCE(a.paid_amount, 0)), 0) as delinquent_balance
+         FROM amortization_schedules a
+         JOIN loans l ON l.id = a.loan_id
+         JOIN borrowers br ON br.id = l.borrower_id
+         LEFT JOIN branches b ON b.id = br.branch_id
+         WHERE l.status IN ('active', 'closed')
+           AND a.due_date < CURRENT_DATE - INTERVAL '90 days'
+           AND COALESCE(a.paid_amount, 0) < a.total_due
+         GROUP BY br.branch_id, b.name`
       );
 
       // Merge all data by branch
       const branchMap: Record<string, any> = {};
       const addBranch = (id: string, name: string) => {
-        if (!branchMap[id]) branchMap[id] = { branch_id: id, branch_name: name || 'Unassigned', interest_income: 0, penalty_income: 0, charge_income: 0, other_income: 0, total_expenses: 0 };
+        if (!branchMap[id]) branchMap[id] = { branch_id: id, branch_name: name || 'Unassigned', interest_income: 0, penalty_income: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
       };
 
       for (const r of loanIncome.rows) {
@@ -403,18 +425,112 @@ export class CashflowController {
         addBranch(r.branch_id, r.branch_name);
         branchMap[r.branch_id].other_income = parseFloat(r.other_income) || 0;
       }
-      for (const r of expenses.rows) {
+      for (const r of costOfFunds.rows) {
         addBranch(r.branch_id, r.branch_name);
-        branchMap[r.branch_id].total_expenses = parseFloat(r.total_expenses) || 0;
+        branchMap[r.branch_id].cost_of_funds = parseFloat(r.cost_of_funds) || 0;
+      }
+      for (const r of otherExpenses.rows) {
+        addBranch(r.branch_id, r.branch_name);
+        branchMap[r.branch_id].operating_expenses = parseFloat(r.operating_expenses) || 0;
+      }
+      for (const r of prov.rows) {
+        addBranch(r.branch_id, r.branch_name);
+        const delinquent = parseFloat(r.delinquent_balance) || 0;
+        branchMap[r.branch_id].loan_loss_provision = Math.round(delinquent * provisionRate * 100) / 100;
       }
 
       const rows = Object.values(branchMap).map((r: any) => ({
         ...r,
         total_income: r.interest_income + r.penalty_income + r.charge_income + r.other_income,
-        net_pl: (r.interest_income + r.penalty_income + r.charge_income + r.other_income) - r.total_expenses,
+        total_deductions: r.cost_of_funds + r.operating_expenses + r.loan_loss_provision,
+        net_pl: (r.interest_income + r.penalty_income + r.charge_income + r.other_income) - (r.cost_of_funds + r.operating_expenses + r.loan_loss_provision),
       })).sort((a: any, b: any) => a.branch_name.localeCompare(b.branch_name));
 
-      res.json({ success: true, data: rows });
+      // Monthly trend (company-wide)
+      const buildMonthlyFilter = (col: string, idxStart: number) => {
+        let filter = '';
+        const p: any[] = [];
+        let i = idxStart;
+        if (startDate) { filter += ` AND ${col} >= $${i++}`; p.push(startDate); }
+        if (endDate) { filter += ` AND ${col} <= $${i++}`; p.push(endDate); }
+        return { filter, params: p };
+      };
+
+      const mi = buildMonthlyFilter('p.payment_date', 1);
+      const monthlyIncome = await pool.query(
+        `SELECT to_char(p.payment_date, 'YYYY-MM') as month,
+                COALESCE(SUM(p.interest_amount), 0) as interest_income,
+                COALESCE(SUM(p.penalty_amount), 0) as penalty_income
+         FROM payments p
+         WHERE p.status = 'completed'${mi.filter}
+         GROUP BY month ORDER BY month`,
+        mi.params
+      );
+
+      const mc = buildMonthlyFilter('l.release_date', 1);
+      const monthlyCharges = await pool.query(
+        `SELECT to_char(l.release_date, 'YYYY-MM') as month,
+                COALESCE(SUM(lc.amount), 0) as charge_income
+         FROM loan_charges lc
+         JOIN loans l ON l.id = lc.loan_id
+         WHERE 1=1${mc.filter}
+         GROUP BY month ORDER BY month`,
+        mc.params
+      );
+
+      const mo = buildMonthlyFilter('o.date', 1);
+      const monthlyOther = await pool.query(
+        `SELECT to_char(o.date, 'YYYY-MM') as month,
+                COALESCE(SUM(o.amount), 0) as other_income
+         FROM other_income o
+         WHERE 1=1${mo.filter}
+         GROUP BY month ORDER BY month`,
+        mo.params
+      );
+
+      const me = buildMonthlyFilter('e.date', 1);
+      const monthlyExpenses = await pool.query(
+        `SELECT to_char(e.date, 'YYYY-MM') as month,
+                COALESCE(SUM(e.amount) FILTER (WHERE e.category = 'Cost of Funds'), 0) as cost_of_funds,
+                COALESCE(SUM(e.amount) FILTER (WHERE e.category != 'Cost of Funds'), 0) as operating_expenses
+         FROM operating_expenses e
+         WHERE 1=1${me.filter}
+         GROUP BY month ORDER BY month`,
+        me.params
+      );
+
+      // Merge monthly data
+      const monthMap: Record<string, any> = {};
+      for (const r of monthlyIncome.rows) {
+        monthMap[r.month] = { month: r.month, interest_income: parseFloat(r.interest_income) || 0, penalty_income: parseFloat(r.penalty_income) || 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
+      }
+      for (const r of monthlyCharges.rows) {
+        if (!monthMap[r.month]) monthMap[r.month] = { month: r.month, interest_income: 0, penalty_income: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
+        monthMap[r.month].charge_income = parseFloat(r.charge_income) || 0;
+      }
+      for (const r of monthlyOther.rows) {
+        if (!monthMap[r.month]) monthMap[r.month] = { month: r.month, interest_income: 0, penalty_income: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
+        monthMap[r.month].other_income = parseFloat(r.other_income) || 0;
+      }
+      for (const r of monthlyExpenses.rows) {
+        if (!monthMap[r.month]) monthMap[r.month] = { month: r.month, interest_income: 0, penalty_income: 0, charge_income: 0, other_income: 0, cost_of_funds: 0, operating_expenses: 0, loan_loss_provision: 0 };
+        monthMap[r.month].cost_of_funds = parseFloat(r.cost_of_funds) || 0;
+        monthMap[r.month].operating_expenses = parseFloat(r.operating_expenses) || 0;
+      }
+      // Monthly provision: pro-rate provision across months (same total, distributed by income ratio)
+      const totalIncome = Object.values(monthMap).reduce((s: number, m: any) => s + m.interest_income + m.penalty_income + m.charge_income + m.other_income, 0);
+      const totalProvision = rows.reduce((s: number, r: any) => s + r.loan_loss_provision, 0);
+      for (const month of Object.values(monthMap) as any[]) {
+        const mIncome = month.interest_income + month.penalty_income + month.charge_income + month.other_income;
+        month.loan_loss_provision = totalIncome > 0 ? Math.round((mIncome / totalIncome) * totalProvision * 100) / 100 : 0;
+        month.total_income = mIncome;
+        month.total_deductions = month.cost_of_funds + month.operating_expenses + month.loan_loss_provision;
+        month.net_pl = mIncome - month.total_deductions;
+      }
+
+      const monthlyTrend = Object.values(monthMap).sort((a: any, b: any) => a.month.localeCompare(b.month));
+
+      res.json({ success: true, data: rows, monthly: monthlyTrend, provision_rate: provisionRate });
     } catch (error: any) {
       next(new AppError(500, error.message));
     }

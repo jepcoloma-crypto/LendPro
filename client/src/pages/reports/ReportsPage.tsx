@@ -68,6 +68,8 @@ export const ReportsPage = () => {
   const [branchPLLoading, setBranchPLLoading] = useState(false);
   const [branchPLStartDate, setBranchPLStartDate] = useState<Date | null>(null);
   const [branchPLEndDate, setBranchPLEndDate] = useState<Date | null>(null);
+  const [branchPLMonthly, setBranchPLMonthly] = useState<any[]>([]);
+  const [branchPLView, setBranchPLView] = useState<'branch' | 'monthly'>('branch');
 
   const [pastDueData, setPastDueData] = useState<any[]>([]);
   const [pastDueLoading, setPastDueLoading] = useState(false);
@@ -253,7 +255,8 @@ export const ReportsPage = () => {
         if (branchPLEndDate) params.endDate = branchPLEndDate.toISOString().split('T')[0];
         const { data } = await reportsApi.getBranchPL(params);
         setBranchPLData(data.data || []);
-      } catch { setBranchPLData([]); }
+        setBranchPLMonthly(data.monthly || []);
+      } catch { setBranchPLData([]); setBranchPLMonthly([]); }
       finally { setBranchPLLoading(false); }
     };
     fetchBranchPL();
@@ -577,36 +580,42 @@ export const ReportsPage = () => {
   };
 
   const printPLReport = () => {
-    const title = 'Branch Profit & Loss';
+    const title = branchPLView === 'monthly' ? 'Monthly Profit & Loss' : 'Branch Profit & Loss';
+    const data = branchPLView === 'monthly' ? branchPLMonthly : branchPLData;
     const period = `${branchPLStartDate ? branchPLStartDate.toLocaleDateString() : 'Start'} - ${branchPLEndDate ? branchPLEndDate.toLocaleDateString() : 'End'}`;
+    const headers = branchPLView === 'monthly'
+      ? ['Month', 'Interest Income', 'Penalty Income', 'Processing Charges', 'Other Income', 'Total Income', 'Cost of Funds', 'Operating Expenses', 'Loan Loss Provision', 'Total Deductions', 'Net P&L']
+      : ['Branch', 'Interest Income', 'Penalty Income', 'Processing Charges', 'Other Income', 'Total Income', 'Cost of Funds', 'Operating Expenses', 'Loan Loss Provision', 'Total Deductions', 'Net P&L'];
     let html = `<!DOCTYPE html><html><head><title>${title}</title>
       <style>${printStyles}</style></head><body>
       ${companyHeaderHtml(companyInfo)}
       <div class="report-title">${title}</div>
       <div class="report-subtitle">Period: ${period} &middot; Generated: ${new Date().toLocaleString()}</div>
-      <table><thead><tr>
-        <th>Branch</th><th>Interest Income</th><th>Penalty Income</th><th>Processing Charges</th>
-        <th>Other Income</th><th>Total Income</th><th>Total Expenses</th><th>Net P&L</th>
-      </tr></thead><tbody>`;
-    let totalIncome = 0, totalExpenses = 0, totalNet = 0;
-    for (const row of branchPLData) {
+      <table><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>`;
+    let totalIncome = 0, totalDeductions = 0, totalNet = 0;
+    for (const row of data) {
       const inc = Number(row.total_income || 0);
-      const exp = Number(row.total_expenses || 0);
+      const ded = Number(row.total_deductions || 0);
       const net = Number(row.net_pl || 0);
-      totalIncome += inc; totalExpenses += exp; totalNet += net;
+      totalIncome += inc; totalDeductions += ded; totalNet += net;
+      const label = row.branch_name || row.month || 'Unassigned';
       html += `<tr>
-        <td>${row.branch_name || 'Unassigned'}</td>
+        <td>${label}</td>
         <td class="right">${formatCurrency(row.interest_income)}</td>
         <td class="right">${formatCurrency(row.penalty_income)}</td>
         <td class="right">${formatCurrency(row.charge_income)}</td>
         <td class="right">${formatCurrency(row.other_income)}</td>
         <td class="right">${formatCurrency(inc)}</td>
-        <td class="right">${formatCurrency(exp)}</td>
+        <td class="right">${formatCurrency(row.cost_of_funds)}</td>
+        <td class="right">${formatCurrency(row.operating_expenses)}</td>
+        <td class="right">${formatCurrency(row.loan_loss_provision)}</td>
+        <td class="right">${formatCurrency(ded)}</td>
         <td class="right ${net >= 0 ? 'green' : 'red'}">${formatCurrency(net)}</td>
       </tr>`;
     }
     html += `<tr class="total"><td>TOTAL</td><td class="right">${formatCurrency(totalIncome)}</td><td></td><td></td><td></td>
-      <td class="right">${formatCurrency(totalIncome)}</td><td class="right">${formatCurrency(totalExpenses)}</td>
+      <td class="right">${formatCurrency(totalIncome)}</td><td></td><td></td><td></td>
+      <td class="right">${formatCurrency(totalDeductions)}</td>
       <td class="right ${totalNet >= 0 ? 'green' : 'red'}">${formatCurrency(totalNet)}</td></tr>`;
     html += `</tbody></table>
       <div class="signatures">
@@ -699,7 +708,7 @@ export const ReportsPage = () => {
       { key: 'income-report', label: 'Income Report' },
       { key: 'processing-charges', label: 'Processing Charges' },
       { key: 'cash-flow', label: 'Cash Flow' },
-      { key: 'branch-pl', label: 'Branch P&L' },
+      { key: 'branch-pl', label: 'Profit & Loss' },
     ]},
   ];
 
@@ -1114,50 +1123,68 @@ export const ReportsPage = () => {
             <div className="flex gap-3">
               <DatePicker placeholder="Start date" value={branchPLStartDate} onChange={(v) => setBranchPLStartDate(v)} oneTap />
               <DatePicker placeholder="End date" value={branchPLEndDate} onChange={(v) => setBranchPLEndDate(v)} oneTap />
+              <div className="ml-2 flex gap-1 border rounded overflow-hidden">
+                <button onClick={() => setBranchPLView('branch')} className={`px-3 py-1.5 text-sm font-medium ${branchPLView === 'branch' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>By Branch</button>
+                <button onClick={() => setBranchPLView('monthly')} className={`px-3 py-1.5 text-sm font-medium ${branchPLView === 'monthly' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Monthly Trend</button>
+              </div>
             </div>
             <div className="flex gap-3">
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printPLReport()}>Print</Button>
-              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(branchPLData, 'branch-pl', [
-                { key: 'branch_name', label: 'Branch' },
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(branchPLView === 'monthly' ? branchPLMonthly : branchPLData, 'profit-loss', [
+                { key: branchPLView === 'monthly' ? 'month' : 'branch_name', label: branchPLView === 'monthly' ? 'Month' : 'Branch' },
                 { key: 'interest_income', label: 'Interest Income', format: (v) => String(v) },
                 { key: 'penalty_income', label: 'Penalty Income', format: (v) => String(v) },
                 { key: 'charge_income', label: 'Processing Charges', format: (v) => String(v) },
                 { key: 'other_income', label: 'Other Income', format: (v) => String(v) },
                 { key: 'total_income', label: 'Total Income', format: (v) => String(v) },
-                { key: 'total_expenses', label: 'Total Expenses', format: (v) => String(v) },
+                { key: 'cost_of_funds', label: 'Cost of Funds', format: (v) => String(v) },
+                { key: 'operating_expenses', label: 'Operating Expenses', format: (v) => String(v) },
+                { key: 'loan_loss_provision', label: 'Loan Loss Provision', format: (v) => String(v) },
+                { key: 'total_deductions', label: 'Total Deductions', format: (v) => String(v) },
                 { key: 'net_pl', label: 'Net P&L', format: (v) => String(v) },
               ])}>Export CSV</Button>
             </div>
           </div>
 
-          <Table data={branchPLData} loading={branchPLLoading} height={500} rowHeight={50} virtualized>
-            <Column width={180}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
-            <Column width={140} align="right"><HeaderCell>Interest Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.interest_income)}</span>}</Cell></Column>
-            <Column width={140} align="right"><HeaderCell>Penalty Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.penalty_income)}</span>}</Cell></Column>
-            <Column width={150} align="right"><HeaderCell>Processing Charges</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.charge_income)}</span>}</Cell></Column>
-            <Column width={140} align="right"><HeaderCell>Other Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.other_income)}</span>}</Cell></Column>
-            <Column width={140} align="right"><HeaderCell>Total Income</HeaderCell><Cell>{(r: any) => <span className="text-green-700 font-bold">{formatCurrency(r.total_income)}</span>}</Cell></Column>
-            <Column width={140} align="right"><HeaderCell>Total Expenses</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-medium">{formatCurrency(r.total_expenses)}</span>}</Cell></Column>
-            <Column width={140} align="right"><HeaderCell>Net P&L</HeaderCell><Cell>{(r: any) => <span className={`font-bold ${r.net_pl >= 0 ? 'text-green-700' : 'text-red-700'}`}>{formatCurrency(r.net_pl)}</span>}</Cell></Column>
-          </Table>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6" bordered header={<span className="font-semibold">{branchPLView === 'monthly' ? 'Monthly Profit & Loss Trend' : 'Profit & Loss by Branch'}</span>}>
+            <Table data={branchPLView === 'monthly' ? branchPLMonthly : branchPLData} loading={branchPLLoading} height={500} rowHeight={50} virtualized>
+              <Column width={branchPLView === 'monthly' ? 120 : 160}><HeaderCell>{branchPLView === 'monthly' ? 'Month' : 'Branch'}</HeaderCell><Cell dataKey={branchPLView === 'monthly' ? 'month' : 'branch_name'} /></Column>
+              <Column width={130} align="right"><HeaderCell>Interest Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.interest_income)}</span>}</Cell></Column>
+              <Column width={130} align="right"><HeaderCell>Penalty Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.penalty_income)}</span>}</Cell></Column>
+              <Column width={140} align="right"><HeaderCell>Processing Charges</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.charge_income)}</span>}</Cell></Column>
+              <Column width={130} align="right"><HeaderCell>Other Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.other_income)}</span>}</Cell></Column>
+              <Column width={130} align="right"><HeaderCell>Total Income</HeaderCell><Cell>{(r: any) => <span className="text-green-700 font-bold">{formatCurrency(r.total_income)}</span>}</Cell></Column>
+              <Column width={130} align="right"><HeaderCell>Cost of Funds</HeaderCell><Cell>{(r: any) => <span className="text-orange-600 font-medium">{formatCurrency(r.cost_of_funds)}</span>}</Cell></Column>
+              <Column width={140} align="right"><HeaderCell>Operating Expenses</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-medium">{formatCurrency(r.operating_expenses)}</span>}</Cell></Column>
+              <Column width={150} align="right"><HeaderCell>Loan Loss Provision</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-medium">{formatCurrency(r.loan_loss_provision)}</span>}</Cell></Column>
+              <Column width={140} align="right"><HeaderCell>Total Deductions</HeaderCell><Cell>{(r: any) => <span className="text-red-700 font-medium">{formatCurrency(r.total_deductions)}</span>}</Cell></Column>
+              <Column width={130} align="right"><HeaderCell>Net P&L</HeaderCell><Cell>{(r: any) => <span className={`font-bold ${r.net_pl >= 0 ? 'text-green-700' : 'text-red-700'}`}>{formatCurrency(r.net_pl)}</span>}</Cell></Column>
+            </Table>
+          </Panel>
 
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
               <p className="text-sm text-green-600 dark:text-green-400 font-medium">Total Income</p>
               <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                {formatCurrency(branchPLData.reduce((s: number, r: any) => s + Number(r.total_income || 0), 0))}
+                {formatCurrency((branchPLView === 'monthly' ? branchPLMonthly : branchPLData).reduce((s: number, r: any) => s + Number(r.total_income || 0), 0))}
+              </p>
+            </div>
+            <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 border border-orange-200 dark:border-orange-800">
+              <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">Cost of Funds</p>
+              <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">
+                {formatCurrency((branchPLView === 'monthly' ? branchPLMonthly : branchPLData).reduce((s: number, r: any) => s + Number(r.cost_of_funds || 0), 0))}
               </p>
             </div>
             <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
-              <p className="text-sm text-red-600 dark:text-red-400 font-medium">Total Expenses</p>
+              <p className="text-sm text-red-600 dark:text-red-400 font-medium">Total Deductions</p>
               <p className="text-2xl font-bold text-red-700 dark:text-red-300">
-                {formatCurrency(branchPLData.reduce((s: number, r: any) => s + Number(r.total_expenses || 0), 0))}
+                {formatCurrency((branchPLView === 'monthly' ? branchPLMonthly : branchPLData).reduce((s: number, r: any) => s + Number(r.total_deductions || 0), 0))}
               </p>
             </div>
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
               <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Net P&L</p>
-              <p className={`text-2xl font-bold ${branchPLData.reduce((s: number, r: any) => s + Number(r.net_pl || 0), 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                {formatCurrency(branchPLData.reduce((s: number, r: any) => s + Number(r.net_pl || 0), 0))}
+              <p className={`text-2xl font-bold ${(branchPLView === 'monthly' ? branchPLMonthly : branchPLData).reduce((s: number, r: any) => s + Number(r.net_pl || 0), 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {formatCurrency((branchPLView === 'monthly' ? branchPLMonthly : branchPLData).reduce((s: number, r: any) => s + Number(r.net_pl || 0), 0))}
               </p>
             </div>
           </div>
