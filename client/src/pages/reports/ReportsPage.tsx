@@ -26,6 +26,8 @@ export const ReportsPage = () => {
   const [collectorFilter, setCollectorFilter] = useState<string | null>(null);
   const [collectorStartDate, setCollectorStartDate] = useState<Date | null>(null);
   const [collectorEndDate, setCollectorEndDate] = useState<Date | null>(null);
+  const [borrowerStartDate, setBorrowerStartDate] = useState<Date | null>(null);
+  const [borrowerEndDate, setBorrowerEndDate] = useState<Date | null>(null);
   const [collectorVisits, setCollectorVisits] = useState<any[]>([]);
   const [collectorPayments, setCollectorPayments] = useState<any[]>([]);
   const [selectedCollector, setSelectedCollector] = useState<string | null>(null);
@@ -84,6 +86,8 @@ export const ReportsPage = () => {
   const [appTypeData, setAppTypeData] = useState<any[]>([]);
   const [appTypeTotals, setAppTypeTotals] = useState<any[]>([]);
   const [appTypeLoading, setAppTypeLoading] = useState(false);
+  const [appTypeStartDate, setAppTypeStartDate] = useState<Date | null>(null);
+  const [appTypeEndDate, setAppTypeEndDate] = useState<Date | null>(null);
 
   const [dailyColData, setDailyColData] = useState<any[]>([]);
   const [dailyColLoading, setDailyColLoading] = useState(false);
@@ -94,6 +98,7 @@ export const ReportsPage = () => {
   const [loansGrantedLoading, setLoansGrantedLoading] = useState(false);
   const [loansGrantedStart, setLoansGrantedStart] = useState<string | null>(null);
   const [loansGrantedEnd, setLoansGrantedEnd] = useState<string | null>(null);
+  const [loansGrantedBranch, setLoansGrantedBranch] = useState<string | null>(null);
 
   const [masterListData, setMasterListData] = useState<any[]>([]);
   const [masterListLoading, setMasterListLoading] = useState(false);
@@ -103,6 +108,8 @@ export const ReportsPage = () => {
   const [expectedColLoading, setExpectedColLoading] = useState(false);
   const [expectedColStart, setExpectedColStart] = useState<string>(new Date().toISOString().slice(0, 10));
   const [expectedColEnd, setExpectedColEnd] = useState<string>(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); });
+  const [expectedColBranch, setExpectedColBranch] = useState<string | null>(null);
+  const [expectedColCollector, setExpectedColCollector] = useState<string | null>(null);
 
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
@@ -116,6 +123,7 @@ export const ReportsPage = () => {
   const [disbursementLoading, setDisbursementLoading] = useState(false);
   const [disbursementStart, setDisbursementStart] = useState<string | null>(null);
   const [disbursementEnd, setDisbursementEnd] = useState<string | null>(null);
+  const [disbursementBranch, setDisbursementBranch] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -226,14 +234,17 @@ export const ReportsPage = () => {
       if (activeTab !== 'application-types') return;
       setAppTypeLoading(true);
       try {
-        const { data } = await reportsApi.getApplicationTypes();
+        const params: any = {};
+        if (appTypeStartDate) params.startDate = appTypeStartDate.toISOString().split('T')[0];
+        if (appTypeEndDate) params.endDate = appTypeEndDate.toISOString().split('T')[0];
+        const { data } = await reportsApi.getApplicationTypes(params);
         setAppTypeData(data.data.details || []);
         setAppTypeTotals(data.data.totals || []);
       } catch { toaster.push(<Message type="error">Failed to load application types</Message>, { placement: 'topEnd' }); }
       finally { setAppTypeLoading(false); }
     };
     fetchAppTypes();
-  }, [activeTab]);
+  }, [activeTab, appTypeStartDate, appTypeEndDate]);
 
   useEffect(() => {
     const fetchCashFlow = async () => {
@@ -352,15 +363,15 @@ export const ReportsPage = () => {
       try {
         const params: any = {};
         if (borrowerPerfFilter) params.borrowerId = borrowerPerfFilter;
-        if (collectorStartDate) params.startDate = collectorStartDate.toISOString().split('T')[0];
-        if (collectorEndDate) params.endDate = collectorEndDate.toISOString().split('T')[0];
+        if (borrowerStartDate) params.startDate = borrowerStartDate.toISOString().split('T')[0];
+        if (borrowerEndDate) params.endDate = borrowerEndDate.toISOString().split('T')[0];
         const { data } = await reportsApi.getBorrowerPerformance(params);
         setBorrowerPerfData(data.data || []);
       } catch { toaster.push(<Message type="error">Failed to load borrower performance data</Message>, { placement: 'topEnd' }); }
       finally { setBorrowerPerfLoading(false); }
     };
     fetchBorrowerPerf();
-  }, [activeTab, borrowerPerfFilter, collectorStartDate, collectorEndDate]);
+  }, [activeTab, borrowerPerfFilter, borrowerStartDate, borrowerEndDate]);
 
   useEffect(() => { getCompanySettings().then(setCompanyInfo); }, []);
 
@@ -401,13 +412,14 @@ export const ReportsPage = () => {
         const params: any = {};
         if (loansGrantedStart) params.startDate = loansGrantedStart;
         if (loansGrantedEnd) params.endDate = loansGrantedEnd;
+        if (loansGrantedBranch) params.branchId = loansGrantedBranch;
         const { data } = await reportsApi.getLoansGranted(params);
         setLoansGrantedData(data.data || []);
       } catch { toaster.push(<Message type="error">Failed to load loans granted</Message>, { placement: 'topEnd' }); }
       finally { setLoansGrantedLoading(false); }
     };
     fetchLoansGranted();
-  }, [activeTab, loansGrantedStart, loansGrantedEnd]);
+  }, [activeTab, loansGrantedStart, loansGrantedEnd, loansGrantedBranch]);
 
   useEffect(() => {
     if (activeTab !== 'borrower-master-list') return;
@@ -427,13 +439,13 @@ export const ReportsPage = () => {
     const fetch = async () => {
       setExpectedColLoading(true);
       try {
-        const { data } = await reportsApi.getExpectedCollections({ startDate: expectedColStart, endDate: expectedColEnd });
+        const { data } = await reportsApi.getExpectedCollections({ startDate: expectedColStart, endDate: expectedColEnd, branchId: expectedColBranch, collectorId: expectedColCollector });
         setExpectedColData(data.data || []);
       } catch { toaster.push(<Message type="error">Failed to load expected collections</Message>, { placement: 'topEnd' }); }
       finally { setExpectedColLoading(false); }
     };
     fetch();
-  }, [activeTab, expectedColStart, expectedColEnd]);
+  }, [activeTab, expectedColStart, expectedColEnd, expectedColBranch, expectedColCollector]);
 
   useEffect(() => {
     if (activeTab !== 'portfolio-summary') return;
@@ -472,13 +484,14 @@ export const ReportsPage = () => {
         const params: any = {};
         if (disbursementStart) params.startDate = disbursementStart;
         if (disbursementEnd) params.endDate = disbursementEnd;
+        if (disbursementBranch) params.branchId = disbursementBranch;
         const { data } = await reportsApi.getDisbursements(params);
         setDisbursementData(data.data || []);
       } catch { toaster.push(<Message type="error">Failed to load disbursements</Message>, { placement: 'topEnd' }); }
       finally { setDisbursementLoading(false); }
     };
     fetch();
-  }, [activeTab, disbursementStart, disbursementEnd]);
+  }, [activeTab, disbursementStart, disbursementEnd, disbursementBranch]);
 
   const statusColor = (s: string) => {
     return s === 'paid' ? 'green' : s === 'partial' ? 'blue' : 'orange';
@@ -815,6 +828,11 @@ export const ReportsPage = () => {
                 { key: 'count', label: 'Count' },
                 { key: 'total_amount', label: 'Total Amount', format: (v) => formatCurrency(v) },
               ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(agingData, 'aging-report', [
+                { key: 'aging_bucket', label: 'Bucket' },
+                { key: 'count', label: 'Count' },
+                { key: 'total_amount', label: 'Total Amount' },
+              ])}>Export CSV</Button>
             </div>
           </Panel>
         </div>
@@ -848,6 +866,18 @@ export const ReportsPage = () => {
                 { key: 'last_payment_date', label: 'Last Payment', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
                 { key: 'computed_status', label: 'Status' },
               ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(delinquencyData, 'overdue-list', [
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'principal_amount', label: 'Principal' },
+                { key: 'outstanding_balance', label: 'Outstanding' },
+                { key: 'total_overdue', label: 'Total Overdue' },
+                { key: 'days_overdue', label: 'Days OD' },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'collector_name', label: 'Collector' },
+                { key: 'last_payment_date', label: 'Last Payment', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
+                { key: 'computed_status', label: 'Status' },
+              ])}>Export CSV</Button>
             </div>
           </div>
           <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Overdue List (${delinquencyData.length})`}>
@@ -1288,6 +1318,43 @@ export const ReportsPage = () => {
   </body></html>`;
   printWindow(html);
 }}>Print Report</Button>
+<Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+  const flatRows: any[] = [];
+  for (const loan of amortData) {
+    for (const s of loan.schedules) {
+      flatRows.push({
+        borrower_name: loan.borrower_name,
+        borrower_code: loan.borrower_code,
+        loan_number: loan.loan_number,
+        installment_no: s.installment_no,
+        due_date: new Date(s.due_date).toLocaleDateString(),
+        total_due: s.total_due,
+        paid_amount: s.paid_amount,
+        penalty_amount: s.penalty_amount,
+        paid_at: s.paid_at ? new Date(s.paid_at).toLocaleDateString() : '',
+        status: s.status,
+        outstanding_balance: loan.outstanding_balance,
+        net_proceeds: loan.effective_net_proceeds,
+        previous_balance: loan.previous_balance,
+      });
+    }
+  }
+  exportCSV(flatRows, 'amortization-schedule', [
+    { key: 'borrower_name', label: 'Borrower' },
+    { key: 'borrower_code', label: 'Code' },
+    { key: 'loan_number', label: 'Loan #' },
+    { key: 'installment_no', label: 'Installment #' },
+    { key: 'due_date', label: 'Due Date' },
+    { key: 'total_due', label: 'Total Due' },
+    { key: 'paid_amount', label: 'Paid Amount' },
+    { key: 'penalty_amount', label: 'Penalty' },
+    { key: 'paid_at', label: 'Payment Date' },
+    { key: 'status', label: 'Status' },
+    { key: 'outstanding_balance', label: 'Outstanding' },
+    { key: 'net_proceeds', label: 'Net Proceeds' },
+    { key: 'previous_balance', label: 'Previous Balance' },
+  ]);
+}}>Export CSV</Button>
           </div>
 
           {amortData.length === 0 ? (
@@ -1398,7 +1465,7 @@ export const ReportsPage = () => {
                 )}</Cell>
               </Column>
             </Table>
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Collector Performance Evaluation', performanceData, [
                 { key: 'collector_name', label: 'Collector' },
                 { key: 'total_assigned', label: 'Assigned' },
@@ -1414,6 +1481,21 @@ export const ReportsPage = () => {
                 { key: 'performance_score', label: 'Score' },
                 { key: 'grade', label: 'Grade' },
               ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(performanceData, 'collector-performance', [
+                { key: 'collector_name', label: 'Collector' },
+                { key: 'total_assigned', label: 'Assigned' },
+                { key: 'active_assigned', label: 'Active' },
+                { key: 'delinquent_assigned', label: 'Delinq' },
+                { key: 'closed_assigned', label: 'Closed' },
+                { key: 'total_visits', label: 'Visits' },
+                { key: 'total_outstanding', label: 'Outstanding' },
+                { key: 'collection_rate', label: 'Collection %' },
+                { key: 'visit_efficiency', label: 'Visit Eff. %' },
+                { key: 'delinquency_rate', label: 'Delinq. %' },
+                { key: 'on_time_rate', label: 'On-Time %' },
+                { key: 'performance_score', label: 'Score' },
+                { key: 'grade', label: 'Grade' },
+              ])}>Export CSV</Button>
             </div>
           </Panel>
 
@@ -1462,8 +1544,19 @@ export const ReportsPage = () => {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div className="flex gap-3">
-              <input type="date" value={loansGrantedStart || ''} onChange={(e) => setLoansGrantedStart(e.target.value || null)} className="rs-input w-40" />
-              <input type="date" value={loansGrantedEnd || ''} onChange={(e) => setLoansGrantedEnd(e.target.value || null)} className="rs-input w-40" />
+              <input type="date" value={loansGrantedStart || ''} onChange={(e) => setLoansGrantedStart(e.target.value || null)} className="rs-input w-36" />
+              <input type="date" value={loansGrantedEnd || ''} onChange={(e) => setLoansGrantedEnd(e.target.value || null)} className="rs-input w-36" />
+              <div className="w-40">
+                <SelectPicker
+                  placeholder="All branches"
+                  data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                  value={loansGrantedBranch}
+                  onChange={(v) => setLoansGrantedBranch(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                  size="sm"
+                />
+              </div>
             </div>
             <div className="flex gap-2">
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Loans Granted', loansGrantedData, [
@@ -1549,8 +1642,30 @@ export const ReportsPage = () => {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div className="flex gap-3">
-              <input type="date" value={expectedColStart} onChange={(e) => setExpectedColStart(e.target.value)} className="rs-input w-40" />
-              <input type="date" value={expectedColEnd} onChange={(e) => setExpectedColEnd(e.target.value)} className="rs-input w-40" />
+              <input type="date" value={expectedColStart} onChange={(e) => setExpectedColStart(e.target.value)} className="rs-input w-36" />
+              <input type="date" value={expectedColEnd} onChange={(e) => setExpectedColEnd(e.target.value)} className="rs-input w-36" />
+              <div className="w-40">
+                <SelectPicker
+                  placeholder="All branches"
+                  data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                  value={expectedColBranch}
+                  onChange={(v) => setExpectedColBranch(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                  size="sm"
+                />
+              </div>
+              <div className="w-44">
+                <SelectPicker
+                  placeholder="All collectors"
+                  data={collectors.map((c: any) => ({ label: `${c.first_name} ${c.last_name}`, value: c.id }))}
+                  value={expectedColCollector}
+                  onChange={(v) => setExpectedColCollector(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                  size="sm"
+                />
+              </div>
             </div>
             <div className="flex gap-2">
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Expected Collections', expectedColData, [
@@ -1755,7 +1870,15 @@ export const ReportsPage = () => {
 
       {activeTab === 'application-types' && (
         <div>
-          <div className="flex justify-end gap-2 mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <DatePicker placeholder="Start date" value={appTypeStartDate} onChange={(v) => setAppTypeStartDate(v)} oneTap />
+              <DatePicker placeholder="End date" value={appTypeEndDate} onChange={(v) => setAppTypeEndDate(v)} oneTap />
+              {(appTypeStartDate || appTypeEndDate) && (
+                <Button size="sm" appearance="ghost" onClick={() => { setAppTypeStartDate(null); setAppTypeEndDate(null); }}>Clear</Button>
+              )}
+            </div>
+            <div className="flex gap-2">
             <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Applications by Type', appTypeData, [
               { key: 'branch_name', label: 'Branch' },
               { key: 'application_type', label: 'Type' },
@@ -1770,6 +1893,7 @@ export const ReportsPage = () => {
                 { key: 'total_principal', label: 'Total Principal', format: (v) => formatCurrency(v) },
               ]);
             }}>Export CSV</Button>
+          </div>
           </div>
 
           <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6" bordered header="Applications per Branch">
@@ -1795,8 +1919,19 @@ export const ReportsPage = () => {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div className="flex gap-3">
-              <input type="date" value={disbursementStart || ''} onChange={(e) => setDisbursementStart(e.target.value || null)} className="rs-input w-40" />
-              <input type="date" value={disbursementEnd || ''} onChange={(e) => setDisbursementEnd(e.target.value || null)} className="rs-input w-40" />
+              <input type="date" value={disbursementStart || ''} onChange={(e) => setDisbursementStart(e.target.value || null)} className="rs-input w-36" />
+              <input type="date" value={disbursementEnd || ''} onChange={(e) => setDisbursementEnd(e.target.value || null)} className="rs-input w-36" />
+              <div className="w-40">
+                <SelectPicker
+                  placeholder="All branches"
+                  data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                  value={disbursementBranch}
+                  onChange={(v) => setDisbursementBranch(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                  size="sm"
+                />
+              </div>
             </div>
             <div className="flex gap-2">
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Disbursement Report', disbursementData, [
@@ -1981,8 +2116,8 @@ export const ReportsPage = () => {
                   cleanable
                 />
               </div>
-              <DatePicker placeholder="Start date" value={collectorStartDate} onChange={(v) => setCollectorStartDate(v)} oneTap />
-              <DatePicker placeholder="End date" value={collectorEndDate} onChange={(v) => setCollectorEndDate(v)} oneTap />
+              <DatePicker placeholder="Start date" value={borrowerStartDate} onChange={(v) => setBorrowerStartDate(v)} oneTap />
+              <DatePicker placeholder="End date" value={borrowerEndDate} onChange={(v) => setBorrowerEndDate(v)} oneTap />
             </div>
           </div>
           <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-4" bordered header="Borrower Performance Evaluation">
@@ -2022,7 +2157,7 @@ export const ReportsPage = () => {
                 }}</Cell>
               </Column>
             </Table>
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Borrower Performance Evaluation', borrowerPerfData, [
                 { key: 'borrower_name', label: 'Borrower' },
                 { key: 'current_collector_name', label: 'Collector' },
@@ -2037,6 +2172,20 @@ export const ReportsPage = () => {
                 { key: 'risk_score', label: 'Score' },
                 { key: 'grade', label: 'Grade' },
               ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(borrowerPerfData, 'borrower-performance', [
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'current_collector_name', label: 'Collector' },
+                { key: 'total_loans', label: 'Loans' },
+                { key: 'completed_loans', label: 'Completed' },
+                { key: 'active_loans', label: 'Active' },
+                { key: 'delinquent_loans', label: 'Delinq' },
+                { key: 'outstanding_balance', label: 'Outstanding' },
+                { key: 'on_time_rate', label: 'On-Time %' },
+                { key: 'completion_rate', label: 'Completion %' },
+                { key: 'avg_days_late', label: 'Avg Late' },
+                { key: 'risk_score', label: 'Score' },
+                { key: 'grade', label: 'Grade' },
+              ])}>Export CSV</Button>
             </div>
           </Panel>
         </div>
