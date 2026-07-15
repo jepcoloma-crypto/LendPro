@@ -170,14 +170,14 @@ export const LoansPage = () => {
           <p className="text-gray-500 dark:text-gray-400">Manage active and closed loans</p>
         </div>
         {isAdmin && (
-          <>
+          <div className="flex gap-2">
             <Button appearance="subtle" color="violet" onClick={async () => { try { const [bRes, pRes, cRes] = await Promise.all([borrowersApi.getAll({ limit: 1000 }), loanProductsApi.getAll(), usersApi.getCollectors()]); setHistoryBorrowers(bRes.data.data || []); setHistoryProducts(pRes.data.data || []); setHistoryCollectors(cRes.data.data || []); } catch { toaster.push(<Message type="error">Failed to load data</Message>, { placement: 'topEnd' }); } setHistoryForm({ paymentFrequency: 'monthly', interestType: 'flat-rate', status: 'paid', schedule: [] }); setHistoryFormKey((k) => k + 1); setHistoryOpen(true); }} startIcon={<FileText className="w-4 h-4" />}>
               Record Historical
             </Button>
             <Button appearance="subtle" color="cyan" onClick={() => setImportOpen(true)} startIcon={<Upload className="w-4 h-4" />}>
               Import CSV
             </Button>
-          </>
+          </div>
         )}
       </div>
 
