@@ -257,7 +257,7 @@ export class LoanService {
     return ids.length;
   }
 
-  async releaseLoan(applicationId: string, userId: string, method: string = 'cash', reference?: string) {
+  async releaseLoan(applicationId: string, userId: string, method: string = 'cash', reference?: string, releaseDate?: Date) {
     const app = await loanApplicationRepo.findById(applicationId);
     if (!app) throw new Error('Application not found');
     if (app.status !== 'approved') throw new Error('Application is not approved');
@@ -267,13 +267,15 @@ export class LoanService {
 
     const product = await loanProductRepo.findById(app.loan_product_id);
 
+    const relDate = releaseDate || new Date();
+
     const { schedule, totalInterest, totalAmount } = calculateAmortization(
       parseFloat(app.principal_amount),
       parseFloat(app.interest_rate),
       app.term_months,
       app.interest_type,
       app.payment_frequency,
-      new Date(),
+      relDate,
       app.term_type || 'months',
       app.installment_count || undefined
     );
@@ -281,7 +283,7 @@ export class LoanService {
     const loanNumber = generateLoanNumber();
 
     const maturityDate = (() => {
-      const d = new Date();
+      const d = new Date(relDate);
       if (app.term_type === 'days') d.setDate(d.getDate() + app.term_months);
       else if (app.term_type === 'weeks') d.setDate(d.getDate() + app.term_months * 7);
       else d.setMonth(d.getMonth() + app.term_months);
@@ -305,7 +307,7 @@ export class LoanService {
       application_type: app.application_type || 'New',
       payment_frequency: app.payment_frequency,
       status: 'active',
-      release_date: new Date(),
+      release_date: relDate,
       next_payment_date: schedule[0]?.dueDate || null,
       maturity_date: maturityDate,
       late_payment_fee: product?.late_payment_fee || 0,

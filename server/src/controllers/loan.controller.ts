@@ -515,7 +515,14 @@ export class LoanController {
         }
       }
 
-      const loan = await loanService.releaseLoan(appId, req.user!.userId, method, req.body.reference);
+      const shiftDate = new Date(myShift.opened_at);
+      const today = new Date();
+      const shiftDay = shiftDate.toISOString().slice(0, 10);
+      const todayDay = today.toISOString().slice(0, 10);
+      if (shiftDay !== todayDay) {
+        throw new AppError(400, `Your open shift is dated ${shiftDay} but today is ${todayDay}. Release date and shift date must match.`);
+      }
+      const loan = await loanService.releaseLoan(appId, req.user!.userId, method, req.body.reference, shiftDate);
 
       await autoRecordTransaction({
         userId: req.user!.userId,
