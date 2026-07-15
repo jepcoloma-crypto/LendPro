@@ -70,7 +70,7 @@ async function updateVercelEnv(newUrl) {
     'Content-Type': 'application/json',
   };
 
-  const fullApiUrl = `${newUrl}/api`;
+  const fullApiUrl = newUrl;
   if (fullApiUrl === process.env._lastSetUrl) {
     console.log('[watcher] VITE_API_BASE_URL already up to date');
     return true;
