@@ -229,7 +229,7 @@ const SystemToolsTab = () => {
 
   return (
     <div className="space-y-4">
-      {/* Health Check */}
+      {/* Health Check — full width */}
       <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-sm font-semibold flex items-center gap-2"><HeartPulse className="w-4 h-4 text-green-500" /> System Health</div>}>
         <p className="text-sm text-gray-500 mb-3">Check database connection and table record counts.</p>
         <Button appearance="primary" onClick={checkHealth} loading={healthLoading} startIcon={<RefreshCw className="w-4 h-4" />}>Run Health Check</Button>
@@ -251,48 +251,51 @@ const SystemToolsTab = () => {
         )}
       </Panel>
 
-      {/* Database Backup */}
-      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-sm font-semibold flex items-center gap-2"><Download className="w-4 h-4 text-purple-500" /> Database Backup</div>}>
-        <p className="text-sm text-gray-500 mb-3">Download a SQL dump — full database or selected modules only.</p>
-        <Button appearance="primary" color="violet" onClick={() => { setBackupMode('full'); setBackupModules([]); setBackupOpen(true); }} startIcon={<Download className="w-4 h-4" />}>
-          Download Backup
-        </Button>
-      </Panel>
+      {/* Action cards grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {/* Database Backup */}
+        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-xs font-semibold flex items-center gap-2"><Download className="w-3.5 h-3.5 text-purple-500" /> Database Backup</div>}>
+          <p className="text-xs text-gray-500 mb-3">Download a SQL dump — full or selected modules.</p>
+          <Button size="sm" appearance="primary" color="violet" onClick={() => { setBackupMode('full'); setBackupModules([]); setBackupOpen(true); }} startIcon={<Download className="w-3.5 h-3.5" />}>
+            Download Backup
+          </Button>
+        </Panel>
 
-      {/* Database Restore */}
-      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-amber-200 dark:border-amber-800" bordered header={<div className="text-sm font-semibold flex items-center gap-2 text-amber-600"><Upload className="w-4 h-4" /> Database Restore</div>}>
-        <p className="text-sm text-gray-500 mb-3">Upload a <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">.sql</code> backup to restore. <strong className="text-red-500">Overwrites existing data.</strong></p>
-        <input type="file" accept=".sql" ref={fileInputRef} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setRestoreFile(f); setRestoreOpen(true); } }} />
-        <Button appearance="primary" color="orange" onClick={() => fileInputRef.current?.click()} startIcon={<Upload className="w-4 h-4" />}>Upload & Restore</Button>
-      </Panel>
+        {/* Database Restore */}
+        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-amber-200 dark:border-amber-800" bordered header={<div className="text-xs font-semibold flex items-center gap-2 text-amber-600"><Upload className="w-3.5 h-3.5" /> Database Restore</div>}>
+          <p className="text-xs text-gray-500 mb-3">Upload <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">.sql</code> to restore. <strong className="text-red-500">Overwrites data.</strong></p>
+          <input type="file" accept=".sql" ref={fileInputRef} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setRestoreFile(f); setRestoreOpen(true); } }} />
+          <Button size="sm" appearance="primary" color="orange" onClick={() => fileInputRef.current?.click()} startIcon={<Upload className="w-3.5 h-3.5" />}>Upload & Restore</Button>
+        </Panel>
 
-      {/* Recalculate Balances */}
-      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-sm font-semibold flex items-center gap-2"><Database className="w-4 h-4 text-blue-500" /> Recalculate Loan Balances</div>}>
-        <p className="text-sm text-gray-500 mb-3">Recompute outstanding balances for all active loans.</p>
-        <Button appearance="primary" color="blue" onClick={recalculate} loading={recalcLoading} startIcon={<RefreshCw className="w-4 h-4" />}>Recalculate Now</Button>
-        {recalcResult && <p className="text-sm text-green-600 mt-2">{recalcResult}</p>}
-      </Panel>
+        {/* Recalculate Balances */}
+        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-xs font-semibold flex items-center gap-2"><Database className="w-3.5 h-3.5 text-blue-500" /> Recalculate Balances</div>}>
+          <p className="text-xs text-gray-500 mb-3">Recompute outstanding balances for all active loans.</p>
+          <Button size="sm" appearance="primary" color="blue" onClick={recalculate} loading={recalcLoading} startIcon={<RefreshCw className="w-3.5 h-3.5" />}>Recalculate Now</Button>
+          {recalcResult && <p className="text-xs text-green-600 mt-2">{recalcResult}</p>}
+        </Panel>
 
-      {/* Apply Penalties */}
-      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-sm font-semibold flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-orange-500" /> Apply Overdue Penalties</div>}>
-        <p className="text-sm text-gray-500 mb-3">Scan overdue schedules and apply late fees/penalties.</p>
-        <Button appearance="primary" color="orange" onClick={async () => {
-          setPenaltyLoading(true); setPenaltyResult(null);
-          try {
-            const { data } = await utilitiesApi.applyPenalties();
-            setPenaltyResult(data.message);
-            toaster.push(<Message type="success">{data.message}</Message>, { placement: 'topEnd' });
-          } catch { toaster.push(<Message type="error">Failed to apply penalties</Message>, { placement: 'topEnd' }); }
-          finally { setPenaltyLoading(false); }
-        }} loading={penaltyLoading} startIcon={<AlertTriangle className="w-4 h-4" />}>Apply Penalties</Button>
-        {penaltyResult && <p className="text-sm text-orange-600 mt-2">{penaltyResult}</p>}
-      </Panel>
+        {/* Apply Penalties */}
+        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="text-xs font-semibold flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 text-orange-500" /> Apply Penalties</div>}>
+          <p className="text-xs text-gray-500 mb-3">Scan overdue schedules and apply late fees.</p>
+          <Button size="sm" appearance="primary" color="orange" onClick={async () => {
+            setPenaltyLoading(true); setPenaltyResult(null);
+            try {
+              const { data } = await utilitiesApi.applyPenalties();
+              setPenaltyResult(data.message);
+              toaster.push(<Message type="success">{data.message}</Message>, { placement: 'topEnd' });
+            } catch { toaster.push(<Message type="error">Failed to apply penalties</Message>, { placement: 'topEnd' }); }
+            finally { setPenaltyLoading(false); }
+          }} loading={penaltyLoading} startIcon={<AlertTriangle className="w-3.5 h-3.5" />}>Apply Penalties</Button>
+          {penaltyResult && <p className="text-xs text-orange-600 mt-2">{penaltyResult}</p>}
+        </Panel>
 
-      {/* Clear Operational Data */}
-      <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-red-200 dark:border-red-800" bordered header={<div className="text-sm font-semibold flex items-center gap-2 text-red-600"><Trash2 className="w-4 h-4" /> Clear Operational Data</div>}>
-        <p className="text-sm text-gray-500 mb-3">Remove data from selected modules. Users, roles, loan products, charges, and settings are always preserved.</p>
-        <Button appearance="primary" color="red" onClick={() => { setClearModules([]); setClearOpen(true); }} startIcon={<Trash2 className="w-4 h-4" />}>Clear Data</Button>
-      </Panel>
+        {/* Clear Operational Data */}
+        <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-red-200 dark:border-red-800" bordered header={<div className="text-xs font-semibold flex items-center gap-2 text-red-600"><Trash2 className="w-3.5 h-3.5" /> Clear Data</div>}>
+          <p className="text-xs text-gray-500 mb-3">Remove data from selected operational modules.</p>
+          <Button size="sm" appearance="primary" color="red" onClick={() => { setClearModules([]); setClearOpen(true); }} startIcon={<Trash2 className="w-3.5 h-3.5" />}>Clear Data</Button>
+        </Panel>
+      </div>
 
       {/* Backup Modal */}
       <Modal open={backupOpen} onClose={() => { if (!backupLoading) { setBackupOpen(false); setBackupProgress(0); setBackupTotal(0); } }} size="sm">

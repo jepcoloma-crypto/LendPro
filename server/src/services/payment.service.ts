@@ -131,7 +131,7 @@ export class PaymentService {
 
       const { rows: [payment] } = await writeClient.query(
         `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, penalty_waived, advance_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'completed',$15,$16,$17) RETURNING *`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'completed',$16,$17) RETURNING *`,
         [paymentNumber, data.loanId, loan.borrower_id, netForSchedules + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount, penaltyWaived, advanceAmount,
          data.paymentMethod || 'cash', data.referenceNumber || null, data.paymentDate || new Date(), userId, receiptNumber,
          data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
@@ -278,7 +278,7 @@ export class PaymentService {
 
       const { rows: [payment] } = await writeClient.query(
         `INSERT INTO payments (payment_number, loan_id, borrower_id, amount, principal_amount, interest_amount, penalty_amount, penalty_waived, advance_amount, payment_method, reference_number, payment_date, received_by, receipt_number, notes, status, collector_id, remittance_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'completed',$15,$16,$17) RETURNING *`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'completed',$16,$17) RETURNING *`,
         [paymentNumber, data.loanId, loan.borrower_id, totalAllocAmount + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount, penaltyWaived, 0,
          data.paymentMethod || 'cash', data.referenceNumber || null, data.paymentDate || new Date(), userId, receiptNumber,
          data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
