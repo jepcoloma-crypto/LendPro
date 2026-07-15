@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Tag, Modal, Form, toaster, Message, SelectPicker, InputNumber, Input } from 'rsuite';
 import { loansApi, borrowersApi, loanProductsApi, usersApi } from '../../services/api';
 import { Loan } from '../../types';
-import { Eye, Edit3, Trash2, ExternalLink, Ban, RefreshCw, FileText, Upload } from 'lucide-react';
+import { Eye, Edit3, Trash2, ExternalLink, Ban, RefreshCw, FileText, Upload, Download } from 'lucide-react';
 import { DataTable } from '../../components/DataTable';
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
 import { formatCurrency, statusColor } from '../../utils/format';
@@ -468,7 +468,13 @@ export const LoansPage = () => {
             <code>borrower_code, principal_amount, interest_rate, term_months, release_date, payment_frequency, total_paid, paid_up_to_date, status, previous_balance, collector_code, loan_product_name</code>
           </div>
           <p className="text-xs text-gray-400 mb-4">Only <strong>borrower_code</strong>, <strong>principal_amount</strong>, <strong>interest_rate</strong>, <strong>term_months</strong>, and <strong>release_date</strong> are required. All others are optional.</p>
-          <input type="file" accept=".csv" onChange={handleImportCsv} disabled={importLoading} className="rs-input" />
+          <div className="flex gap-2 items-center mb-2">
+            <input type="file" accept=".csv" onChange={handleImportCsv} disabled={importLoading} className="rs-input flex-1" />
+            <Button size="sm" appearance="ghost" onClick={() => {
+              const csv = 'borrower_code,principal_amount,interest_rate,term_months,release_date,payment_frequency,total_paid,paid_up_to_date,status,previous_balance,collector_code,loan_product_name,interest_type\nB-MRA6JTBUL396,10000,5,6,2025-01-15,monthly,5000,2025-04-15,paid,0,COL001,Standard Loan,flat-rate\n,20000,3.5,12,2025-03-01,monthly,,,,active,0,,,flat-rate';
+              const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv); a.download = 'historical-loan-template.csv'; a.click();
+            }}><Download className="w-3.5 h-3.5 mr-1" />Template</Button>
+          </div>
           {importLoading && <p className="text-sm text-blue-600 mt-2">Processing... this may take a moment.</p>}
           {importResult && (
             <div className="mt-4 p-3 rounded text-sm" style={{ background: importResult.errors?.length ? '#fff3cd' : '#d4edda' }}>
