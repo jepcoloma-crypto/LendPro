@@ -111,6 +111,7 @@ router.delete('/applications/:id/documents/:docId', authenticate, auditLog('dele
 // Loans
 router.get('/loans', authenticate, loanController.getLoans.bind(loanController));
 router.post('/loans/historical', authenticate, authorize('super-admin', 'admin'), auditLog('create', 'loan'), loanController.createHistoricalLoan.bind(loanController));
+router.post('/loans/historical/import', authenticate, authorize('super-admin', 'admin'), uploadCsv, auditLog('import', 'loan'), loanController.importHistoricalCsv.bind(loanController));
 router.get('/loans/dashboard', authenticate, loanController.getDashboardStats.bind(loanController));
 router.get('/loans/:id', authenticate, loanController.getLoanById.bind(loanController));
 router.get('/loans/:id/schedule', authenticate, loanController.getLoanSchedule.bind(loanController));

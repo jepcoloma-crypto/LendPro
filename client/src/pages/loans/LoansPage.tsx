@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Tag, Modal, Form, toaster, Message, SelectPicker, InputNumber, Input } from 'rsuite';
 import { loansApi, borrowersApi, loanProductsApi, usersApi } from '../../services/api';
 import { Loan } from '../../types';
-import { Eye, Edit3, Trash2, ExternalLink, Ban, RefreshCw, FileText } from 'lucide-react';
+import { Eye, Edit3, Trash2, ExternalLink, Ban, RefreshCw, FileText, Upload } from 'lucide-react';
 import { DataTable } from '../../components/DataTable';
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
 import { formatCurrency, statusColor } from '../../utils/format';
@@ -44,7 +44,30 @@ export const LoansPage = () => {
   const [historyBorrowers, setHistoryBorrowers] = useState<any[]>([]);
   const [historyProducts, setHistoryProducts] = useState<any[]>([]);
   const [historyCollectors, setHistoryCollectors] = useState<any[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
   const limit = 20;
+
+  const handleImportCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportLoading(true);
+    setImportResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const { data } = await loansApi.importHistoricalCsv(fd);
+      setImportResult(data.data);
+      toaster.push(<Message type={data.data.errors?.length ? 'warning' : 'success'}>{`${data.data.inserted} of ${data.data.total} loans imported${data.data.errors?.length ? ` (${data.data.errors.length} errors)` : ''}`}</Message>, { placement: 'topEnd' });
+    } catch (err: any) {
+      toaster.push(<Message type="error">{err.response?.data?.error || err.message}</Message>, { placement: 'topEnd' });
+    } finally {
+      setImportLoading(false);
+      e.target.value = '';
+      fetchLoans();
+    }
+  };
 
   const fetchLoans = async () => {
     setLoading(true);
@@ -147,9 +170,14 @@ export const LoansPage = () => {
           <p className="text-gray-500 dark:text-gray-400">Manage active and closed loans</p>
         </div>
         {isAdmin && (
-          <Button appearance="subtle" color="violet" onClick={async () => { try { const [bRes, pRes, cRes] = await Promise.all([borrowersApi.getAll({ limit: 1000 }), loanProductsApi.getAll(), usersApi.getCollectors()]); setHistoryBorrowers(bRes.data.data || []); setHistoryProducts(pRes.data.data || []); setHistoryCollectors(cRes.data.data || []); } catch { toaster.push(<Message type="error">Failed to load data</Message>, { placement: 'topEnd' }); } setHistoryForm({ paymentFrequency: 'monthly', interestType: 'flat-rate', status: 'paid', schedule: [] }); setHistoryFormKey((k) => k + 1); setHistoryOpen(true); }} startIcon={<FileText className="w-4 h-4" />}>
-            Record Historical
-          </Button>
+          <>
+            <Button appearance="subtle" color="violet" onClick={async () => { try { const [bRes, pRes, cRes] = await Promise.all([borrowersApi.getAll({ limit: 1000 }), loanProductsApi.getAll(), usersApi.getCollectors()]); setHistoryBorrowers(bRes.data.data || []); setHistoryProducts(pRes.data.data || []); setHistoryCollectors(cRes.data.data || []); } catch { toaster.push(<Message type="error">Failed to load data</Message>, { placement: 'topEnd' }); } setHistoryForm({ paymentFrequency: 'monthly', interestType: 'flat-rate', status: 'paid', schedule: [] }); setHistoryFormKey((k) => k + 1); setHistoryOpen(true); }} startIcon={<FileText className="w-4 h-4" />}>
+              Record Historical
+            </Button>
+            <Button appearance="subtle" color="cyan" onClick={() => setImportOpen(true)} startIcon={<Upload className="w-4 h-4" />}>
+              Import CSV
+            </Button>
+          </>
         )}
       </div>
 
@@ -428,6 +456,33 @@ export const LoansPage = () => {
             finally { setHistoryLoading(false); }
           }} startIcon={<FileText className="w-4 h-4" />}>Save Historical Loan</Button>
           <Button appearance="subtle" onClick={() => setHistoryOpen(false)}>Cancel</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Import CSV Modal */}
+      <Modal open={importOpen} onClose={() => { setImportOpen(false); setImportResult(null); }} size="sm">
+        <Modal.Header><Modal.Title>Import Historical Loans from CSV</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <p className="text-sm text-gray-500 mb-4">Upload a CSV file with historical loan data. Required columns:</p>
+          <div className="text-xs bg-gray-50 dark:bg-gray-900 p-3 rounded mb-4 font-mono overflow-x-auto">
+            <code>borrower_code, principal_amount, interest_rate, term_months, release_date, payment_frequency, total_paid, paid_up_to_date, status, previous_balance, collector_code, loan_product_name</code>
+          </div>
+          <p className="text-xs text-gray-400 mb-4">Only <strong>borrower_code</strong>, <strong>principal_amount</strong>, <strong>interest_rate</strong>, <strong>term_months</strong>, and <strong>release_date</strong> are required. All others are optional.</p>
+          <input type="file" accept=".csv" onChange={handleImportCsv} disabled={importLoading} className="rs-input" />
+          {importLoading && <p className="text-sm text-blue-600 mt-2">Processing... this may take a moment.</p>}
+          {importResult && (
+            <div className="mt-4 p-3 rounded text-sm" style={{ background: importResult.errors?.length ? '#fff3cd' : '#d4edda' }}>
+              <strong>Result:</strong> {importResult.inserted} of {importResult.total} loans imported.
+              {importResult.errors?.length > 0 && (
+                <ul className="mt-2 text-xs space-y-1">
+                  {importResult.errors.map((e: any, i: number) => <li key={i} className="text-red-600">Row {e.row}: {e.message}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button appearance="subtle" onClick={() => { setImportOpen(false); setImportResult(null); }}>Close</Button>
         </Modal.Footer>
       </Modal>
     </div>

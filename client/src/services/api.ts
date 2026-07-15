@@ -139,6 +139,7 @@ export const loansApi = {
   getDashboard: () => api.get('/loans/dashboard'),
   update: (id: string, data: any) => api.put(`/loans/${id}`, data),
   createHistorical: (data: any) => api.post('/loans/historical', data),
+  importHistoricalCsv: (data: FormData) => api.post('/loans/historical/import', data, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }),
   delete: (id: string) => api.delete(`/loans/${id}`),
   writeOff: (id: string, data: any) => api.post(`/loans/${id}/write-off`, data),
   restructure: (id: string, data: any) => api.post(`/loans/${id}/restructure`, data),

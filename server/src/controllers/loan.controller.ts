@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { loanService } from '../services/loan.service';
-import { loanRepo, loanApplicationRepo, loanProductRepo, loanProductChargeRepo, amortizationScheduleRepo, applicationDocumentRepo, coMakerRepo, cashierSessionRepo } from '../repositories';
+import { loanRepo, loanApplicationRepo, loanProductRepo, loanProductChargeRepo, amortizationScheduleRepo, applicationDocumentRepo, coMakerRepo, cashierSessionRepo, borrowerRepo } from '../repositories';
 import { AppError } from '../middleware/errorHandler';
 import { parsePagination, paramStr, calculateAmortization, calculateInterest } from '../utils/helpers';
 import { autoRecordTransaction } from '../services/cash-transaction.service';
@@ -9,6 +9,7 @@ import { validateUploadedFile } from '../utils/fileValidation';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { parse } from 'csv-parse/sync';
 
 const uploadsDir = path.join(__dirname, '..', '..', 'uploads', 'applications');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -537,6 +538,105 @@ export class LoanController {
     try {
       const loan = await loanService.createHistoricalLoan(req.user!.userId, req.body);
       res.status(201).json({ success: true, data: loan, message: 'Historical loan recorded successfully' });
+    } catch (error: any) {
+      next(new AppError(400, error.message));
+    }
+  }
+
+  async importHistoricalCsv(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const file = (req as any).file;
+      if (!file) throw new Error('No file uploaded');
+      const csvBuffer = file.buffer.toString('utf-8');
+
+      const HEADER_MAP: Record<string, string> = {
+        'borrower code': 'borrower_code', 'borrower code ': 'borrower_code',
+        'borrower': 'borrower_code', 'borrower name': 'borrower_code',
+        'principal amount': 'principal_amount', 'principal': 'principal_amount', 'amount': 'principal_amount',
+        'interest rate': 'interest_rate', 'rate': 'interest_rate',
+        'term months': 'term_months', 'term': 'term_months', 'months': 'term_months',
+        'release date': 'release_date', 'start date': 'release_date', 'date': 'release_date',
+        'payment frequency': 'payment_frequency', 'frequency': 'payment_frequency',
+        'total paid': 'total_paid', 'paid': 'total_paid',
+        'paid up to date': 'paid_up_to_date', 'paid up to': 'paid_up_to_date',
+        'status': 'status',
+        'previous balance': 'previous_balance', 'prev balance': 'previous_balance',
+        'collector code': 'collector_code', 'collector': 'collector_code',
+        'loan product': 'loan_product_name', 'product': 'loan_product_name',
+        'interest type': 'interest_type',
+      };
+
+      const records: any[] = parse(csvBuffer, {
+        columns: true, skip_empty_lines: true, trim: true, relax_column_count: true,
+      });
+
+      if (records.length === 0) throw new Error('CSV file is empty');
+
+      const rawHeaders = Object.keys(records[0]);
+      const columnMap: Record<string, string> = {};
+      for (const h of rawHeaders) {
+        const key = h.toLowerCase().replace(/\s+/g, ' ').trim();
+        columnMap[h] = HEADER_MAP[key] || key.replace(/[^a-z_]/g, '_');
+      }
+
+      const errors: { row: number | string; message: string }[] = [];
+      const inserted: any[] = [];
+
+      for (let i = 0; i < records.length; i++) {
+        const raw = records[i];
+        const row = i + 2;
+        const mapped: any = {};
+        for (const csvCol of rawHeaders) {
+          const dbCol = columnMap[csvCol];
+          if (dbCol) mapped[dbCol] = raw[csvCol] || null;
+        }
+
+        try {
+          const borrowerCode = mapped.borrower_code;
+          if (!borrowerCode) throw new Error('borrower_code is required');
+          const borrowerRows = await borrowerRepo.query('SELECT id FROM borrowers WHERE borrower_code = $1', [borrowerCode]);
+          if (!borrowerRows.length) throw new Error(`Borrower '${borrowerCode}' not found`);
+          const borrowerId = borrowerRows[0].id;
+
+          let loanProductId = null;
+          if (mapped.loan_product_name) {
+            const prodRows = await loanProductRepo.query('SELECT id FROM loan_products WHERE name ILIKE $1', [mapped.loan_product_name]);
+            if (prodRows.length) loanProductId = prodRows[0].id;
+          }
+
+          let collectorId = null;
+          if (mapped.collector_code) {
+            const userRows = await borrowerRepo.query('SELECT id FROM users WHERE (username ILIKE $1 OR employee_id ILIKE $1) AND role_id IN (SELECT id FROM roles WHERE slug = \'collector\')', [mapped.collector_code]);
+            if (userRows.length) collectorId = userRows[0].id;
+          }
+
+          const payload: any = {
+            borrowerId,
+            principalAmount: parseFloat(mapped.principal_amount) || 0,
+            interestRate: parseFloat(mapped.interest_rate) || 0,
+            termMonths: parseInt(mapped.term_months) || 0,
+            releaseDate: mapped.release_date ? new Date(mapped.release_date).toISOString() : undefined,
+            paymentFrequency: mapped.payment_frequency || 'monthly',
+            status: mapped.status || 'paid',
+            loanProductId,
+            collectorId,
+          };
+          if (mapped.interest_type) payload.interestType = mapped.interest_type;
+          if (mapped.total_paid) payload.totalPaid = parseFloat(mapped.total_paid);
+          if (mapped.paid_up_to_date) payload.paidUpToDate = new Date(mapped.paid_up_to_date).toISOString();
+          if (mapped.previous_balance) payload.previousBalance = parseFloat(mapped.previous_balance);
+
+          const loan = await loanService.createHistoricalLoan(req.user!.userId, payload);
+          inserted.push({ loan_number: loan.loan_number, borrower_code: borrowerCode, amount: payload.principalAmount });
+        } catch (err: any) {
+          errors.push({ row, message: err.message });
+        }
+      }
+
+      res.json({
+        success: true,
+        data: { total: records.length, inserted: inserted.length, errors },
+      });
     } catch (error: any) {
       next(new AppError(400, error.message));
     }
