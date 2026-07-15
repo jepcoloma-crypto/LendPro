@@ -127,7 +127,9 @@ export const CashierReconciliationPage = () => {
 
   const fetchTransactions = useCallback(async () => {
     try {
-      const params: any = { shift_id: myShift?.id, type: txnFilter };
+      const params: any = { type: txnFilter };
+      // When a date range is set, query all shifts within that range
+      if (!txnDateFrom && !txnDateTo) params.shift_id = myShift?.id;
       if (txnDateFrom) params.date_from = txnDateFrom;
       if (txnDateTo) params.date_to = txnDateTo;
       const { data } = await api.get('/cash-transactions', { params });
