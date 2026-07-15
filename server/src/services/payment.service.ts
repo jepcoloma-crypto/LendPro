@@ -13,24 +13,21 @@ export class PaymentService {
     const outstandingBalance = parseFloat(loan.outstanding_balance);
     const amount = parseFloat(data.amount);
     if (isNaN(amount) || amount <= 0) throw new Error('Invalid payment amount');
-    if (amount > outstandingBalance) {
-      throw new Error(`Payment amount (${amount.toFixed(2)}) exceeds outstanding balance (${outstandingBalance.toFixed(2)}). Reduce the payment amount.`);
-    }
 
     if (data.allocations && Array.isArray(data.allocations) && data.allocations.length > 0) {
       return this.receiveWithAllocations(data, loan, userId, paymentNumber, receiptNumber);
     }
 
     const paymentDate = data.paymentDate ? new Date(data.paymentDate) : new Date();
+    const paymentDateNorm = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
 
-    // Direct query — no unnecessary COUNT
+    // Fetch schedules and compute penalty first so validation can account for penalty
     const { rows: schedules } = await pool.query(
       `SELECT * FROM amortization_schedules WHERE loan_id = $1 ORDER BY installment_no ASC`,
       [data.loanId]
     );
 
     let totalOverdue = 0;
-    const paymentDateNorm = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
     for (const s of schedules) {
       if (parseFloat(s.paid_amount) >= parseFloat(s.total_due) - 0.005) continue;
       const dueDate = new Date(s.due_date);
@@ -52,6 +49,11 @@ export class PaymentService {
       } else if (pValue > 0) {
         computedPenalty = Math.round(totalOverdue * (pValue / 100) * 100) / 100;
       }
+    }
+
+    // Allow amount up to outstanding_balance + computedPenalty (to cover penalty)
+    if (amount > outstandingBalance + computedPenalty) {
+      throw new Error(`Payment amount (${amount.toFixed(2)}) exceeds outstanding balance (${outstandingBalance.toFixed(2)}) plus penalty (${computedPenalty.toFixed(2)}). Reduce the payment amount.`);
     }
 
     let penaltyAmount = computedPenalty;

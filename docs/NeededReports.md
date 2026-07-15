@@ -13,29 +13,7 @@
 
 ---
 
-## High Priority
-
-### P1 — Missing CSV Export
-The following tabs have no CSV export button:
-
-| Tab | Category |
-|---|---|
-| Amortization Schedule | Loans |
-| Collector Performance | Performance |
-| Borrower Performance | Performance |
-| Aging Report | Risk |
-| Overdue List | Risk |
-
-### P1 — Shared State Bug
-`collectorStartDate` / `collectorEndDate` state is shared between **Collector Performance** and **Borrower Performance** tabs. Changing date in one tab affects the other. Fix: separate state variables.
-
-### P1 — Hidden Backend Filters (UI doesn't expose)
-| Tab | Backend accepts | UI missing |
-|---|---|---|
-| Expected Collections | `branchId`, `collectorId` | Branch + Collector selectors |
-| Loans Granted | `branchId` | Branch selector |
-| Disbursements | `branchId` | Branch selector |
-| Application Types | `startDate`, `endDate` | Date range pickers |
+## P1 — All items completed ✅
 
 ---
 

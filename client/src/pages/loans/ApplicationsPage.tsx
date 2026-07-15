@@ -171,7 +171,7 @@ const [collectors, setCollectors] = useState<any[]>([]);
   const openCreate = async () => {
     setFormLoading(true);
     try {
-      const [bData, pData] = await Promise.all([borrowersApi.getAll({ limit: 100 }), loanProductsApi.getAll()]);
+      const [bData, pData] = await Promise.all([borrowersApi.getAll({ limit: 1000 }), loanProductsApi.getAll()]);
       setBorrowers(bData.data.data || []);
       setProducts(pData.data.data || []);
       try {
