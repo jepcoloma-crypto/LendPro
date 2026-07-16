@@ -158,6 +158,28 @@ export class AdminController {
             );
           }
 
+          // Update allocations and schedule paid_amounts proportionally
+          const { rows: allocs } = await client.query(
+            `SELECT id, schedule_id, amount FROM payment_allocations WHERE payment_id = $1`,
+            [id]
+          );
+          if (allocs.length > 0) {
+            const ratio = oldAmount > 0 ? newAmount / oldAmount : 1;
+            for (const alloc of allocs) {
+              const oldAllocAmt = parseFloat(alloc.amount) || 0;
+              const newAllocAmt = Math.round(oldAllocAmt * ratio * 100) / 100;
+              const allocDiff = newAllocAmt - oldAllocAmt;
+              await client.query(
+                `UPDATE payment_allocations SET amount = $1 WHERE id = $2`,
+                [newAllocAmt, alloc.id]
+              );
+              await client.query(
+                `UPDATE amortization_schedules SET paid_amount = GREATEST(0, paid_amount + $1) WHERE id = $2`,
+                [allocDiff, alloc.schedule_id]
+              );
+            }
+          }
+
           await client.query('COMMIT');
         } catch (err) {
           await client.query('ROLLBACK').catch(() => {});
