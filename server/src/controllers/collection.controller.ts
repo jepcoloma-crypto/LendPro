@@ -36,8 +36,9 @@ export class CollectionController {
         l.loan_number, l.outstanding_balance,
         b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
         CASE WHEN l.status = 'closed' THEN 'closed'
-             WHEN COALESCE(SUM(CASE WHEN a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due
+             WHEN COALESCE(SUM(CASE WHEN a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due
                               THEN 1 ELSE 0 END), 0) > 0 THEN 'delinquent'
+             WHEN l.maturity_date < CURRENT_DATE AND l.outstanding_balance > 0 THEN 'overdue'
              ELSE 'active' END as computed_status,
         l.outstanding_balance as total_due,
         COALESCE(SUM(CASE WHEN a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due
@@ -53,7 +54,7 @@ export class CollectionController {
         c.promise_to_pay_date, c.promise_to_pay_amount,
         c.last_visit_date, c.last_visit_notes, c.next_visit_date,
         c.created_at, c.updated_at,
-        l.loan_number, l.outstanding_balance, l.status, b.first_name, b.last_name, b.mobile
+        l.loan_number, l.outstanding_balance, l.maturity_date, l.status, b.first_name, b.last_name, b.mobile
       ORDER BY ${pagination.sortBy} ${pagination.sortOrder}
       LIMIT $${offset} OFFSET $${offset + 1}`;
 
@@ -151,22 +152,21 @@ export class CollectionController {
           c.created_at, c.updated_at,
           l.loan_number, l.outstanding_balance as total_due,
           b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
-          CASE WHEN l.status = 'closed' THEN 'closed'
-               WHEN COALESCE(MAX(CASE WHEN a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due THEN 1 ELSE 0 END), 0) > 0 THEN 'delinquent'
-               ELSE 'overdue' END as computed_status,
-          COALESCE(SUM(a.total_due - COALESCE(a.paid_amount,0)), 0) as total_overdue,
-          COALESCE(MAX(CURRENT_DATE - a.due_date), 0)::int as days_overdue
+          'overdue' as computed_status,
+          l.outstanding_balance as total_overdue,
+          COALESCE((SELECT MAX(CURRENT_DATE - a.due_date)::int
+                   FROM amortization_schedules a
+                   WHERE a.loan_id = l.id
+                     AND a.due_date < CURRENT_DATE
+                     AND COALESCE(a.paid_amount,0) < a.total_due), 0) as days_overdue
          FROM collections c
          JOIN loans l ON c.loan_id = l.id
          JOIN borrowers b ON c.borrower_id = b.id
-         JOIN amortization_schedules a ON a.loan_id = l.id
-         WHERE a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due ${collectorFilter}
-         GROUP BY c.id, c.loan_id, c.borrower_id, c.collector_id, c.status,
-           c.promise_to_pay_date, c.promise_to_pay_amount,
-           c.last_visit_date, c.last_visit_notes, c.next_visit_date,
-           c.created_at, c.updated_at,
-           l.loan_number, l.outstanding_balance, l.status, b.first_name, b.last_name, b.mobile
-         ORDER BY days_overdue DESC`,
+         WHERE l.maturity_date < CURRENT_DATE
+           AND l.outstanding_balance > 0
+           AND l.status != 'closed'
+           ${collectorFilter}
+         ORDER BY l.maturity_date`,
         values.length > 0 ? values : undefined
       );
       res.json({ success: true, data: result });

@@ -29,7 +29,7 @@ export const CollectionsPage = () => {
         setCollections(data.data.data || data.data);
         setTotal((data.data.data || data.data).length);
       } else if (tab === 'delinquent') {
-        data = await collectionsApi.getOverdue();
+        data = await collectionsApi.getAll({ page: 1, limit: 10000 });
         const all = data.data.data || data.data;
         const filtered = all.filter((r: any) => r.computed_status === 'delinquent');
         setCollections(filtered);
