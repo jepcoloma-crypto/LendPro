@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Tag, Modal, Form, toaster, Message, SelectPicker, InputNumber, Input } from 'rsuite';
+import { Button, Tag, Modal, Form, toaster, Message, SelectPicker, InputNumber, Input, Loader } from 'rsuite';
 import { loansApi, borrowersApi, loanProductsApi, usersApi } from '../../services/api';
 import { Loan } from '../../types';
 import { Eye, Edit3, Trash2, ExternalLink, Ban, RefreshCw, FileText, Upload, Download } from 'lucide-react';
@@ -443,7 +443,7 @@ export const LoansPage = () => {
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <Button appearance="primary" color="violet" loading={historyLoading} onClick={async () => {
+          <Button appearance="primary" color="violet" disabled={historyLoading} onClick={async () => {
             if (!historyForm.borrowerId || !historyForm.principalAmount || !historyForm.interestRate || !historyForm.termMonths || !historyForm.releaseDate || !historyForm.paymentFrequency) { toaster.push(<Message type="warning">Fill in all required fields (marked with *)</Message>, { placement: 'topEnd' }); return; }
             if ((historyForm.totalPaid && !historyForm.paidUpToDate) || (!historyForm.totalPaid && historyForm.paidUpToDate)) { toaster.push(<Message type="warning">Both Total Amount Paid and Last Payment Date must be filled together</Message>, { placement: 'topEnd' }); return; }
             setHistoryLoading(true);
@@ -454,7 +454,7 @@ export const LoansPage = () => {
               fetchLoans();
             } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
             finally { setHistoryLoading(false); }
-          }} startIcon={<FileText className="w-4 h-4" />}>Save Historical Loan</Button>
+          }} startIcon={historyLoading ? <Loader size="xs" /> : <FileText className="w-4 h-4" />}>Save Historical Loan</Button>
           <Button appearance="subtle" onClick={() => setHistoryOpen(false)}>Cancel</Button>
         </Modal.Footer>
       </Modal>
