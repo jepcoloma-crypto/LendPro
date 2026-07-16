@@ -733,7 +733,7 @@ export const ReportsPage = () => {
   const categories: { key: string; label: string; tabs: { key: string; label: string }[] }[] = [
       { key: 'collections', label: 'Collections', tabs: [
         { key: 'daily-collections', label: 'Collections' },
-        { key: 'expected-collections', label: 'Expected Collections' },
+        { key: 'expected-collections', label: 'Collection Schedule' },
         { key: 'remittance-audit', label: 'Remittance Audit' },
       ]},
     { key: 'loans', label: 'Loans', tabs: [
@@ -1657,58 +1657,84 @@ export const ReportsPage = () => {
                   size="sm"
                 />
               </div>
-              <div className="w-44">
-                <SelectPicker
-                  placeholder="All collectors"
-                  data={collectors.map((c: any) => ({ label: `${c.first_name} ${c.last_name}`, value: c.id }))}
-                  value={expectedColCollector}
-                  onChange={(v) => setExpectedColCollector(v)}
-                  style={{ width: '100%' }}
-                  cleanable
-                  size="sm"
-                />
-              </div>
             </div>
             <div className="flex gap-2">
-              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Expected Collections', expectedColData, [
-                { key: 'due_date', label: 'Due Date', format: (v) => new Date(v).toLocaleDateString() },
-                { key: 'borrower_name', label: 'Borrower' },
-                { key: 'loan_number', label: 'Loan #' },
-                { key: 'installment_no', label: 'Installment' },
-                { key: 'total_due', label: 'Amount Due', format: (v) => formatCurrency(v) },
-                { key: 'branch_name', label: 'Branch' },
-                { key: 'collector_name', label: 'Collector' },
-                { key: 'schedule_status', label: 'Status' },
-              ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
+                const periodLabel = `${new Date(expectedColStart).toLocaleDateString()} — ${new Date(expectedColEnd).toLocaleDateString()}`;
+                let html = `<!DOCTYPE html><html><head><title>Collection Schedule</title>
+                  <style>${printStyles}</style></head><body>
+                  ${companyHeaderHtml(companyInfo)}
+                  <div class="report-title">Collection Schedule</div>
+                  <div class="report-subtitle">${periodLabel}</div>
+                  <table><thead><tr><th>Due Date</th><th>Loan #</th><th>Borrower Name</th><th>Mobile</th><th>Address</th><th class="text-right">Amount Due</th><th class="text-right">Outstanding</th></tr></thead><tbody>`;
+                for (const r of expectedColData) {
+                  const addr = r.present_address ? (r.present_city ? `${r.present_address}, ${r.present_city}` : r.present_address) : '';
+                  html += `<tr><td>${new Date(r.due_date).toLocaleDateString()}</td><td>${r.loan_number}</td><td>${r.borrower_name}</td><td>${r.mobile || ''}</td><td>${addr}</td><td class="text-right">${formatCurrency(r.total_due)}</td><td class="text-right">${formatCurrency(r.outstanding_balance)}</td></tr>`;
+                }
+                html += `</tbody><tfoot><tr class="grand-total"><td colspan="5">Total</td><td class="text-right">${formatCurrency(expectedColData.reduce((s: number, r: any) => s + Number(r.total_due || 0), 0))}</td><td class="text-right">${formatCurrency(expectedColData.reduce((s: number, r: any) => s + Number(r.outstanding_balance || 0), 0))}</td></tr></tfoot></table>
+                  <div class="signatures">
+                    <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+                    <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+                    <div><div class="sig-line"></div><p class="sig-name">Approved By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+                  </div>
+                  <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
+                </body></html>`;
+                printWindow(html);
+              }}>Print</Button>
               <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
-              exportCSV(expectedColData, 'expected-collections', [
+              exportCSV(expectedColData, 'collection-schedule', [
                 { key: 'due_date', label: 'Due Date', format: (v) => new Date(v).toLocaleDateString() },
-                { key: 'borrower_name', label: 'Borrower' },
                 { key: 'loan_number', label: 'Loan #' },
-                { key: 'installment_no', label: 'Installment' },
-                { key: 'total_due', label: 'Amount Due', format: (v) => formatCurrency(v) },
-                { key: 'branch_name', label: 'Branch' },
-                { key: 'collector_name', label: 'Collector' },
-                { key: 'mobile', label: 'Contact' },
+                { key: 'borrower_name', label: 'Borrower Name' },
+                { key: 'mobile', label: 'Mobile' },
                 { key: 'present_address', label: 'Address' },
-                { key: 'schedule_status', label: 'Status' },
+                { key: 'total_due', label: 'Amount Due', format: (v) => formatCurrency(v) },
+                { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
               ]);
             }}>Export CSV</Button>
           </div>
           </div>
-          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Expected Collections (${new Date(expectedColStart).toLocaleDateString()} — ${new Date(expectedColEnd).toLocaleDateString()})`}>
-            <Table data={expectedColData} loading={expectedColLoading} height={500} rowHeight={45}>
-              <Column width={100}><HeaderCell>Due Date</HeaderCell><Cell>{(r: any) => new Date(r.due_date).toLocaleDateString()}</Cell></Column>
-              <Column width={170}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
-              <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
-              <Column width={80}><HeaderCell>Installment</HeaderCell><Cell>{(r: any) => `${r.installment_no}`}</Cell></Column>
-              <Column width={120}><HeaderCell>Amount Due</HeaderCell><Cell>{(r: any) => formatCurrency(r.total_due)}</Cell></Column>
-              <Column width={120}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
-              <Column width={150}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
-              <Column width={110}><HeaderCell>Contact</HeaderCell><Cell dataKey="mobile" /></Column>
-              <Column width={150}><HeaderCell>Address</HeaderCell><Cell>{(r: any) => r.present_address || ''}</Cell></Column>
-              <Column width={80}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.schedule_status === 'overdue' ? 'red' : 'orange'}>{r.schedule_status}</Tag>}</Cell></Column>
-            </Table>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Collection Schedule (${new Date(expectedColStart).toLocaleDateString()} — ${new Date(expectedColEnd).toLocaleDateString()})`}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Due Date</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Loan #</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Borrower Name</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Mobile</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Address</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Amount Due</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Outstanding</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expectedColData.length === 0 ? (
+                  <tr><td colSpan={7} className="text-center py-8 text-gray-400">No schedules for this period</td></tr>
+                ) : expectedColData.map((r, i) => {
+                  const addr = r.present_address ? (r.present_city ? `${r.present_address}, ${r.present_city}` : r.present_address) : '';
+                  return (
+                  <tr key={r.schedule_id || i} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{new Date(r.due_date).toLocaleDateString()}</td>
+                    <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{r.loan_number}</td>
+                    <td className="py-3 px-4 text-gray-900 dark:text-white">{r.borrower_name}</td>
+                    <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{r.mobile || ''}</td>
+                    <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{addr}</td>
+                    <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(r.total_due)}</td>
+                    <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(r.outstanding_balance)}</td>
+                  </tr>
+                  );
+                })}
+              </tbody>
+              {expectedColData.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-gray-300 dark:border-gray-600">
+                    <td colSpan={5} className="py-3 px-4 font-bold text-gray-900 dark:text-white">Total</td>
+                    <td className="py-3 px-4 text-right font-bold text-green-600">{formatCurrency(expectedColData.reduce((s: number, r: any) => s + Number(r.total_due || 0), 0))}</td>
+                    <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-white">{formatCurrency(expectedColData.reduce((s: number, r: any) => s + Number(r.outstanding_balance || 0), 0))}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           </Panel>
         </div>
       )}
