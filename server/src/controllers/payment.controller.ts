@@ -73,7 +73,7 @@ export class PaymentController {
       if (loanId) { conditions.push(`payments.loan_id = $${paramIndex++}`); values.push(loanId); }
       if (borrowerId) { conditions.push(`payments.borrower_id = $${paramIndex++}`); values.push(borrowerId); }
       if (method) { conditions.push(`payments.payment_method = $${paramIndex++}`); values.push(method); }
-      if (search) { conditions.push(`(b.first_name || ' ' || b.last_name ILIKE $${paramIndex++} OR l.loan_number ILIKE $${paramIndex++})`); values.push(`%${search}%`, `%${search}%`); }
+      if (search) { conditions.push(`(b.first_name || ' ' || b.last_name ILIKE $${paramIndex++} OR l.loan_number ILIKE $${paramIndex++} OR payments.payment_number ILIKE $${paramIndex++})`); values.push(`%${search}%`, `%${search}%`, `%${search}%`); }
 
       const where = conditions.join(' AND ');
 
