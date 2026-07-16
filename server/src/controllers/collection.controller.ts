@@ -49,7 +49,11 @@ export class CollectionController {
       JOIN borrowers b ON c.borrower_id = b.id
       LEFT JOIN amortization_schedules a ON a.loan_id = l.id
       WHERE ${where}
-      GROUP BY c.id, l.loan_number, l.outstanding_balance, l.status, b.first_name, b.last_name, b.mobile
+      GROUP BY c.id, c.loan_id, c.borrower_id, c.collector_id, c.status,
+        c.promise_to_pay_date, c.promise_to_pay_amount,
+        c.last_visit_date, c.last_visit_notes, c.next_visit_date,
+        c.created_at, c.updated_at,
+        l.loan_number, l.outstanding_balance, l.status, b.first_name, b.last_name, b.mobile
       ORDER BY ${pagination.sortBy} ${pagination.sortOrder}
       LIMIT $${offset} OFFSET $${offset + 1}`;
 
@@ -61,6 +65,7 @@ export class CollectionController {
         pagination: { ...pagination, total, totalPages: Math.ceil(total / pagination.limit) },
       });
     } catch (error: any) {
+      console.error('collections.getAll error:', error);
       next(new AppError(500, error.message));
     }
   }
@@ -130,6 +135,7 @@ export class CollectionController {
           );
       res.json({ success: true, data: result });
     } catch (error: any) {
+      console.error('collections.getDueToday error:', error);
       next(new AppError(500, error.message));
     }
   }
@@ -155,12 +161,17 @@ export class CollectionController {
          JOIN borrowers b ON c.borrower_id = b.id
          JOIN amortization_schedules a ON a.loan_id = l.id
          WHERE a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due ${collectorFilter}
-         GROUP BY c.id, l.loan_number, l.outstanding_balance, l.status, b.first_name, b.last_name, b.mobile
+         GROUP BY c.id, c.loan_id, c.borrower_id, c.collector_id, c.status,
+           c.promise_to_pay_date, c.promise_to_pay_amount,
+           c.last_visit_date, c.last_visit_notes, c.next_visit_date,
+           c.created_at, c.updated_at,
+           l.loan_number, l.outstanding_balance, l.status, b.first_name, b.last_name, b.mobile
          ORDER BY days_overdue DESC`,
         values.length > 0 ? values : undefined
       );
       res.json({ success: true, data: result });
     } catch (error: any) {
+      console.error('collections.getOverdue error:', error);
       next(new AppError(500, error.message));
     }
   }

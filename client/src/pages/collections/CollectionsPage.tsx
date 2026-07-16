@@ -19,9 +19,9 @@ export const CollectionsPage = () => {
   const [currentId, setCurrentId] = useState('');
   const [tab, setTab] = useState<'all' | 'due' | 'overdue' | 'delinquent'>('all');
   const limit = 20;
-
   const fetchData = async () => {
     setLoading(true);
+    toaster.clear();
     try {
       let data: any;
       if (tab === 'overdue') {
@@ -43,7 +43,7 @@ export const CollectionsPage = () => {
         setCollections(data.data.data || data.data);
         setTotal(data.data.pagination?.total || 0);
       }
-    } catch { toaster.push(<Message type="error">Failed to load collections</Message>, { placement: 'topEnd' }); }
+    } catch { toaster.push(<Message type="error">Failed to load collections</Message>, { placement: 'topEnd', duration: 5000 }); }
     finally { setLoading(false); }
   };
 
@@ -54,7 +54,7 @@ export const CollectionsPage = () => {
       const { data } = await collectionsApi.getById(id);
       setViewColl(data.data);
       setViewOpen(true);
-    } catch { toaster.push(<Message type="error">Failed to load details</Message>, { placement: 'topEnd' }); }
+    } catch { toaster.push(<Message type="error">Failed to load details</Message>, { placement: 'topEnd', duration: 5000 }); }
   };
 
   const recordVisit = (id: string) => {
@@ -70,7 +70,7 @@ export const CollectionsPage = () => {
       setVisitOpen(false);
       fetchData();
     } catch (err: any) {
-      toaster.push(<Message type="error">{err?.response?.data?.error || 'Error recording visit'}</Message>, { placement: 'topEnd' });
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Error recording visit'}</Message>, { placement: 'topEnd', duration: 5000 });
     }
   };
 

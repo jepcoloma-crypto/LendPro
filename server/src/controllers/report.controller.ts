@@ -507,28 +507,28 @@ export class ReportController {
 
   async getExpectedCollections(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { startDate, endDate, branchId, collectorId } = req.query;
+      const { startDate, endDate, branchId } = req.query;
       const rows = await paymentRepo.query(
         `SELECT
-           asch.id as schedule_id, asch.installment_no, asch.due_date,
-           asch.total_due, asch.balance, asch.status as schedule_status,
-           l.loan_number, l.principal_amount, l.outstanding_balance,
+           l.loan_number, l.outstanding_balance,
            br.first_name || ' ' || br.last_name as borrower_name,
-           br.mobile, br.present_address, br.present_city,
-           u.first_name || ' ' || u.last_name as collector_name,
-           b.name as branch_name
+           br.mobile,
+           COALESCE(br.present_address, '') || CASE WHEN br.present_city IS NOT NULL THEN ', ' || br.present_city ELSE '' END as address,
+           b.name as branch_name,
+            MIN(asch.total_due) as amount_per_due,
+            COUNT(asch.id) as due_installments,
+            SUM(asch.total_due) as total_amount_due
          FROM amortization_schedules asch
          JOIN loans l ON l.id = asch.loan_id
          JOIN borrowers br ON br.id = l.borrower_id
-         LEFT JOIN users u ON u.id = l.collector_id
-         LEFT JOIN branches b ON b.id = u.branch_id
+         LEFT JOIN branches b ON b.id = br.branch_id
          WHERE asch.status IN ('pending', 'overdue')
            AND asch.due_date >= $1::date
            AND asch.due_date <= $2::date
            AND ($3::uuid IS NULL OR b.id = $3::uuid)
-           AND ($4::uuid IS NULL OR u.id = $4::uuid)
-         ORDER BY asch.due_date, b.name`,
-        [startDate || new Date().toISOString().slice(0, 10), endDate || (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); })(), branchId || null, collectorId || null]
+         GROUP BY l.id, l.loan_number, l.outstanding_balance, br.first_name, br.last_name, br.mobile, br.present_address, br.present_city, b.name
+         ORDER BY b.name, br.last_name, br.first_name`,
+        [startDate || new Date().toISOString().slice(0, 10), endDate || (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); })(), branchId || null]
       );
       res.json({ success: true, data: rows });
     } catch (error: any) {
