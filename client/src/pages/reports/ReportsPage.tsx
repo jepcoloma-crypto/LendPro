@@ -2239,8 +2239,8 @@ export const ReportsPage = () => {
                 printWindow(html);
               }}>Print</Button>
               <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
-                const baseCols = [
-                  colSummaryMode !== 'branch' && { key: colSummaryMode === 'daily' ? 'report_date' : 'report_month', label: colSummaryMode === 'daily' ? 'Date' : 'Month' },
+                const baseCols: { key: string; label: string; format?: (v: any) => string }[] = [
+                  ...(colSummaryMode !== 'branch' ? [{ key: colSummaryMode === 'daily' ? 'report_date' : 'report_month', label: colSummaryMode === 'daily' ? 'Date' : 'Month' }] : []),
                   { key: 'branch_name', label: 'Branch' },
                   { key: 'actual_collection', label: 'Actual Collection', format: (v: any) => formatCurrency(v) },
                   { key: 'total_collection', label: 'Total Collection', format: (v: any) => formatCurrency(v) },
@@ -2248,7 +2248,7 @@ export const ReportsPage = () => {
                   { key: 'rebate', label: 'Rebate', format: (v: any) => formatCurrency(v) },
                   { key: 'advance_payment', label: 'Advance Payment', format: (v: any) => formatCurrency(v) },
                   { key: 'offset_amount', label: 'Offset', format: (v: any) => formatCurrency(v) },
-                ].filter(Boolean);
+                ];
                 const modeCols = colSummaryMode === 'daily'
                   ? [
                       { key: 'actual_released_day', label: 'Actual Released', format: (v: any) => formatCurrency(v) },
