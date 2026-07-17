@@ -415,7 +415,7 @@ export const ReportsPage = () => {
       setColSummaryLoading(true);
       try {
         const { data } = await reportsApi.getCollectionSummary({ startDate: csStartDate, endDate: csEndDate, groupBy: colSummaryMode });
-        setColSummaryData(data.rows || []);
+        setColSummaryData(data.data?.rows || []);
       } catch { setColSummaryData([]); }
       finally { setColSummaryLoading(false); }
     };
