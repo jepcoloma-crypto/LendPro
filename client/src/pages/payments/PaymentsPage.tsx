@@ -92,7 +92,7 @@ export const PaymentsPage = () => {
 
   const fetchLoans = async () => {
     try {
-      const { data } = await loansApi.getAll({ limit: 100 });
+      const { data } = await loansApi.getAll({ limit: 1000 });
       setLoans(data.data);
     } catch { toaster.push(<Message type="error">Failed to load loans</Message>, { placement: 'topEnd' }); }
   };
