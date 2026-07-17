@@ -2204,7 +2204,7 @@ export const ReportsPage = () => {
                   </tr></thead><tbody>`;
                 for (const b of colSummaryData) {
                   const name = colSummaryMode === 'daily'
-                    ? `${b.branch_name} (${new Date(b.report_date + 'T00:00:00').toLocaleDateString()})`
+                    ? `${b.branch_name} (${new Date(b.report_date).toLocaleDateString()})`
                     : colSummaryMode === 'monthly' ? `${b.branch_name} (${b.report_month})` : b.branch_name;
                   const released = b.total_released || b.actual_released_day || b.actual_released_month || 0;
                   html += `<tr><td>${name}</td><td class="text-right">${formatCurrency(b.actual_collection)}</td>
@@ -2306,7 +2306,7 @@ export const ReportsPage = () => {
                         <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{r.branch_name}</td>
                         {colSummaryMode !== 'branch' && (
                           <td className="py-3 px-4 text-gray-600 dark:text-gray-400">
-                            {colSummaryMode === 'daily' ? new Date(r.report_date + 'T00:00:00').toLocaleDateString() : r.report_month}
+                            {colSummaryMode === 'daily' ? new Date(r.report_date).toLocaleDateString() : r.report_month}
                           </td>
                         )}
                         <td className="py-3 px-4 text-right text-green-600 font-medium">{formatCurrency(actual)}</td>
