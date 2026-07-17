@@ -490,9 +490,16 @@ export class CashierController {
       const today = new Date().toISOString().slice(0, 10);
       const { userId, roleSlug, branchId } = req.user!;
 
-      // Collections/disbursed from cash_transactions (real-time, not just at close)
+      // Determine scope date: use shift's opened_at if user has an open shift, else today
+      const openShift = await cashierSessionRepo.query(
+        `SELECT expected_cash, opening_float, opened_at FROM cashier_sessions WHERE user_id = $1 AND status = 'open' LIMIT 1`,
+        [userId]
+      );
+      const scopeDate = openShift[0] ? new Date(openShift[0].opened_at).toISOString().slice(0, 10) : today;
+
+      // Collections/disbursed from cash_transactions scoped to the shift date
       let txnFilter = '';
-      const txnParams: any[] = [today];
+      const txnParams: any[] = [scopeDate];
       if (roleSlug === 'cashier') {
         txnFilter = `AND ct.created_by = $2`;
         txnParams.push(userId);
@@ -511,7 +518,7 @@ export class CashierController {
         txnParams
       );
 
-      // Open/closed shift counts from cashier_sessions
+      // Open/closed shift counts from cashier_sessions (still by today)
       let shiftFilter = '';
       const shiftParams: any[] = [today];
       if (roleSlug === 'cashier') {
@@ -535,11 +542,6 @@ export class CashierController {
         `SELECT COUNT(*) as count FROM cash_reconciliations WHERE status = 'pending'`
       );
 
-      const openShift = await cashierSessionRepo.query(
-        `SELECT expected_cash, opening_float, opened_at FROM cashier_sessions WHERE user_id = $1 AND status = 'open' LIMIT 1`,
-        [userId]
-      );
-
       // Sum cash on hand across all open shifts in scope
       let cohFilter = '';
       const cohParams: any[] = [];
@@ -557,7 +559,7 @@ export class CashierController {
 
       const todayTxns = await cashierSessionRepo.query(
         `SELECT COUNT(*) as count FROM cash_transactions WHERE created_at::date = $1`,
-        [today]
+        [scopeDate]
       );
 
       res.json({
