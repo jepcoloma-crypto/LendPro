@@ -11,7 +11,10 @@ import { pool } from '../database/connection';
 export class PaymentController {
   async receivePayment(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const myShift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
+      let myShift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
+      if (!myShift) {
+        myShift = await cashierSessionRepo.findOne({ status: 'open' });
+      }
       if (!myShift) throw new AppError(400, 'No open shift found. Please open a cashier shift before accepting a payment.');
 
       const shiftDate = new Date(myShift.opened_at).toISOString().slice(0, 10);

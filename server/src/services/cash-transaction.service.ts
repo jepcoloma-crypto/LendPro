@@ -14,7 +14,8 @@ export async function autoRecordTransaction(params: {
   description?: string;
   shiftId?: string;
 }) {
-  const shift = params.shiftId ? { id: params.shiftId } : await cashierSessionRepo.findOne({ user_id: params.userId, status: 'open' });
+  let shift: any = params.shiftId ? { id: params.shiftId } : await cashierSessionRepo.findOne({ user_id: params.userId, status: 'open' });
+  if (!shift) shift = await cashierSessionRepo.findOne({ status: 'open' });
   if (!shift) throw new Error('No open shift found. Open a shift first.');
 
   const txn = await cashTransactionRepo.create({
