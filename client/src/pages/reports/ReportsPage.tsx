@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Panel, Table, Tag, Button, SelectPicker, DatePicker, Message, toaster } from 'rsuite';
+import { Panel, Table, Tag, Button, SelectPicker, DatePicker, Message, toaster, Loader } from 'rsuite';
 import { loansApi, reportsApi, borrowersApi, usersApi, branchesApi } from '../../services/api';
 import { Download, Printer, ExternalLink } from 'lucide-react';
 import { formatCurrency, exportCSV } from '../../utils/format';
@@ -96,8 +96,9 @@ export const ReportsPage = () => {
   const [colSummaryData, setColSummaryData] = useState<any[]>([]);
   const [colSummaryLoading, setColSummaryLoading] = useState(false);
   const [colSummaryMode, setColSummaryMode] = useState<'branch' | 'daily' | 'monthly'>('branch');
-  const [csStartDate, setCsStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [csStartDate, setCsStartDate] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
   const [csEndDate, setCsEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [csBranchFilter, setCsBranchFilter] = useState<string | null>(null);
 
   const [loansGrantedData, setLoansGrantedData] = useState<any[]>([]);
   const [loansGrantedLoading, setLoansGrantedLoading] = useState(false);
@@ -414,13 +415,13 @@ export const ReportsPage = () => {
       if (activeTab !== 'collection-summary') return;
       setColSummaryLoading(true);
       try {
-        const { data } = await reportsApi.getCollectionSummary({ startDate: csStartDate, endDate: csEndDate, groupBy: colSummaryMode });
+        const { data } = await reportsApi.getCollectionSummary({ startDate: csStartDate, endDate: csEndDate, groupBy: colSummaryMode, branchId: csBranchFilter || undefined });
         setColSummaryData(data.data?.rows || []);
-      } catch { setColSummaryData([]); }
+      } catch { toaster.push(<Message type="error">Failed to load collection summary</Message>, { placement: 'topEnd', duration: 5000 }); setColSummaryData([]); }
       finally { setColSummaryLoading(false); }
     };
     fetchColSummary();
-  }, [activeTab, csStartDate, csEndDate, colSummaryMode]);
+  }, [activeTab, csStartDate, csEndDate, colSummaryMode, csBranchFilter]);
 
   useEffect(() => {
     const fetchLoansGranted = async () => {
@@ -2162,6 +2163,16 @@ export const ReportsPage = () => {
                 <input type="date" value={csEndDate} onChange={(e) => setCsEndDate(e.target.value)} className="rs-input pl-3 w-40" />
               </div>
               <SelectPicker
+                placeholder="Branch"
+                data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                value={csBranchFilter}
+                onChange={(v) => setCsBranchFilter(v || null)}
+                style={{ width: 160 }}
+                cleanable
+                searchable
+                size="sm"
+              />
+              <SelectPicker
                 placeholder="View"
                 data={[
                   { label: 'Summary (Branch)', value: 'branch' },
@@ -2266,7 +2277,7 @@ export const ReportsPage = () => {
           </div>
           <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Collection Summary — ${new Date(csStartDate).toLocaleDateString()} to ${new Date(csEndDate).toLocaleDateString()}`}>
             {colSummaryLoading ? (
-              <div className="text-center py-8 text-gray-400">Loading...</div>
+              <div className="text-center py-8"><Loader size="md" /></div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm whitespace-nowrap">
@@ -2299,7 +2310,7 @@ export const ReportsPage = () => {
                     ) : colSummaryData.map((r, i) => {
                       const actual = Number(r.actual_collection) || 0;
                       const total = Number(r.total_collection) || 0;
-                      const rate = total > 0 ? Math.round((actual / total) * 100) : (actual > 0 ? 100 : 0);
+                      const rate = total > 0 ? Math.round((actual / total) * 100) : null;
                       const released = r.total_released || r.actual_released_day || r.actual_released_month || 0;
                       return (
                       <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30">
@@ -2312,7 +2323,7 @@ export const ReportsPage = () => {
                         <td className="py-3 px-4 text-right text-green-600 font-medium">{formatCurrency(actual)}</td>
                         <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(total)}</td>
                         <td className="py-3 px-4 text-right">
-                          <Tag color={rate >= 80 ? 'green' : rate >= 50 ? 'orange' : 'red'}>{rate}%</Tag>
+                          {rate !== null ? <Tag color={rate >= 80 ? 'green' : rate >= 50 ? 'orange' : 'red'}>{rate}%</Tag> : <span className="text-gray-400">—</span>}
                         </td>
                         <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(r.penalty)}</td>
                         <td className="py-3 px-4 text-right text-gray-400">{formatCurrency(r.rebate || 0)}</td>

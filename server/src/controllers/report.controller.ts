@@ -857,7 +857,7 @@ export class ReportController {
 
   async getCollectionSummary(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { startDate, endDate, groupBy } = req.query;
+      const { startDate, endDate, groupBy, branchId } = req.query;
       const sDate = startDate || new Date().toISOString().slice(0, 10);
       const eDate = endDate || sDate;
 
@@ -873,6 +873,7 @@ export class ReportController {
             JOIN borrowers br ON br.id = l.borrower_id
             WHERE p.status = 'completed'
               AND p.payment_date::date BETWEEN $1::date AND $2::date
+              AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
             GROUP BY br.branch_id
           ),
           cash_agg AS (
@@ -882,6 +883,7 @@ export class ReportController {
             JOIN cashier_sessions cs ON cs.id = ct.shift_id
             WHERE ct.direction = 'in' AND ct.transaction_type = 'collection'
               AND ct.created_at::date BETWEEN $1::date AND $2::date
+              AND ($3::uuid IS NULL OR cs.branch_id = $3::uuid)
             GROUP BY cs.branch_id
           ),
           release_agg AS (
@@ -891,6 +893,7 @@ export class ReportController {
             JOIN borrowers br ON br.id = l.borrower_id
             WHERE l.release_date IS NOT NULL
               AND l.release_date::date BETWEEN $1::date AND $2::date
+              AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
             GROUP BY br.branch_id
           ),
           cumulative_release AS (
@@ -900,6 +903,7 @@ export class ReportController {
             JOIN borrowers br ON br.id = l.borrower_id
             WHERE l.release_date IS NOT NULL
               AND l.release_date::date <= $2::date
+              AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
             GROUP BY br.branch_id
           ),
           past_due AS (
@@ -909,6 +913,7 @@ export class ReportController {
             WHERE l.maturity_date < $2::date
               AND l.outstanding_balance > 0
               AND l.status NOT IN ('closed', 'written-off', 'cancelled')
+              AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
             GROUP BY br.branch_id
           ),
           delinquent AS (
@@ -921,6 +926,7 @@ export class ReportController {
                 WHERE a.loan_id = l.id AND a.due_date < $2::date
                   AND COALESCE(a.paid_amount, 0) < a.total_due
               )
+              AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
             GROUP BY br.branch_id
           )
           SELECT
@@ -943,8 +949,9 @@ export class ReportController {
           LEFT JOIN past_due pd ON pd.branch_id = b.id
           LEFT JOIN delinquent d ON d.branch_id = b.id
           WHERE b.is_active = true
+            AND ($3::uuid IS NULL OR b.id = $3::uuid)
           ORDER BY b.name
-        `, [sDate, eDate]);
+        `, [sDate, eDate, branchId || null]);
         return res.json({ success: true, data: { mode: 'branch', rows } });
       }
 
@@ -954,6 +961,7 @@ export class ReportController {
         ),
         branches_list AS (
           SELECT id, name FROM branches WHERE is_active = true
+            AND ($3::uuid IS NULL OR id = $3::uuid)
         ),
         date_branches AS (
           SELECT b.id as branch_id, b.name as branch_name, d.dt::date as report_date
@@ -969,6 +977,7 @@ export class ReportController {
           JOIN borrowers br ON br.id = l.borrower_id
           WHERE p.status = 'completed'
             AND p.payment_date::date BETWEEN $1::date AND $2::date
+            AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
           GROUP BY br.branch_id, p.payment_date::date
         ),
         cash_agg AS (
@@ -978,6 +987,7 @@ export class ReportController {
           JOIN cashier_sessions cs ON cs.id = ct.shift_id
           WHERE ct.direction = 'in' AND ct.transaction_type = 'collection'
             AND ct.created_at::date BETWEEN $1::date AND $2::date
+            AND ($3::uuid IS NULL OR cs.branch_id = $3::uuid)
           GROUP BY cs.branch_id, ct.created_at::date
         ),
         release_agg AS (
@@ -987,6 +997,7 @@ export class ReportController {
           JOIN borrowers br ON br.id = l.borrower_id
           WHERE l.release_date IS NOT NULL
             AND l.release_date::date BETWEEN $1::date AND $2::date
+            AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
           GROUP BY br.branch_id, l.release_date::date
         ),
         cumulative_release AS (
@@ -996,6 +1007,7 @@ export class ReportController {
           JOIN borrowers br ON br.id = l.borrower_id
           WHERE l.release_date IS NOT NULL
             AND l.release_date::date <= $2::date
+            AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
           GROUP BY br.branch_id
         ),
         past_due AS (
@@ -1005,6 +1017,7 @@ export class ReportController {
           WHERE l.maturity_date < $2::date
             AND l.outstanding_balance > 0
             AND l.status NOT IN ('closed', 'written-off', 'cancelled')
+            AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
           GROUP BY br.branch_id
         ),
         delinquent AS (
@@ -1018,6 +1031,7 @@ export class ReportController {
                 AND a.due_date < $2::date
                 AND COALESCE(a.paid_amount, 0) < a.total_due
             )
+            AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
           GROUP BY br.branch_id
         )
         SELECT
@@ -1042,7 +1056,7 @@ export class ReportController {
         LEFT JOIN past_due pd ON pd.branch_id = db.branch_id
         LEFT JOIN delinquent d ON d.branch_id = db.branch_id
         ORDER BY db.branch_name, db.report_date
-      `, [sDate, eDate]);
+      `, [sDate, eDate, branchId || null]);
 
       if (groupBy === 'monthly') {
         const monthlyMap: Record<string, any> = {};
