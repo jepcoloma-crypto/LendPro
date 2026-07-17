@@ -906,8 +906,18 @@ export class ReportController {
               AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
             GROUP BY br.branch_id
           ),
+          total_outstanding AS (
+            SELECT br.branch_id,
+              COALESCE(SUM(l.outstanding_balance), 0) as total_outstanding
+            FROM loans l
+            JOIN borrowers br ON br.id = l.borrower_id
+            WHERE l.status NOT IN ('closed', 'written-off', 'cancelled')
+              AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
+            GROUP BY br.branch_id
+          ),
           past_due AS (
-            SELECT br.branch_id, COUNT(*) as past_due_count
+            SELECT br.branch_id, COUNT(*) as past_due_count,
+              COALESCE(SUM(l.outstanding_balance), 0) as past_due_amount
             FROM loans l
             JOIN borrowers br ON br.id = l.borrower_id
             WHERE l.maturity_date < $2::date
@@ -917,15 +927,14 @@ export class ReportController {
             GROUP BY br.branch_id
           ),
           delinquent AS (
-            SELECT br.branch_id, COUNT(DISTINCT l.id) as delinquent_count
+            SELECT br.branch_id, COUNT(DISTINCT l.id) as delinquent_count,
+              COALESCE(SUM(a.total_due - COALESCE(a.paid_amount, 0)), 0) as delinquent_amount
             FROM loans l
             JOIN borrowers br ON br.id = l.borrower_id
+            JOIN amortization_schedules a ON a.loan_id = l.id
             WHERE l.status NOT IN ('closed', 'written-off', 'cancelled')
-              AND EXISTS (
-                SELECT 1 FROM amortization_schedules a
-                WHERE a.loan_id = l.id AND a.due_date < $2::date
-                  AND COALESCE(a.paid_amount, 0) < a.total_due
-              )
+              AND a.due_date < $2::date
+              AND COALESCE(a.paid_amount, 0) < a.total_due
               AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
             GROUP BY br.branch_id
           )
@@ -938,7 +947,13 @@ export class ReportController {
             COALESCE(r.total_released, 0) as total_released,
             COALESCE(cr.ending_loan_release, 0) as ending_loan_release,
             COALESCE(pd.past_due_count, 0) as past_due_accounts,
+            COALESCE(pd.past_due_amount, 0) as past_due_amount,
             COALESCE(d.delinquent_count, 0) as total_delinquent,
+            COALESCE(d.delinquent_amount, 0) as delinquent_amount,
+            COALESCE(to_.total_outstanding, 0) as total_outstanding,
+            CASE WHEN COALESCE(to_.total_outstanding, 0) > 0
+              THEN ROUND(COALESCE(d.delinquent_amount, 0) / to_.total_outstanding * 100, 1)
+              ELSE 0 END as par,
             0::numeric as rebate,
             0::numeric as offset_amount
           FROM branches b
@@ -946,6 +961,7 @@ export class ReportController {
           LEFT JOIN cash_agg c ON c.branch_id = b.id
           LEFT JOIN release_agg r ON r.branch_id = b.id
           LEFT JOIN cumulative_release cr ON cr.branch_id = b.id
+          LEFT JOIN total_outstanding to_ ON to_.branch_id = b.id
           LEFT JOIN past_due pd ON pd.branch_id = b.id
           LEFT JOIN delinquent d ON d.branch_id = b.id
           WHERE b.is_active = true
@@ -1010,8 +1026,18 @@ export class ReportController {
             AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
           GROUP BY br.branch_id
         ),
+        total_outstanding AS (
+          SELECT br.branch_id,
+            COALESCE(SUM(l.outstanding_balance), 0) as total_outstanding
+          FROM loans l
+          JOIN borrowers br ON br.id = l.borrower_id
+          WHERE l.status NOT IN ('closed', 'written-off', 'cancelled')
+            AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
+          GROUP BY br.branch_id
+        ),
         past_due AS (
-          SELECT br.branch_id, COUNT(*) as past_due_count
+          SELECT br.branch_id, COUNT(*) as past_due_count,
+            COALESCE(SUM(l.outstanding_balance), 0) as past_due_amount
           FROM loans l
           JOIN borrowers br ON br.id = l.borrower_id
           WHERE l.maturity_date < $2::date
@@ -1021,16 +1047,14 @@ export class ReportController {
           GROUP BY br.branch_id
         ),
         delinquent AS (
-          SELECT br.branch_id, COUNT(DISTINCT l.id) as delinquent_count
+          SELECT br.branch_id, COUNT(DISTINCT l.id) as delinquent_count,
+            COALESCE(SUM(a.total_due - COALESCE(a.paid_amount, 0)), 0) as delinquent_amount
           FROM loans l
           JOIN borrowers br ON br.id = l.borrower_id
+          JOIN amortization_schedules a ON a.loan_id = l.id
           WHERE l.status NOT IN ('closed', 'written-off', 'cancelled')
-            AND EXISTS (
-              SELECT 1 FROM amortization_schedules a
-              WHERE a.loan_id = l.id
-                AND a.due_date < $2::date
-                AND COALESCE(a.paid_amount, 0) < a.total_due
-            )
+            AND a.due_date < $2::date
+            AND COALESCE(a.paid_amount, 0) < a.total_due
             AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
           GROUP BY br.branch_id
         )
@@ -1047,12 +1071,19 @@ export class ReportController {
           0::numeric as offset_amount,
           COALESCE(cr.ending_loan_release, 0) as ending_loan_release,
           COALESCE(pd.past_due_count, 0) as past_due_accounts,
-          COALESCE(d.delinquent_count, 0) as total_delinquent
+          COALESCE(pd.past_due_amount, 0) as past_due_amount,
+          COALESCE(d.delinquent_count, 0) as total_delinquent,
+          COALESCE(d.delinquent_amount, 0) as delinquent_amount,
+          COALESCE(to_.total_outstanding, 0) as total_outstanding,
+          CASE WHEN COALESCE(to_.total_outstanding, 0) > 0
+            THEN ROUND(COALESCE(d.delinquent_amount, 0) / to_.total_outstanding * 100, 1)
+            ELSE 0 END as par
         FROM date_branches db
         LEFT JOIN payments_agg p ON p.branch_id = db.branch_id AND p.pdate = db.report_date
         LEFT JOIN cash_agg c ON c.branch_id = db.branch_id AND c.cdate = db.report_date
         LEFT JOIN release_agg r ON r.branch_id = db.branch_id AND r.rdate = db.report_date
         LEFT JOIN cumulative_release cr ON cr.branch_id = db.branch_id
+        LEFT JOIN total_outstanding to_ ON to_.branch_id = db.branch_id
         LEFT JOIN past_due pd ON pd.branch_id = db.branch_id
         LEFT JOIN delinquent d ON d.branch_id = db.branch_id
         ORDER BY db.branch_name, db.report_date
@@ -1077,7 +1108,11 @@ export class ReportController {
               total_release: 0,
               ending_loan_release: 0,
               past_due_accounts: 0,
+              past_due_amount: 0,
               total_delinquent: 0,
+              delinquent_amount: 0,
+              total_outstanding: 0,
+              par: 0,
             };
           }
           const m = monthlyMap[key];
@@ -1089,7 +1124,11 @@ export class ReportController {
           m.total_release = Math.max(m.total_release, Number(r.total_release) || 0);
           m.ending_loan_release = Math.max(m.ending_loan_release, Number(r.ending_loan_release) || 0);
           m.past_due_accounts = Math.max(m.past_due_accounts, Number(r.past_due_accounts) || 0);
+          m.past_due_amount = Math.max(m.past_due_amount, Number(r.past_due_amount) || 0);
           m.total_delinquent = Math.max(m.total_delinquent, Number(r.total_delinquent) || 0);
+          m.delinquent_amount = Math.max(m.delinquent_amount, Number(r.delinquent_amount) || 0);
+          m.total_outstanding = Math.max(m.total_outstanding, Number(r.total_outstanding) || 0);
+          m.par = Math.max(m.par, Number(r.par) || 0);
         }
         return res.json({ success: true, data: { mode: 'monthly', rows: Object.values(monthlyMap) } });
       }

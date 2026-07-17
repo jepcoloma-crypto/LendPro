@@ -2200,8 +2200,11 @@ export const ReportsPage = () => {
                   advance_payment: s.advance_payment + num(r.advance_payment),
                   total_released: s.total_released + num(r.total_released || r.actual_released_day || r.actual_released_month || 0),
                   past_due: s.past_due + num(r.past_due_accounts || 0),
+                  past_due_amount: s.past_due_amount + num(r.past_due_amount || 0),
                   delinquent: s.delinquent + num(r.total_delinquent || 0),
-                }), { actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, total_released: 0, past_due: 0, delinquent: 0 });
+                  delinquent_amount: s.delinquent_amount + num(r.delinquent_amount || 0),
+                  total_outstanding: s.total_outstanding + num(r.total_outstanding || 0),
+                }), { actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, total_released: 0, past_due: 0, past_due_amount: 0, delinquent: 0, delinquent_amount: 0, total_outstanding: 0 });
                 let html = `<!DOCTYPE html><html><head><title>Collection Summary</title>
                   <style>${printStyles}</style></head><body>
                   ${companyHeaderHtml(companyInfo)}
@@ -2211,7 +2214,7 @@ export const ReportsPage = () => {
                     <th>Branch</th><th class="text-right">Actual</th><th class="text-right">Total</th>
                     <th class="text-right">Penalty</th><th class="text-right">Advance</th>
                     <th class="text-right">Released</th>
-                    ${colSummaryMode !== 'daily' ? '<th class="text-right">Ending Release</th><th class="text-right">Past Due</th><th class="text-right">Delinquent</th>' : ''}
+                    ${colSummaryMode !== 'daily' ? '<th class="text-right">Ending Release</th><th class="text-right">Past Due</th><th class="text-right">Past Due $</th><th class="text-right">Delinq</th><th class="text-right">Delinq $</th><th class="text-right">Outstanding</th><th class="text-right">PAR</th>' : ''}
                   </tr></thead><tbody>`;
                 for (const b of colSummaryData) {
                   const name = colSummaryMode === 'daily'
@@ -2226,7 +2229,11 @@ export const ReportsPage = () => {
                   if (colSummaryMode !== 'daily') {
                     html += `<td class="text-right">${formatCurrency(b.ending_loan_release)}</td>
                              <td class="text-right">${b.past_due_accounts || 0}</td>
-                             <td class="text-right">${b.total_delinquent || 0}</td>`;
+                             <td class="text-right">${formatCurrency(b.past_due_amount || 0)}</td>
+                             <td class="text-right">${b.total_delinquent || 0}</td>
+                             <td class="text-right">${formatCurrency(b.delinquent_amount || 0)}</td>
+                             <td class="text-right">${formatCurrency(b.total_outstanding || 0)}</td>
+                             <td class="text-right">${Number(b.par || 0).toFixed(1)}%</td>`;
                   }
                   html += `</tr>`;
                 }
@@ -2237,7 +2244,7 @@ export const ReportsPage = () => {
                   <td class="text-right">${formatCurrency(gt.advance_payment)}</td>
                   <td class="text-right">${formatCurrency(gt.total_released)}</td>`;
                 if (colSummaryMode !== 'daily') {
-                  html += `<td class="text-right"></td><td class="text-right">${gt.past_due}</td><td class="text-right">${gt.delinquent}</td>`;
+                  html += `<td class="text-right"></td><td class="text-right">${gt.past_due}</td><td class="text-right">${formatCurrency(gt.past_due_amount || 0)}</td><td class="text-right">${gt.delinquent}</td><td class="text-right">${formatCurrency(gt.delinquent_amount || 0)}</td><td class="text-right">${formatCurrency(gt.total_outstanding || 0)}</td><td class="text-right"></td>`;
                 }
                 html += `</tr></tfoot></table>
                   <div class="signatures">
@@ -2268,8 +2275,12 @@ export const ReportsPage = () => {
                   : [
                       { key: colSummaryMode === 'branch' ? 'total_released' : 'actual_released_month', label: 'Released', format: (v: any) => formatCurrency(v) },
                       { key: 'ending_loan_release', label: 'Ending Loan Release', format: (v: any) => formatCurrency(v) },
-                      { key: 'past_due_accounts', label: 'Past Due' },
-                      { key: 'total_delinquent', label: 'Delinquent' },
+                      { key: 'past_due_accounts', label: 'Past Due Accts' },
+                      { key: 'past_due_amount', label: 'Past Due Amount', format: (v: any) => formatCurrency(v) },
+                      { key: 'total_delinquent', label: 'Delinq Accts' },
+                      { key: 'delinquent_amount', label: 'Delinquent Amount', format: (v: any) => formatCurrency(v) },
+                      { key: 'total_outstanding', label: 'Outstanding', format: (v: any) => formatCurrency(v) },
+                      { key: 'par', label: 'PAR %', format: (v: any) => `${Number(v || 0).toFixed(1)}%` },
                     ];
                 exportCSV(colSummaryData, `collection-summary-${csStartDate}-to-${csEndDate}`, [...baseCols, ...modeCols]);
               }}>Export CSV</Button>
@@ -2299,14 +2310,18 @@ export const ReportsPage = () => {
                         <>
                           <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Ending Release</th>
                           <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Past Due</th>
-                          <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Delinquent</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Past Due $</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Delinq</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Delinq $</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Outstanding</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">PAR</th>
                         </>
                       )}
                     </tr>
                   </thead>
                   <tbody>
                     {colSummaryData.length === 0 ? (
-                      <tr><td colSpan={colSummaryMode === 'branch' ? 13 : colSummaryMode === 'daily' ? 11 : 14} className="text-center py-8 text-gray-400">No data for this period</td></tr>
+                      <tr><td colSpan={colSummaryMode === 'branch' ? 17 : colSummaryMode === 'daily' ? 11 : 18} className="text-center py-8 text-gray-400">No data for this period</td></tr>
                     ) : colSummaryData.map((r, i) => {
                       const actual = Number(r.actual_collection) || 0;
                       const total = Number(r.total_collection) || 0;
@@ -2334,7 +2349,13 @@ export const ReportsPage = () => {
                           <>
                             <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(r.ending_loan_release)}</td>
                             <td className="py-3 px-4 text-right"><Tag>{r.past_due_accounts || 0}</Tag></td>
+                            <td className="py-3 px-4 text-right text-red-600 font-medium">{formatCurrency(r.past_due_amount || 0)}</td>
                             <td className="py-3 px-4 text-right"><Tag color="red">{r.total_delinquent || 0}</Tag></td>
+                            <td className="py-3 px-4 text-right text-orange-600 font-medium">{formatCurrency(r.delinquent_amount || 0)}</td>
+                            <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(r.total_outstanding || 0)}</td>
+                            <td className="py-3 px-4 text-right">
+                              <Tag color={Number(r.par) >= 10 ? 'red' : Number(r.par) >= 5 ? 'orange' : 'green'}>{Number(r.par).toFixed(1)}%</Tag>
+                            </td>
                           </>
                         )}
                       </tr>
@@ -2358,7 +2379,11 @@ export const ReportsPage = () => {
                           <>
                             <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s, r) => s + (Number(r.ending_loan_release) || 0), 0))}</td>
                             <td className="py-3 px-4 text-right">{colSummaryData.reduce((s, r) => s + (Number(r.past_due_accounts) || 0), 0)}</td>
+                            <td className="py-3 px-4 text-right text-red-600">{formatCurrency(colSummaryData.reduce((s, r) => s + (Number(r.past_due_amount) || 0), 0))}</td>
                             <td className="py-3 px-4 text-right">{colSummaryData.reduce((s, r) => s + (Number(r.total_delinquent) || 0), 0)}</td>
+                            <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(colSummaryData.reduce((s, r) => s + (Number(r.delinquent_amount) || 0), 0))}</td>
+                            <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s, r) => s + (Number(r.total_outstanding) || 0), 0))}</td>
+                            <td className="py-3 px-4 text-right"></td>
                           </>
                         )}
                       </tr>
