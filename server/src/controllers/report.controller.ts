@@ -861,6 +861,93 @@ export class ReportController {
       const sDate = startDate || new Date().toISOString().slice(0, 10);
       const eDate = endDate || sDate;
 
+      if (groupBy === 'branch') {
+        const rows = await paymentRepo.query(`
+          WITH payments_agg AS (
+            SELECT br.branch_id,
+              COALESCE(SUM(p.amount), 0) as total_collection,
+              COALESCE(SUM(p.penalty_amount), 0) as penalty,
+              COALESCE(SUM(p.advance_amount), 0) as advance_payment
+            FROM payments p
+            JOIN loans l ON l.id = p.loan_id
+            JOIN borrowers br ON br.id = l.borrower_id
+            WHERE p.status = 'completed'
+              AND p.payment_date::date BETWEEN $1::date AND $2::date
+            GROUP BY br.branch_id
+          ),
+          cash_agg AS (
+            SELECT cs.branch_id,
+              COALESCE(SUM(ct.amount), 0) as actual_collection
+            FROM cash_transactions ct
+            JOIN cashier_sessions cs ON cs.id = ct.shift_id
+            WHERE ct.direction = 'in' AND ct.transaction_type = 'collection'
+              AND ct.created_at::date BETWEEN $1::date AND $2::date
+            GROUP BY cs.branch_id
+          ),
+          release_agg AS (
+            SELECT br.branch_id,
+              COALESCE(SUM(l.principal_amount), 0) as total_released
+            FROM loans l
+            JOIN borrowers br ON br.id = l.borrower_id
+            WHERE l.release_date IS NOT NULL
+              AND l.release_date::date BETWEEN $1::date AND $2::date
+            GROUP BY br.branch_id
+          ),
+          cumulative_release AS (
+            SELECT br.branch_id,
+              COALESCE(SUM(l.principal_amount), 0) as ending_loan_release
+            FROM loans l
+            JOIN borrowers br ON br.id = l.borrower_id
+            WHERE l.release_date IS NOT NULL
+              AND l.release_date::date <= $2::date
+            GROUP BY br.branch_id
+          ),
+          past_due AS (
+            SELECT br.branch_id, COUNT(*) as past_due_count
+            FROM loans l
+            JOIN borrowers br ON br.id = l.borrower_id
+            WHERE l.maturity_date < $2::date
+              AND l.outstanding_balance > 0
+              AND l.status NOT IN ('closed', 'written-off', 'cancelled')
+            GROUP BY br.branch_id
+          ),
+          delinquent AS (
+            SELECT br.branch_id, COUNT(DISTINCT l.id) as delinquent_count
+            FROM loans l
+            JOIN borrowers br ON br.id = l.borrower_id
+            WHERE l.status NOT IN ('closed', 'written-off', 'cancelled')
+              AND EXISTS (
+                SELECT 1 FROM amortization_schedules a
+                WHERE a.loan_id = l.id AND a.due_date < $2::date
+                  AND COALESCE(a.paid_amount, 0) < a.total_due
+              )
+            GROUP BY br.branch_id
+          )
+          SELECT
+            b.name as branch_name,
+            COALESCE(p.total_collection, 0) as total_collection,
+            COALESCE(p.penalty, 0) as penalty,
+            COALESCE(p.advance_payment, 0) as advance_payment,
+            COALESCE(c.actual_collection, 0) as actual_collection,
+            COALESCE(r.total_released, 0) as total_released,
+            COALESCE(cr.ending_loan_release, 0) as ending_loan_release,
+            COALESCE(pd.past_due_count, 0) as past_due_accounts,
+            COALESCE(d.delinquent_count, 0) as total_delinquent,
+            0::numeric as rebate,
+            0::numeric as offset_amount
+          FROM branches b
+          LEFT JOIN payments_agg p ON p.branch_id = b.id
+          LEFT JOIN cash_agg c ON c.branch_id = b.id
+          LEFT JOIN release_agg r ON r.branch_id = b.id
+          LEFT JOIN cumulative_release cr ON cr.branch_id = b.id
+          LEFT JOIN past_due pd ON pd.branch_id = b.id
+          LEFT JOIN delinquent d ON d.branch_id = b.id
+          WHERE b.is_active = true
+          ORDER BY b.name
+        `, [sDate, eDate]);
+        return res.json({ success: true, data: { mode: 'branch', rows } });
+      }
+
       const rows = await paymentRepo.query(`
         WITH dates AS (
           SELECT generate_series($1::date, $2::date, '1 day'::interval) AS dt
@@ -990,10 +1077,10 @@ export class ReportController {
           m.past_due_accounts = Math.max(m.past_due_accounts, Number(r.past_due_accounts) || 0);
           m.total_delinquent = Math.max(m.total_delinquent, Number(r.total_delinquent) || 0);
         }
-        res.json({ success: true, data: { mode: 'monthly', rows: Object.values(monthlyMap) } });
-      } else {
-        res.json({ success: true, data: { mode: 'daily', rows } });
+        return res.json({ success: true, data: { mode: 'monthly', rows: Object.values(monthlyMap) } });
       }
+
+      res.json({ success: true, data: { mode: 'daily', rows } });
     } catch (error: any) {
       next(new AppError(500, error.message));
     }
