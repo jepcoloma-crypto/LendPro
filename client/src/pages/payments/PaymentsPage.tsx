@@ -90,9 +90,11 @@ export const PaymentsPage = () => {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const fetchLoans = async () => {
+  const fetchLoans = async (term?: string) => {
     try {
-      const { data } = await loansApi.getAll({ limit: 1000 });
+      const params: any = { limit: 1000 };
+      if (term) params.search = term;
+      const { data } = await loansApi.getAll(params);
       setLoans(data.data);
     } catch { toaster.push(<Message type="error">Failed to load loans</Message>, { placement: 'topEnd' }); }
   };
@@ -491,7 +493,7 @@ export const PaymentsPage = () => {
               <SelectPicker data={loans.filter(l => l.status === 'active').map(l => ({
                 label: `${l.loan_number} - ${l.borrower_name} (${formatCurrency(l.outstanding_balance)})`,
                 value: l.id,
-              }))} value={formValue.loanId} onChange={(v) => { const sl = loans.find(l => l.id === v); setFormValue({ ...formValue, loanId: v, collectorId: isCollector ? sl?.collector_id || null : null }); }} style={{ width: '100%' }} />
+              }))} value={formValue.loanId} onChange={(v) => { const sl = loans.find(l => l.id === v); setFormValue({ ...formValue, loanId: v, collectorId: isCollector ? sl?.collector_id || null : null }); }} onSearch={(v) => fetchLoans(v || undefined)} style={{ width: '100%' }} />
             </Form.Group>
             {!isCollector && (
               <Form.Group>
@@ -573,7 +575,7 @@ export const PaymentsPage = () => {
                 <SelectPicker data={loans.filter(l => l.status === 'active').map(l => ({
                   label: `${l.loan_number} - ${l.borrower_name} (${formatCurrency(l.outstanding_balance)})`,
                   value: l.id,
-                }))} onChange={(v) => { if (v) openInstallmentModal(v); }} style={{ width: '100%' }} placeholder="Choose an active loan..." />
+                }))} onChange={(v) => { if (v) openInstallmentModal(v); }} onSearch={(v) => fetchLoans(v || undefined)} style={{ width: '100%' }} placeholder="Choose an active loan..." />
               </div>
             )}
             {payLoan && Number(payLoan.advance_balance) > 0 && (
