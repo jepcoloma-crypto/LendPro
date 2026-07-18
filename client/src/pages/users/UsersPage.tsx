@@ -74,10 +74,10 @@ export const UsersPage = () => {
 
   const handleDelete = async (id: string) => {
     try {
-      await usersApi.delete(id);
-      toaster.push(<Message type="success">User deactivated</Message>, { placement: 'topEnd' });
+      await usersApi.deactivate(id);
+      toaster.push(<Message type="success">User deactivated and payments reassigned</Message>, { placement: 'topEnd' });
       fetchUsers();
-    } catch { toaster.push(<Message type="error">Failed to deactivate user</Message>, { placement: 'topEnd' }); }
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed to deactivate user'}</Message>, { placement: 'topEnd' }); }
   };
 
 
@@ -104,7 +104,7 @@ export const UsersPage = () => {
           <Column width={100} align="center"><HeaderCell>Actions</HeaderCell><Cell>{(r: User, i?: number) => (
             <div className="flex gap-1 justify-center">
               <Button size="sm" appearance="subtle" color="blue" onClick={() => openEdit(r)} className="group"><Edit3 className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Edit</span></Button>
-              <Button size="sm" appearance="subtle" color="red" onClick={() => handleDelete(r.id)} className="group"><Trash2 className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Delete</span></Button>
+              <Button size="sm" appearance="subtle" color="red" onClick={() => handleDelete(r.id)} className="group"><Trash2 className="w-3 h-3" /><span className="hidden group-hover:inline ml-1">Deactivate</span></Button>
             </div>
           )}</Cell></Column>
         </Table>

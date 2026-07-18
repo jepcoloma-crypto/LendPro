@@ -68,6 +68,7 @@ export const usersApi = {
   create: (data: any) => api.post('/users', data),
   getById: (id: string) => api.get(`/users/${id}`),
   update: (id: string, data: any) => api.put(`/users/${id}`, data),
+  deactivate: (id: string) => api.post(`/users/${id}/deactivate`),
   delete: (id: string) => api.delete(`/users/${id}`),
 };
 

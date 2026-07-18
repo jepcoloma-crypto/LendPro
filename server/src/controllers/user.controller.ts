@@ -4,6 +4,7 @@ import { userRepo, roleRepo, branchRepo, auditLogRepo, paymentRepo } from '../re
 import { AppError } from '../middleware/errorHandler';
 import { parsePagination, paramStr } from '../utils/helpers';
 import bcrypt from 'bcryptjs';
+import { pool } from '../database/connection';
 
 export class UserController {
   async getAll(req: AuthRequest, res: Response, next: NextFunction) {
@@ -84,31 +85,7 @@ export class UserController {
 
       // Reassign pending payments when a collector is deactivated
       if (data.is_active === false) {
-        const user = await userRepo.findById(id);
-        if (user) {
-          const roleRows = await roleRepo.query('SELECT slug FROM roles WHERE id = $1', [user.role_id]);
-          const roleSlug = roleRows[0]?.slug;
-          if (roleSlug === 'collector') {
-            const pendingPayments = await userRepo.query(
-              `SELECT p.id, p.received_by FROM payments p
-               WHERE p.collector_id = $1 AND p.remittance_status = 'pending' AND p.status != 'cancelled'`,
-              [id]
-            );
-            for (const pay of pendingPayments) {
-              // Reassign to the user who recorded the payment if they're a collector
-              const recRole = await userRepo.query(
-                `SELECT r.slug FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
-                [pay.received_by]
-              );
-              if (recRole[0]?.slug === 'collector') {
-                await userRepo.query(
-                  `UPDATE payments SET collector_id = $1 WHERE id = $2`,
-                  [pay.received_by, pay.id]
-                );
-              }
-            }
-          }
-        }
+        await reassignCollectorPendingPayments(id);
       }
 
       (req as any).oldValues = await userRepo.findById(id);
@@ -125,10 +102,41 @@ export class UserController {
     try {
       const id = paramStr(req.params.id);
       (req as any).oldValues = await userRepo.findById(id);
+      await reassignCollectorPendingPayments(id);
       await userRepo.update(id, { is_active: false });
       res.json({ success: true, message: 'User deactivated' });
     } catch (error: any) {
       next(new AppError(400, error.message));
+    }
+  }
+
+  async deactivate(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const user = await userRepo.findById(id);
+      if (!user) throw new AppError(404, 'User not found');
+
+      // Check if already inactive
+      if (user.is_active === false) throw new AppError(400, 'User is already deactivated');
+
+      // Reassign pending payments
+      await reassignCollectorPendingPayments(id);
+
+      // Log to audit
+      await auditLogRepo.create({
+        action: 'deactivate',
+        entity_type: 'user',
+        entity_id: id,
+        user_id: req.user!.userId,
+        new_values: { is_active: false },
+        old_values: { is_active: user.is_active, role_id: user.role_id },
+        ip_address: req.ip || null,
+      });
+
+      await userRepo.update(id, { is_active: false });
+      res.json({ success: true, message: 'User deactivated and payments reassigned' });
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
     }
   }
 
@@ -146,6 +154,33 @@ export class UserController {
       res.json({ success: true, data: result.rows });
     } catch (error: any) {
       next(new AppError(500, error.message));
+    }
+  }
+}
+
+// Shared helper: reassign a collector's pending payments to the user who recorded them (if they're also a collector)
+async function reassignCollectorPendingPayments(collectorId: string) {
+  const user = await userRepo.findById(collectorId);
+  if (!user) return;
+  const roleRows = await roleRepo.query('SELECT slug FROM roles WHERE id = $1', [user.role_id]);
+  const roleSlug = roleRows[0]?.slug;
+  if (roleSlug !== 'collector') return;
+
+  const pendingPayments = await userRepo.query(
+    `SELECT p.id, p.received_by FROM payments p
+     WHERE p.collector_id = $1 AND p.remittance_status = 'pending' AND p.status != 'cancelled'`,
+    [collectorId]
+  );
+  for (const pay of pendingPayments) {
+    const recRole = await userRepo.query(
+      `SELECT r.slug FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
+      [pay.received_by]
+    );
+    if (recRole[0]?.slug === 'collector') {
+      await userRepo.query(
+        `UPDATE payments SET collector_id = $1 WHERE id = $2`,
+        [pay.received_by, pay.id]
+      );
     }
   }
 }

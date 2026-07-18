@@ -58,6 +58,7 @@ router.get('/users/collectors', authenticate, authorize('super-admin', 'admin', 
 router.get('/users/:id', authenticate, authorize('super-admin'), userController.getById.bind(userController));
 router.put('/users/:id', authenticate, authorize('super-admin'), auditLog('update', 'user'), userController.update.bind(userController));
 router.delete('/users/:id', authenticate, authorize('super-admin'), auditLog('delete', 'user'), userController.delete.bind(userController));
+router.post('/users/:id/deactivate', authenticate, authorize('super-admin'), userController.deactivate.bind(userController));
 
 // Roles
 router.get('/roles', authenticate, roleController.getAll.bind(roleController));
