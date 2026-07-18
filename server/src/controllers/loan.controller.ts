@@ -662,7 +662,7 @@ export class LoanController {
       if (borrowerId) { where += `${where ? ' AND ' : 'WHERE '} l.borrower_id = $${idx++}`; values.push(borrowerId); }
       if (search) { where += `${where ? ' AND ' : 'WHERE '} (b.first_name ILIKE $${idx} OR b.last_name ILIKE $${idx} OR b.borrower_code ILIKE $${idx} OR l.loan_number ILIKE $${idx})`; values.push(`%${search}%`); idx++; }
       if (req.user?.roleSlug === 'collector') {
-        where += `${where ? ' AND ' : 'WHERE '} (l.collector_id = $${idx} OR (l.collector_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users WHERE id = l.collector_id AND is_active = true)))`;
+        where += `${where ? ' AND ' : 'WHERE '} (l.collector_id = $${idx} OR l.collector_id IS NULL OR NOT EXISTS (SELECT 1 FROM users WHERE id = l.collector_id AND is_active = true))`;
         values.push(req.user.userId); idx++;
       }
       const countResult = await loanRepo.query(
