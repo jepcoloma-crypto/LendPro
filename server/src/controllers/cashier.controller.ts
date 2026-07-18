@@ -272,8 +272,8 @@ export class CashierController {
       if (shift_id) { sql += ` AND ct.shift_id = $${idx++}`; params.push(shift_id); }
       if (type) { sql += ` AND ct.transaction_type = $${idx++}`; params.push(type); }
       if (direction) { sql += ` AND ct.direction = $${idx++}`; params.push(direction); }
-      if (date_from) { sql += ` AND ct.created_at >= $${idx++}::date`; params.push(date_from); }
-      if (date_to) { sql += ` AND ct.created_at <= $${idx++}::date + interval '1 day'`; params.push(date_to); }
+      if (date_from) { sql += ` AND (ct.created_at AT TIME ZONE 'Asia/Manila')::date >= $${idx++}::date`; params.push(date_from); }
+      if (date_to) { sql += ` AND (ct.created_at AT TIME ZONE 'Asia/Manila')::date <= $${idx++}::date`; params.push(date_to); }
       sql += ` ORDER BY ct.created_at DESC`;
       const rows = await cashTransactionRepo.query(sql, params);
       res.json({ success: true, data: rows });
@@ -487,19 +487,20 @@ export class CashierController {
 
   async dashboard(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
       const { userId, roleSlug, branchId } = req.user!;
 
-      // Determine scope date: use shift's opened_at if user has an open shift, else today
+      // Determine scope: use shift_id if user has an open shift, else fall back to Manila date
       const openShift = await cashierSessionRepo.query(
-        `SELECT expected_cash, opening_float, opened_at FROM cashier_sessions WHERE user_id = $1 AND status = 'open' LIMIT 1`,
+        `SELECT id, expected_cash, opening_float, opened_at FROM cashier_sessions WHERE user_id = $1 AND status = 'open' LIMIT 1`,
         [userId]
       );
-      const scopeDate = openShift[0] ? new Date(openShift[0].opened_at).toISOString().slice(0, 10) : today;
+      const openShiftId = openShift[0]?.id || null;
+      const scopeDate = openShiftId ? null : today;
 
-      // Collections/disbursed from cash_transactions scoped to the shift date
+      // Collections/disbursed scoped to the open shift (by shift_id) or today's Manila date
       let txnFilter = '';
-      const txnParams: any[] = [scopeDate];
+      const txnParams: any[] = openShiftId ? [openShiftId] : [scopeDate];
       if (roleSlug === 'cashier') {
         txnFilter = `AND ct.created_by = $2`;
         txnParams.push(userId);
@@ -508,13 +509,15 @@ export class CashierController {
         txnParams.push(branchId);
       }
 
+      const scopeClause = openShiftId ? `ct.shift_id = $1` : `(ct.created_at AT TIME ZONE 'Asia/Manila')::date = $1`;
+
       const txnStats = await cashierSessionRepo.query(
         `SELECT
            COALESCE(SUM(ct.amount) FILTER (WHERE (ct.transaction_type = 'payment' OR ct.transaction_type = 'collection') AND (ct.payment_id IS NULL OR (SELECT p.status FROM payments p WHERE p.id = ct.payment_id) IS DISTINCT FROM 'cancelled')), 0) as today_collections,
            COALESCE(SUM(ct.amount) FILTER (WHERE ct.transaction_type = 'disbursement'), 0) as today_disbursed
          FROM cash_transactions ct
          LEFT JOIN cashier_sessions cs ON cs.id = ct.shift_id
-         WHERE ct.created_at::date = $1 ${txnFilter}`,
+         WHERE ${scopeClause} ${txnFilter}`,
         txnParams
       );
 
@@ -534,7 +537,7 @@ export class CashierController {
            COUNT(*) FILTER (WHERE status = 'open') as open_shifts,
            COUNT(*) FILTER (WHERE status = 'closed') as closed_shifts
          FROM cashier_sessions
-         WHERE created_at::date = $1 ${shiftFilter}`,
+          WHERE (created_at AT TIME ZONE 'Asia/Manila')::date = $1 ${shiftFilter}`,
         shiftParams
       );
 
@@ -558,8 +561,10 @@ export class CashierController {
       );
 
       const todayTxns = await cashierSessionRepo.query(
-        `SELECT COUNT(*) as count FROM cash_transactions WHERE created_at::date = $1`,
-        [scopeDate]
+        openShiftId
+          ? `SELECT COUNT(*) as count FROM cash_transactions WHERE shift_id = $1`
+          : `SELECT COUNT(*) as count FROM cash_transactions WHERE (created_at AT TIME ZONE 'Asia/Manila')::date = $1`,
+        openShiftId ? [openShiftId] : [scopeDate]
       );
 
       res.json({
@@ -607,16 +612,16 @@ export class CashierController {
       const rows = await cashierSessionRepo.query(
         `SELECT u.first_name || ' ' || u.last_name as cashier_name, b.name as branch_name,
                 ct.payment_method, COUNT(*) as txn_count, SUM(ct.amount) as total,
-                cs.opened_at::date as shift_date
-         FROM cash_transactions ct
-         JOIN cashier_sessions cs ON cs.id = ct.shift_id
-         JOIN users u ON u.id = cs.user_id
-         LEFT JOIN branches b ON b.id = cs.branch_id
-         WHERE ct.direction = 'in' AND ct.transaction_type = 'collection'
-           AND ($1::date IS NULL OR cs.opened_at::date >= $1)
-           AND ($2::date IS NULL OR cs.opened_at::date <= $2)
-           AND ($3::uuid IS NULL OR cs.user_id = $3)
-         GROUP BY u.first_name, u.last_name, b.name, ct.payment_method, cs.opened_at::date
+                 (cs.opened_at AT TIME ZONE 'Asia/Manila')::date as shift_date
+          FROM cash_transactions ct
+          JOIN cashier_sessions cs ON cs.id = ct.shift_id
+          JOIN users u ON u.id = cs.user_id
+          LEFT JOIN branches b ON b.id = cs.branch_id
+          WHERE ct.direction = 'in' AND ct.transaction_type = 'collection'
+            AND ($1::date IS NULL OR (cs.opened_at AT TIME ZONE 'Asia/Manila')::date >= $1)
+            AND ($2::date IS NULL OR (cs.opened_at AT TIME ZONE 'Asia/Manila')::date <= $2)
+            AND ($3::uuid IS NULL OR cs.user_id = $3)
+          GROUP BY u.first_name, u.last_name, b.name, ct.payment_method, (cs.opened_at AT TIME ZONE 'Asia/Manila')::date
          ORDER BY shift_date DESC`,
         [startDate || null, endDate || null, cashierId || null]
       );
@@ -639,8 +644,8 @@ export class CashierController {
          JOIN users u1 ON u1.id = cs.user_id
          LEFT JOIN users u2 ON u2.id = cr.reviewed_by
          LEFT JOIN branches b ON b.id = cs.branch_id
-         WHERE ($1::date IS NULL OR cr.created_at::date >= $1)
-           AND ($2::date IS NULL OR cr.created_at::date <= $2)
+          WHERE ($1::date IS NULL OR (cr.created_at AT TIME ZONE 'Asia/Manila')::date >= $1)
+            AND ($2::date IS NULL OR (cr.created_at AT TIME ZONE 'Asia/Manila')::date <= $2)
          ORDER BY cr.created_at DESC`,
         [startDate || null, endDate || null]
       );
@@ -660,8 +665,8 @@ export class CashierController {
                 COUNT(*) FILTER (WHERE ct.direction = 'out') as out_count,
                 SUM(ct.amount) FILTER (WHERE ct.direction = 'out') as out_total
          FROM cash_transactions ct
-         WHERE ($1::date IS NULL OR ct.created_at::date >= $1)
-           AND ($2::date IS NULL OR ct.created_at::date <= $2)
+          WHERE ($1::date IS NULL OR (ct.created_at AT TIME ZONE 'Asia/Manila')::date >= $1)
+            AND ($2::date IS NULL OR (ct.created_at AT TIME ZONE 'Asia/Manila')::date <= $2)
          GROUP BY ct.payment_method
          ORDER BY total DESC`,
         [startDate || null, endDate || null]
@@ -705,12 +710,12 @@ export class CashierController {
       const { days } = req.query;
       const limit = Math.min(parseInt(days as string) || 7, 90);
       const rows = await cashierSessionRepo.query(
-        `SELECT created_at::date as txn_date,
+        `SELECT (created_at AT TIME ZONE 'Asia/Manila')::date as txn_date,
                 SUM(amount) FILTER (WHERE direction = 'in') as cash_in,
                 SUM(amount) FILTER (WHERE direction = 'out') as cash_out
          FROM cash_transactions
-         WHERE created_at >= CURRENT_DATE - $1::integer
-         GROUP BY created_at::date
+         WHERE (created_at AT TIME ZONE 'Asia/Manila')::date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Manila')::date - $1::integer
+         GROUP BY (created_at AT TIME ZONE 'Asia/Manila')::date
          ORDER BY txn_date`,
         [limit]
       );
@@ -723,7 +728,7 @@ export class CashierController {
   async reportDailyCashPosition(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { date } = req.query;
-      const targetDate = date ? (date as string) : new Date().toISOString().slice(0, 10);
+      const targetDate = date ? (date as string) : new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 
       const rows = await cashierSessionRepo.query(
         `WITH shift_data AS (
