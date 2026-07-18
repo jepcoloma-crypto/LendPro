@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { paymentRepo, amortizationScheduleRepo, paymentAllocationRepo, loanRepo, cancellationRequestRepo } from '../repositories';
+import { paymentRepo, amortizationScheduleRepo, paymentAllocationRepo, loanRepo, cancellationRequestRepo, cashTransactionRepo } from '../repositories';
 import { AppError } from '../middleware/errorHandler';
 import { paramStr } from '../utils/helpers';
 
@@ -90,6 +90,15 @@ export class CancellationController {
         const newBalance = oldBalance + restoreAmount;
         const newStatus = loan.status === 'closed' ? 'active' : loan.status;
         await loanRepo.update(loanId, { outstanding_balance: newBalance, status: newStatus });
+      }
+
+      const cashTxns = await cashTransactionRepo.query(`SELECT id, shift_id FROM cash_transactions WHERE payment_id = $1`, [request.payment_id]);
+      for (const txn of cashTxns) {
+        await cashTransactionRepo.query(`DELETE FROM cash_transactions WHERE id = $1`, [txn.id]);
+        await cashTransactionRepo.query(
+          `UPDATE cashier_sessions SET expected_cash = expected_cash - $1 WHERE id = $2`,
+          [payment.amount, txn.shift_id]
+        );
       }
 
       await paymentRepo.update(request.payment_id, { status: 'cancelled', cancellation_reason: request.reason });

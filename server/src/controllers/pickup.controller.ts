@@ -225,7 +225,7 @@ export class PickupController {
          JOIN roles r ON r.id = u.role_id
          LEFT JOIN branches b ON b.id = u.branch_id
          LEFT JOIN payments pf ON pf.collector_id = u.id
-         WHERE r.slug = 'collector' AND u.is_active = true
+         WHERE r.slug = 'collector'
          GROUP BY u.id, u.first_name, u.last_name, b.name
          ORDER BY u.first_name`
       );
