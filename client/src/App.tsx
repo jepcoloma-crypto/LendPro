@@ -23,6 +23,7 @@ import { BranchesPage } from './pages/branches/BranchesPage';
 import { UtilitiesPage } from './pages/utilities/UtilitiesPage';
 import { CalendarPage } from './pages/calendar/CalendarPage';
 import { ProfilePage } from './pages/profile/ProfilePage';
+import { MyRemittancePage } from './pages/payments/MyRemittancePage';
 
 
 const AppContent = () => {
@@ -54,6 +55,7 @@ const AppContent = () => {
             <Route path="/charges" element={<Navigate to="/loan-products" replace />} />
             <Route path="/audit-logs" element={<Navigate to="/utilities" replace />} />
             <Route path="/collector-remittance" element={<Navigate to="/reports" replace />} />
+            <Route path="/my-remittance" element={<ProtectedRoute roles={['collector']}><MyRemittancePage /></ProtectedRoute>} />
             <Route path="/expenses" element={<Navigate to="/cashier" replace />} />
 
             <Route path="/profile" element={<ProfilePage />} />

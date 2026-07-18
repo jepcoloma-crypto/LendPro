@@ -17,6 +17,7 @@ const menuItems = [
   { label: 'Payments', path: '/payments', icon: CreditCardIcon, roles: ['super-admin', 'admin', 'branch-manager', 'cashier', 'collector'], group: 'lending' },
   { label: 'Cashier', path: '/cashier', icon: DollarSignIcon, roles: ['super-admin', 'admin', 'branch-manager', 'cashier'], group: 'lending' },
   { label: 'Collections', path: '/collections', icon: CollectionIcon, roles: ['super-admin', 'admin', 'branch-manager', 'collector'], group: 'lending' },
+  { label: 'My Remittance', path: '/my-remittance', icon: CreditCardIcon, roles: ['collector'], group: 'lending' },
   { label: 'Calendar', path: '/calendar', icon: CalendarIcon, roles: ['*'], group: 'lending' },
 
   { label: 'Reports', path: '/reports', icon: FileTextIcon, roles: ['super-admin', 'admin', 'branch-manager'], group: 'insights' },

@@ -7,11 +7,11 @@ import { Download, Printer } from 'lucide-react';
 
 const { Column, HeaderCell, Cell } = Table;
 
-export const CollectorRemittancePage = ({ embedded }: { embedded?: boolean }) => {
+export const CollectorRemittancePage = ({ embedded, forcedCollectorId }: { embedded?: boolean; forcedCollectorId?: string }) => {
   const [payments, setPayments] = useState<any[]>([]);
   const [collectors, setCollectors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [collectorId, setCollectorId] = useState<string | undefined>();
+  const [collectorId, setCollectorId] = useState<string | undefined>(forcedCollectorId);
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
 
@@ -32,9 +32,11 @@ export const CollectorRemittancePage = ({ embedded }: { embedded?: boolean }) =>
 
   useEffect(() => {
     fetch();
-    usersApi.getCollectors().then(({ data }) => {
-      setCollectors(data.data || []);
-    }).catch(() => {});
+    if (!forcedCollectorId) {
+      usersApi.getCollectors().then(({ data }) => {
+        setCollectors(data.data || []);
+      }).catch(() => {});
+    }
   }, [collectorId, startDate, endDate]);
 
   const paymentsWithIndex = payments.map((p: any, i: number) => ({ ...p, _rowNum: i + 1 }));
@@ -87,10 +89,12 @@ export const CollectorRemittancePage = ({ embedded }: { embedded?: boolean }) =>
   const content = (
     <>
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <div style={{ minWidth: 220 }}>
-          <SelectPicker data={collectorOptions} placeholder="All collectors" searchable cleanable
-            value={collectorId} onChange={(v: any) => setCollectorId(v || undefined)} />
-        </div>
+        {!forcedCollectorId && (
+          <div style={{ minWidth: 220 }}>
+            <SelectPicker data={collectorOptions} placeholder="All collectors" searchable cleanable
+              value={collectorId} onChange={(v: any) => setCollectorId(v || undefined)} />
+          </div>
+        )}
         <div style={{ minWidth: 150 }}>
           <DatePicker value={startDate} onChange={setStartDate} placeholder="Start date" oneTap />
         </div>
