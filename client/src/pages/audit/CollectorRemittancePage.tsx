@@ -14,7 +14,7 @@ export const CollectorRemittancePage = ({ embedded }: { embedded?: boolean }) =>
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
 
-  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const fmt = (d: Date) => d.toLocaleDateString('en-CA');
 
   const fetch = async () => {
     setLoading(true);
