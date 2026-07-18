@@ -197,6 +197,7 @@ router.get('/reports/collector-visits', authenticate, reportController.getCollec
 router.get('/reports/collector-payments', authenticate, reportController.getCollectorPayments.bind(reportController));
 router.get('/reports/collector-performance', authenticate, reportController.getCollectorPerformance.bind(reportController));
 router.get('/reports/collector-remittance', authenticate, reportController.getCollectorRemittance.bind(reportController));
+router.get('/reports/collector-payment-summary', authenticate, reportController.getCollectorPaymentSummary.bind(reportController));
 router.get('/reports/borrower-performance', authenticate, reportController.getBorrowerPerformance.bind(reportController));
 router.get('/reports/processing-charges', authenticate, reportController.getProcessingCharges.bind(reportController));
 router.get('/reports/past-due', authenticate, reportController.getPastDue.bind(reportController));

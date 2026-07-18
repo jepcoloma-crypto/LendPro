@@ -6,6 +6,7 @@ import { formatCurrency, exportCSV } from '../../utils/format';
 import { printStyles, companyHeaderHtml, printWindow } from '../../utils/print';
 import { getCompanySettings } from '../../utils/companySettings';
 import { CollectorRemittancePage } from '../audit/CollectorRemittancePage';
+import { CollectorPaymentSummary } from './CollectorPaymentSummary';
 
 const { Column, HeaderCell, Cell } = Table;
 
@@ -755,6 +756,7 @@ export const ReportsPage = () => {
         { key: 'collection-summary', label: 'Collection Summary' },
         { key: 'expected-collections', label: 'Collection Schedule' },
         { key: 'remittance-audit', label: 'Remittance Audit' },
+        { key: 'collector-payment-summary', label: 'Collector Payment Summary' },
       ]},
     { key: 'loans', label: 'Loans', tabs: [
       { key: 'loans-granted', label: 'Loans Granted' },
@@ -2486,6 +2488,7 @@ export const ReportsPage = () => {
       )}
 
       {activeTab === 'remittance-audit' && <CollectorRemittancePage embedded />}
+      {activeTab === 'collector-payment-summary' && <CollectorPaymentSummary embedded />}
     </div>
   );
 };
