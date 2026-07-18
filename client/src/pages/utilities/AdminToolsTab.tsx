@@ -154,10 +154,10 @@ const PaymentCorrector = () => {
           <Column width={200}><HeaderCell>Actions</HeaderCell><Cell>{(r: any) => (
             <div className="flex gap-1">
               {r.status !== 'cancelled' && <>
-                <Button size="sm" color="red" appearance="ghost" onClick={() => openCancel(r)}><XCircle className="w-3.5 h-3.5" />Cancel</Button>
-                <Button size="sm" color="blue" appearance="ghost" onClick={() => openAdjust(r)}><Edit3 className="w-3.5 h-3.5" />Adjust</Button>
-                <Button size="sm" color="violet" appearance="ghost" onClick={() => openReallocate(r)}><RefreshCw className="w-3.5 h-3.5" />Re-allocate</Button>
-                <Button size="sm" color="orange" appearance="ghost" onClick={() => openReassign(r)}><ArrowRight className="w-3.5 h-3.5" />Reassign</Button>
+                <Button size="sm" color="red" appearance="primary" onClick={() => openCancel(r)}><XCircle className="w-3.5 h-3.5" />Cancel</Button>
+                <Button size="sm" color="blue" appearance="primary" onClick={() => openAdjust(r)}><Edit3 className="w-3.5 h-3.5" />Adjust</Button>
+                <Button size="sm" color="violet" appearance="primary" onClick={() => openReallocate(r)}><RefreshCw className="w-3.5 h-3.5" />Re-allocate</Button>
+                <Button size="sm" color="orange" appearance="primary" onClick={() => openReassign(r)}><ArrowRight className="w-3.5 h-3.5" />Reassign</Button>
               </>}
             </div>
           )}</Cell></Column>
