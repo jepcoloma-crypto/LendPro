@@ -159,7 +159,7 @@ export const CollectorRemittancePage = ({ embedded }: { embedded?: boolean }) =>
   return embedded ? content : (
     <Panel header={<h2 className="text-xl font-semibold">Collector Remittance Audit</h2>}>
       <p className="text-sm text-gray-500 mb-4 -mt-2">
-        Verify collector remittances — shows payments entered by each collector alongside their nearby collection visits.
+        Verify collector remittances — shows payments assigned to each collector alongside their nearby collection visits.
       </p>
       {content}
     </Panel>

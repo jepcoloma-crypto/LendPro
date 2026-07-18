@@ -457,8 +457,9 @@ export class ReportController {
          FROM payments p
          JOIN loans l ON p.loan_id = l.id
          JOIN borrowers b ON p.borrower_id = b.id
-         JOIN users u ON u.id = p.received_by
+         JOIN users u ON u.id = p.collector_id
          WHERE u.role_id = (SELECT id FROM roles WHERE slug = 'collector')
+           AND p.status != 'cancelled'
            AND ($1::uuid IS NULL OR u.id = $1::uuid)
            AND ($2::date IS NULL OR p.payment_date >= $2::date)
            AND ($3::date IS NULL OR p.payment_date <= $3::date)
