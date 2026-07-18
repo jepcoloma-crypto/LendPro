@@ -19,7 +19,6 @@ export class CollectionController {
       let paramIndex = 1;
       if (status) { whereClauses.push(`c.status = $${paramIndex++}`); values.push(status); }
       if (collectorId) { whereClauses.push(`c.collector_id = $${paramIndex++}`); values.push(collectorId); }
-      if (req.user?.roleSlug === 'collector') { whereClauses.push(`c.collector_id = $${paramIndex++}`); values.push(req.user.userId); }
       const where = whereClauses.join(' AND ');
 
       const countResult = await collectionRepo.query(
@@ -73,67 +72,35 @@ export class CollectionController {
 
   async getDueToday(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const collectorFilter = req.user?.roleSlug === 'collector';
-      const result = collectorFilter
-        ? await collectionRepo.query(
-            `SELECT c.id, c.loan_id, c.borrower_id, c.collector_id,
-              c.status, c.promise_to_pay_date, c.promise_to_pay_amount,
-              c.last_visit_date, c.last_visit_notes, c.next_visit_date,
-              c.created_at, c.updated_at,
-              l.loan_number, l.outstanding_balance as total_due,
-              b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
-              COALESCE((
-                SELECT SUM(a2.total_due - COALESCE(a2.paid_amount,0))
-                FROM amortization_schedules a2
-                WHERE a2.loan_id = l.id AND a2.due_date < CURRENT_DATE
-                  AND COALESCE(a2.paid_amount,0) < a2.total_due
-              ), 0) as total_overdue,
-              COALESCE((
-                SELECT MAX(CURRENT_DATE - a3.due_date)
-                FROM amortization_schedules a3
-                WHERE a3.loan_id = l.id AND a3.due_date < CURRENT_DATE
-                  AND COALESCE(a3.paid_amount,0) < a3.total_due
-              ), 0)::int as days_overdue
-             FROM collections c
-             JOIN loans l ON c.loan_id = l.id
-             JOIN borrowers b ON c.borrower_id = b.id
-             WHERE EXISTS (
-               SELECT 1 FROM amortization_schedules a
-               WHERE a.loan_id = l.id
-               AND a.due_date = CURRENT_DATE
-               AND COALESCE(a.paid_amount, 0) < a.total_due
-             ) AND c.collector_id = $1`,
-            [req.user!.userId]
-          )
-        : await collectionRepo.query(
-            `SELECT c.id, c.loan_id, c.borrower_id, c.collector_id,
-              c.status, c.promise_to_pay_date, c.promise_to_pay_amount,
-              c.last_visit_date, c.last_visit_notes, c.next_visit_date,
-              c.created_at, c.updated_at,
-              l.loan_number, l.outstanding_balance as total_due,
-              b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
-              COALESCE((
-                SELECT SUM(a2.total_due - COALESCE(a2.paid_amount,0))
-                FROM amortization_schedules a2
-                WHERE a2.loan_id = l.id AND a2.due_date < CURRENT_DATE
-                  AND COALESCE(a2.paid_amount,0) < a2.total_due
-              ), 0) as total_overdue,
-              COALESCE((
-                SELECT MAX(CURRENT_DATE - a3.due_date)
-                FROM amortization_schedules a3
-                WHERE a3.loan_id = l.id AND a3.due_date < CURRENT_DATE
-                  AND COALESCE(a3.paid_amount,0) < a3.total_due
-              ), 0)::int as days_overdue
-             FROM collections c
-             JOIN loans l ON c.loan_id = l.id
-             JOIN borrowers b ON c.borrower_id = b.id
-             WHERE EXISTS (
-               SELECT 1 FROM amortization_schedules a
-               WHERE a.loan_id = l.id
-               AND a.due_date = CURRENT_DATE
-               AND COALESCE(a.paid_amount, 0) < a.total_due
-             )`
-          );
+      const result = await collectionRepo.query(
+        `SELECT c.id, c.loan_id, c.borrower_id, c.collector_id,
+          c.status, c.promise_to_pay_date, c.promise_to_pay_amount,
+          c.last_visit_date, c.last_visit_notes, c.next_visit_date,
+          c.created_at, c.updated_at,
+          l.loan_number, l.outstanding_balance as total_due,
+          b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
+          COALESCE((
+            SELECT SUM(a2.total_due - COALESCE(a2.paid_amount,0))
+            FROM amortization_schedules a2
+            WHERE a2.loan_id = l.id AND a2.due_date < CURRENT_DATE
+              AND COALESCE(a2.paid_amount,0) < a2.total_due
+          ), 0) as total_overdue,
+          COALESCE((
+            SELECT MAX(CURRENT_DATE - a3.due_date)
+            FROM amortization_schedules a3
+            WHERE a3.loan_id = l.id AND a3.due_date < CURRENT_DATE
+              AND COALESCE(a3.paid_amount,0) < a3.total_due
+          ), 0)::int as days_overdue
+         FROM collections c
+         JOIN loans l ON c.loan_id = l.id
+         JOIN borrowers b ON c.borrower_id = b.id
+         WHERE EXISTS (
+           SELECT 1 FROM amortization_schedules a
+           WHERE a.loan_id = l.id
+           AND a.due_date = CURRENT_DATE
+           AND COALESCE(a.paid_amount, 0) < a.total_due
+         )`
+      );
       res.json({ success: true, data: result });
     } catch (error: any) {
       console.error('collections.getDueToday error:', error);
@@ -143,8 +110,6 @@ export class CollectionController {
 
   async getOverdue(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const collectorFilter = req.user?.roleSlug === 'collector' ? 'AND c.collector_id = $1' : '';
-      const values = req.user?.roleSlug === 'collector' ? [req.user!.userId] : [];
       const result = await collectionRepo.query(
         `SELECT c.id, c.loan_id, c.borrower_id, c.collector_id,
           c.status, c.promise_to_pay_date, c.promise_to_pay_amount,
@@ -165,9 +130,7 @@ export class CollectionController {
          WHERE l.maturity_date < CURRENT_DATE
            AND l.outstanding_balance > 0
            AND l.status != 'closed'
-           ${collectorFilter}
-         ORDER BY l.maturity_date`,
-        values.length > 0 ? values : undefined
+         ORDER BY l.maturity_date`
       );
       res.json({ success: true, data: result });
     } catch (error: any) {

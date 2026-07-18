@@ -76,7 +76,6 @@ export class PaymentController {
       const values: any[] = [];
       let paramIndex = 1;
 
-      if (req.user?.roleSlug === 'collector') { conditions.push(`(l.collector_id = $${paramIndex} OR l.collector_id IS NULL OR NOT EXISTS (SELECT 1 FROM users WHERE id = l.collector_id AND is_active = true))`); values.push(req.user.userId); paramIndex++; }
       if (loanId) { conditions.push(`payments.loan_id = $${paramIndex++}`); values.push(loanId); }
       if (borrowerId) { conditions.push(`payments.borrower_id = $${paramIndex++}`); values.push(borrowerId); }
       if (method) { conditions.push(`payments.payment_method = $${paramIndex++}`); values.push(method); }
