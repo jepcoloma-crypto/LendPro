@@ -471,31 +471,6 @@ export class ReportController {
     }
   }
 
-  async getCollectorPaymentSummary(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-      const startDate = paramStr(req.query.startDate);
-      const endDate = paramStr(req.query.endDate);
-      const result = await collectionRepo.query(
-        `SELECT u.id as collector_id,
-                u.first_name || ' ' || u.last_name as collector_name,
-                COUNT(p.id) as payment_count,
-                COALESCE(SUM(p.amount), 0) as total_amount
-         FROM payments p
-         JOIN users u ON u.id = p.received_by
-         WHERE u.role_id = (SELECT id FROM roles WHERE slug = 'collector')
-           AND p.status != 'cancelled'
-           AND ($1::date IS NULL OR p.payment_date >= $1::date)
-           AND ($2::date IS NULL OR p.payment_date <= $2::date)
-         GROUP BY u.id, u.first_name, u.last_name
-         ORDER BY total_amount DESC`,
-        [startDate || null, endDate || null]
-      );
-      res.json({ success: true, data: result });
-    } catch (error: any) {
-      next(new AppError(500, error.message));
-    }
-  }
-
   async getLoansGranted(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { startDate, endDate, branchId } = req.query;

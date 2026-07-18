@@ -192,7 +192,6 @@ export const reportsApi = {
   getPastDue: (params?: any) => api.get('/reports/past-due', { params }),
   getApplicationTypes: (params?: any) => api.get('/reports/application-types', { params }),
   getCollectorRemittance: (params?: any) => api.get('/reports/collector-remittance', { params }),
-  getCollectorPaymentSummary: (params?: any) => api.get('/reports/collector-payment-summary', { params }),
   getBorrowerPerformance: (params?: any) => api.get('/reports/borrower-performance', { params }),
   getCashFlow: (params?: any) => api.get('/reports/cash-flow', { params }),
   getExpenseReport: (params?: any) => api.get('/reports/expense-report', { params }),
