@@ -21,7 +21,7 @@ export class PickupController {
 
       // Fetch unremitted payments for this collector
       const { rows: payments } = await pool.query(
-        `SELECT p.id, p.amount, p.payment_number, p.created_at,
+        `SELECT p.id, p.amount, p.payment_number, p.loan_id, p.borrower_id, p.payment_method, p.created_at,
                 CONCAT(b.first_name, ' ', b.last_name) as borrower_name
          FROM payments p
          LEFT JOIN borrowers b ON b.id = p.borrower_id
@@ -71,8 +71,36 @@ export class PickupController {
           [pickup.id, paymentIds]
         );
 
-        // Adjust expected_cash only for variance between actual cash and system amount.
-        // Payment auto-record already incremented expected_cash at payment creation time.
+        // Record cash transactions for the remitted payments (cash now physically with cashier).
+        // Only create if one doesn't already exist (old behavior pre-created it at payment time).
+        for (const pay of payments) {
+          const { rows: existing } = await client.query(
+            `SELECT id FROM cash_transactions WHERE payment_id = $1`, [pay.id]
+          );
+          if (existing.length === 0) {
+            await client.query(
+              `INSERT INTO cash_transactions (shift_id, loan_id, borrower_id, payment_id, transaction_type, direction, amount, payment_method, description, created_by)
+               VALUES ($1, $2, $3, $4, 'collection', 'in', $5, $6, $7, $8)`,
+              [shift.id, pay.loan_id, pay.borrower_id, pay.id, pay.amount, pay.payment_method || 'cash', `Pickup ${pickupNumber}: ${pay.payment_number}`, req.user!.userId]
+            );
+          }
+        }
+        // Only increment expected_cash for payments that didn't already have a cash transaction
+        const { rows: needCash } = await client.query(
+          `SELECT COALESCE(SUM(p.amount), 0) as total
+           FROM payments p
+           WHERE p.id = ANY($1) AND NOT EXISTS (SELECT 1 FROM cash_transactions ct WHERE ct.payment_id = p.id)`,
+          [paymentIds]
+        );
+        const newCashTotal = parseFloat(needCash[0]?.total) || 0;
+        if (newCashTotal > 0) {
+          await client.query(
+            `UPDATE cashier_sessions SET expected_cash = expected_cash + $1 WHERE id = $2`,
+            [newCashTotal, shift.id]
+          );
+        }
+
+        // Adjust expected_cash for variance between actual cash and system amount.
         if (Math.abs(variance) > 0.02) {
           const adjDirection = variance > 0 ? 'in' : 'out';
           await client.query(

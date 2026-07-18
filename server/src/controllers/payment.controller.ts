@@ -40,20 +40,24 @@ export class PaymentController {
       }
 
       const payment = await paymentService.receivePayment(req.body, req.user!.userId);
-      await autoRecordTransaction({
-        userId: req.user!.userId,
-        loanId: payment.loan_id,
-        borrowerId: payment.borrower_id,
-        paymentId: payment.id,
-        transactionType: 'collection',
-        direction: 'in',
-        amount: parseFloat(payment.amount) || 0,
-        paymentMethod: payment.payment_method,
-        referenceNumber: payment.reference_number,
-        receiptNumber: payment.receipt_number,
-        description: `Payment ${payment.payment_number}`,
-        shiftId: myShift.id,
-      });
+      // Only record cash if paid directly at the office (no collector involved)
+      // Collector payments record cash when the pickup is processed
+      if (!req.body.collectorId) {
+        await autoRecordTransaction({
+          userId: req.user!.userId,
+          loanId: payment.loan_id,
+          borrowerId: payment.borrower_id,
+          paymentId: payment.id,
+          transactionType: 'collection',
+          direction: 'in',
+          amount: parseFloat(payment.amount) || 0,
+          paymentMethod: payment.payment_method,
+          referenceNumber: payment.reference_number,
+          receiptNumber: payment.receipt_number,
+          description: `Payment ${payment.payment_number}`,
+          shiftId: myShift.id,
+        });
+      }
       res.status(201).json({ success: true, data: payment, message: 'Payment received successfully' });
     } catch (error: any) {
       next(new AppError(400, error.message));
