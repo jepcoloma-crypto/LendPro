@@ -935,6 +935,10 @@ ${transactions.map((t: any, i: number) => `<tr>
                               </div>
                             ))}
                           </div>
+                          <div className="mt-2 flex justify-between items-center text-sm">
+                            <span className="text-gray-500">Denomination Total:</span>
+                            <span className="font-bold text-lg">{formatCurrency([1000,500,200,100,50,20,10,5,1].reduce((s, d) => s + d * (parseInt(String(pickupDenoms[d])) || 0), 0))}</span>
+                          </div>
                         </div>
                         <div>
                           <label className="block text-sm font-medium mb-1">Notes</label>
