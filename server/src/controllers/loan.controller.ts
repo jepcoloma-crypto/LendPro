@@ -743,6 +743,7 @@ export class LoanController {
       const stats = await loanService.getDashboardStats(req.user?.userId, req.user?.roleSlug);
       res.json({ success: true, data: stats });
     } catch (error: any) {
+      console.error('dashboard error:', error.message, error.stack);
       next(new AppError(500, error.message));
     }
   }

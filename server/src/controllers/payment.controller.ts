@@ -39,6 +39,20 @@ export class PaymentController {
         req.body.paymentDate = shiftDate;
       }
 
+      // If the payment has a collector assigned who is inactive, reassign the loan
+      // to the current active collector and override the collectorId
+      if (req.body.collectorId && req.body.loanId) {
+        const collectorResult = await pool.query(`SELECT is_active FROM users WHERE id = $1`, [req.body.collectorId]);
+        const collectorUser = collectorResult.rows[0];
+        if (!collectorUser || collectorUser.is_active === false) {
+          const loanResult = await pool.query(
+            `UPDATE loans SET collector_id = $1 WHERE id = $2 RETURNING collector_id`,
+            [req.user!.userId, req.body.loanId]
+          );
+          if (loanResult.rows.length) req.body.collectorId = req.user!.userId;
+        }
+      }
+
       const payment = await paymentService.receivePayment(req.body, req.user!.userId);
       // Only record cash if paid directly at the office (no collector involved)
       // Collector payments record cash when the pickup is processed

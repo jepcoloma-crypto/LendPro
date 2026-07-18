@@ -544,8 +544,8 @@ export class LoanService {
   async getDashboardStats(userId?: string, roleSlug?: string) {
     const isCollector = roleSlug === 'collector' && userId;
     const cid = isCollector ? [userId] : [];
-    const cf = isCollector ? 'AND collector_id = $1' : '';
-    const cfl = isCollector ? 'AND l.collector_id = $1' : '';
+    const cf = isCollector ? ' AND collector_id = $1' : '';
+    const cfl = isCollector ? ' AND l.collector_id = $1' : '';
 
     const aggQuery = isCollector
       ? `
