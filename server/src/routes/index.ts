@@ -289,6 +289,7 @@ router.get('/admin/payments/:id/allocations', authenticate, authorize('super-adm
 router.put('/admin/payments/:id/force-cancel', authenticate, authorize('super-admin'), auditLog('force-cancel', 'payment'), adminController.forceCancelPayment.bind(adminController));
 router.put('/admin/payments/:id/adjust', authenticate, authorize('super-admin'), auditLog('adjust', 'payment'), adminController.adjustPayment.bind(adminController));
 router.post('/admin/payments/:id/re-allocate', authenticate, authorize('super-admin'), auditLog('re-allocate', 'payment'), adminController.reAllocatePayment.bind(adminController));
+router.put('/admin/payments/:id/reassign-collector', authenticate, authorize('super-admin'), auditLog('reassign-collector', 'payment'), adminController.reassignCollector.bind(adminController));
 router.get('/admin/cash-transactions', authenticate, authorize('super-admin'), adminController.listCashTransactions.bind(adminController));
 router.delete('/admin/cash-transactions/:id', authenticate, authorize('super-admin'), auditLog('delete', 'cash_transaction'), adminController.deleteCashTransaction.bind(adminController));
 router.put('/admin/cash-transactions/:id/reassign', authenticate, authorize('super-admin'), auditLog('reassign', 'cash_transaction'), adminController.reassignCashTransaction.bind(adminController));

@@ -290,6 +290,34 @@ export class AdminController {
     }
   }
 
+  async reassignCollector(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const { collector_id } = req.body;
+      if (!collector_id) throw new AppError(400, 'Collector is required');
+
+      const payment = await paymentRepo.findById(id);
+      if (!payment) throw new AppError(404, 'Payment not found');
+
+      // Verify collector exists and is active
+      const { rows: collectors } = await pool.query(
+        `SELECT id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1 AND r.slug = 'collector' AND u.is_active = true`,
+        [collector_id]
+      );
+      if (!collectors.length) throw new AppError(400, 'Collector not found or inactive');
+
+      await pool.query(
+        `UPDATE payments SET collector_id = $1, updated_at = NOW() WHERE id = $2`,
+        [collector_id, id]
+      );
+
+      const updated = await paymentRepo.findById(id);
+      res.json({ success: true, data: updated, message: 'Payment collector reassigned' });
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
+    }
+  }
+
   // ==================== CASH TRANSACTION ADMIN ====================
 
   async listCashTransactions(req: AuthRequest, res: Response, next: NextFunction) {

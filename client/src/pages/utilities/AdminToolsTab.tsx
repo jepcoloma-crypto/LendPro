@@ -22,6 +22,10 @@ const PaymentCorrector = () => {
   const [reallocateModal, setReallocateModal] = useState(false);
   const [allocations, setAllocations] = useState<any[]>([]);
   const [reallocateLoading, setReallocateLoading] = useState(false);
+  const [reassignModal, setReassignModal] = useState(false);
+  const [reassignCollectorId, setReassignCollectorId] = useState('');
+  const [reassignLoading, setReassignLoading] = useState(false);
+  const [collectors, setCollectors] = useState<any[]>([]);
 
   const searchPayments = async () => {
     if (!searchTerm.trim()) return;
@@ -88,6 +92,32 @@ const PaymentCorrector = () => {
     finally { setAdjustLoading(false); }
   };
 
+  const loadCollectors = async () => {
+    try {
+      const { data } = await api.get('/users/collectors');
+      setCollectors(data.data || []);
+    } catch {}
+  };
+
+  const openReassign = (p: any) => {
+    setSelectedPayment(p);
+    setReassignCollectorId(p.collector_id || '');
+    loadCollectors();
+    setReassignModal(true);
+  };
+
+  const handleReassignCollector = async () => {
+    if (!reassignCollectorId) return;
+    setReassignLoading(true);
+    try {
+      await api.put(`/admin/payments/${selectedPayment.id}/reassign-collector`, { collector_id: reassignCollectorId });
+      toaster.push(<Message type="success">Collector reassigned</Message>, { placement: 'topEnd' });
+      setReassignModal(false);
+      searchPayments();
+    } catch (err: any) { toaster.push(<Message type="error">{err?.response?.data?.error || 'Failed'}</Message>, { placement: 'topEnd' }); }
+    finally { setReassignLoading(false); }
+  };
+
   const handleReallocate = async () => {
     if (!allocations.length) return;
     const totalAlloc = allocations.reduce((s, a) => s + (parseFloat(a.allocated_amount) || 0), 0);
@@ -127,6 +157,7 @@ const PaymentCorrector = () => {
                 <Button size="sm" color="red" appearance="ghost" onClick={() => openCancel(r)}><XCircle className="w-3.5 h-3.5" />Cancel</Button>
                 <Button size="sm" color="blue" appearance="ghost" onClick={() => openAdjust(r)}><Edit3 className="w-3.5 h-3.5" />Adjust</Button>
                 <Button size="sm" color="violet" appearance="ghost" onClick={() => openReallocate(r)}><RefreshCw className="w-3.5 h-3.5" />Re-allocate</Button>
+                <Button size="sm" color="orange" appearance="ghost" onClick={() => openReassign(r)}><ArrowRight className="w-3.5 h-3.5" />Reassign</Button>
               </>}
             </div>
           )}</Cell></Column>
@@ -168,6 +199,27 @@ const PaymentCorrector = () => {
         <Modal.Footer>
           <Button color="blue" appearance="primary" onClick={handleAdjust} loading={adjustLoading}><Edit3 className="w-4 h-4 mr-1" />Save Changes</Button>
           <Button onClick={() => setAdjustModal(false)} appearance="subtle">Close</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Reassign Collector Modal */}
+      <Modal open={reassignModal} onClose={() => setReassignModal(false)} size="sm">
+        <Modal.Header><Modal.Title>Reassign Collector</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <p className="mb-3 text-sm text-gray-600">Reassign <strong>{selectedPayment?.payment_number}</strong> ({formatCurrency(selectedPayment?.amount)}) to a different collector</p>
+          <label className="text-sm font-medium">Collector</label>
+          <select className="rs-input" value={reassignCollectorId} onChange={(e: any) => setReassignCollectorId(e.target.value)} style={{ width: '100%' }}>
+            <option value="">Select collector...</option>
+            {collectors.map((c: any) => (
+              <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>
+            ))}
+          </select>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button color="orange" appearance="primary" onClick={handleReassignCollector} loading={reassignLoading} disabled={!reassignCollectorId}>
+            <ArrowRight className="w-4 h-4 mr-1" />Reassign
+          </Button>
+          <Button onClick={() => setReassignModal(false)} appearance="subtle">Close</Button>
         </Modal.Footer>
       </Modal>
 
