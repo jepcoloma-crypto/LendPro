@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { userRepo, roleRepo, branchRepo, auditLogRepo } from '../repositories';
+import { userRepo, roleRepo, branchRepo, auditLogRepo, paymentRepo } from '../repositories';
 import { AppError } from '../middleware/errorHandler';
 import { parsePagination, paramStr } from '../utils/helpers';
 import bcrypt from 'bcryptjs';
@@ -81,10 +81,40 @@ export class UserController {
       if (req.body.isActive !== undefined) data.is_active = req.body.isActive;
       if (req.body.password) data.password_hash = await bcrypt.hash(req.body.password, 12);
       const id = paramStr(req.params.id);
+
+      // Reassign pending payments when a collector is deactivated
+      if (data.is_active === false) {
+        const user = await userRepo.findById(id);
+        if (user) {
+          const roleRows = await roleRepo.query('SELECT slug FROM roles WHERE id = $1', [user.role_id]);
+          const roleSlug = roleRows[0]?.slug;
+          if (roleSlug === 'collector') {
+            const pendingPayments = await userRepo.query(
+              `SELECT p.id, p.received_by FROM payments p
+               WHERE p.collector_id = $1 AND p.remittance_status = 'pending' AND p.status != 'cancelled'`,
+              [id]
+            );
+            for (const pay of pendingPayments) {
+              // Reassign to the user who recorded the payment if they're a collector
+              const recRole = await userRepo.query(
+                `SELECT r.slug FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
+                [pay.received_by]
+              );
+              if (recRole[0]?.slug === 'collector') {
+                await userRepo.query(
+                  `UPDATE payments SET collector_id = $1 WHERE id = $2`,
+                  [pay.received_by, pay.id]
+                );
+              }
+            }
+          }
+        }
+      }
+
       (req as any).oldValues = await userRepo.findById(id);
-      const user = await userRepo.update(id, data);
-      if (!user) throw new Error('User not found');
-      const { password_hash, refresh_token, ...userData } = user;
+      const updated = await userRepo.update(id, data);
+      if (!updated) throw new Error('User not found');
+      const { password_hash, refresh_token, ...userData } = updated;
       res.json({ success: true, data: userData });
     } catch (error: any) {
       next(new AppError(400, error.message));
