@@ -1099,7 +1099,8 @@ export class ReportController {
       if (groupBy === 'monthly') {
         const monthlyMap: Record<string, any> = {};
         for (const r of rows) {
-          const monthKey = String(r.report_date).slice(0, 7);
+          const d = r.report_date;
+          const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
           const key = `${r.branch_name}|${monthKey}`;
           if (!monthlyMap[key]) {
             monthlyMap[key] = {
@@ -1143,7 +1144,8 @@ export class ReportController {
       if (groupBy === 'unified') {
         const monthMap: Record<string, any> = {};
         for (const r of rows) {
-          const monthKey = String(r.report_date).slice(0, 7);
+          const d = r.report_date;
+          const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
           const key = `${r.branch_name}|${monthKey}`;
           if (!monthMap[key]) {
             monthMap[key] = {
