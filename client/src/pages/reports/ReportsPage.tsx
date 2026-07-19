@@ -95,8 +95,6 @@ export const ReportsPage = () => {
   const [colEndDate, setColEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [colSummaryData, setColSummaryData] = useState<any[]>([]);
   const [colSummaryLoading, setColSummaryLoading] = useState(false);
-  const [colSummaryData, setColSummaryData] = useState<any[]>([]);
-  const [colSummaryLoading, setColSummaryLoading] = useState(false);
   const [csGroupBy, setCsGroupBy] = useState<'branch' | 'month'>('month');
   const [csStartDate, setCsStartDate] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
   const [csEndDate, setCsEndDate] = useState(new Date().toISOString().slice(0, 10));
