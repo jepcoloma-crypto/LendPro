@@ -95,11 +95,13 @@ export const ReportsPage = () => {
   const [colEndDate, setColEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [colSummaryData, setColSummaryData] = useState<any[]>([]);
   const [colSummaryLoading, setColSummaryLoading] = useState(false);
-  const [colSummaryMode, setColSummaryMode] = useState<'branch' | 'unified'>('unified');
+  const [colSummaryData, setColSummaryData] = useState<any[]>([]);
+  const [colSummaryLoading, setColSummaryLoading] = useState(false);
+  const [csGroupBy, setCsGroupBy] = useState<'branch' | 'month'>('month');
   const [csStartDate, setCsStartDate] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
   const [csEndDate, setCsEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [csBranchFilter, setCsBranchFilter] = useState<string | null>(null);
-  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
   const [loansGrantedData, setLoansGrantedData] = useState<any[]>([]);
   const [loansGrantedLoading, setLoansGrantedLoading] = useState(false);
@@ -416,17 +418,13 @@ export const ReportsPage = () => {
       if (activeTab !== 'collection-summary') return;
       setColSummaryLoading(true);
       try {
-        const { data } = await reportsApi.getCollectionSummary({ startDate: csStartDate, endDate: csEndDate, groupBy: colSummaryMode, branchId: csBranchFilter || undefined });
-        if (colSummaryMode === 'unified') {
-          setColSummaryData(data.data?.months || []);
-        } else {
-          setColSummaryData(data.data?.rows || []);
-        }
+        const { data } = await reportsApi.getCollectionSummary({ startDate: csStartDate, endDate: csEndDate, groupBy: 'unified', branchId: csBranchFilter || undefined });
+        setColSummaryData(data.data?.months || []);
       } catch { toaster.push(<Message type="error">Failed to load collection summary</Message>, { placement: 'topEnd', duration: 5000 }); setColSummaryData([]); }
       finally { setColSummaryLoading(false); }
     };
     fetchColSummary();
-  }, [activeTab, csStartDate, csEndDate, colSummaryMode, csBranchFilter]);
+  }, [activeTab, csStartDate, csEndDate, csBranchFilter]);
 
   useEffect(() => {
     const fetchLoansGranted = async () => {
@@ -2178,14 +2176,14 @@ export const ReportsPage = () => {
                 size="sm"
               />
               <SelectPicker
-                placeholder="View"
+                placeholder="Group by"
                 data={[
-                  { label: 'Branch Summary', value: 'branch' },
-                  { label: 'Detailed (Monthly/Daily)', value: 'unified' },
+                  { label: 'Branch', value: 'branch' },
+                  { label: 'Month', value: 'month' },
                 ]}
-                value={colSummaryMode}
-                onChange={(v) => { if (v) { setColSummaryMode(v as 'branch' | 'unified'); setExpandedMonths(new Set()); } }}
-                style={{ width: 200 }}
+                value={csGroupBy}
+                onChange={(v) => { if (v) { setCsGroupBy(v as 'branch' | 'month'); setExpandedKeys(new Set()); } }}
+                style={{ width: 140 }}
                 cleanable={false}
                 searchable={false}
                 size="sm"
@@ -2195,85 +2193,66 @@ export const ReportsPage = () => {
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
                 const periodLabel = `${new Date(csStartDate).toLocaleDateString()} — ${new Date(csEndDate).toLocaleDateString()}`;
                 const num = (v: any) => Number(v) || 0;
+                const allMonths = colSummaryData as any[];
+                const title = `Collection Summary — Grouped by ${csGroupBy === 'branch' ? 'Branch' : 'Month'}`;
+                let html = `<!DOCTYPE html><html><head><title>${title}</title>
+                  <style>${printStyles}</style></head><body>
+                  ${companyHeaderHtml(companyInfo)}
+                  <div class="report-title">${title}</div>
+                  <div class="report-subtitle">${periodLabel}</div>`;
 
-                if (colSummaryMode === 'branch') {
-                  const gt = colSummaryData.reduce((s, r) => ({
-                    actual_collection: s.actual_collection + num(r.actual_collection),
-                    total_collection: s.total_collection + num(r.total_collection),
-                    penalty: s.penalty + num(r.penalty),
-                    advance_payment: s.advance_payment + num(r.advance_payment),
-                    total_released: s.total_released + num(r.total_released || 0),
-                    past_due: s.past_due + num(r.past_due_accounts || 0),
-                    past_due_amount: s.past_due_amount + num(r.past_due_amount || 0),
-                    delinquent: s.delinquent + num(r.total_delinquent || 0),
-                    delinquent_amount: s.delinquent_amount + num(r.delinquent_amount || 0),
-                    total_outstanding: s.total_outstanding + num(r.total_outstanding || 0),
-                  }), { actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, total_released: 0, past_due: 0, past_due_amount: 0, delinquent: 0, delinquent_amount: 0, total_outstanding: 0 });
-                  let html = `<!DOCTYPE html><html><head><title>Collection Summary</title>
-                    <style>${printStyles}</style></head><body>
-                    ${companyHeaderHtml(companyInfo)}
-                    <div class="report-title">Collection Summary (Branch Summary)</div>
-                    <div class="report-subtitle">${periodLabel}</div>
-                    <table><thead><tr>
-                      <th>Branch</th><th class="text-right">Actual</th><th class="text-right">Total</th>
-                      <th class="text-right">Penalty</th><th class="text-right">Advance</th>
-                      <th class="text-right">Released</th>
-                      <th class="text-right">Ending Release</th><th class="text-right">Past Due</th><th class="text-right">Past Due $</th><th class="text-right">Delinq</th><th class="text-right">Delinq $</th><th class="text-right">Outstanding</th><th class="text-right">PAR</th>
-                    </tr></thead><tbody>`;
-                  for (const b of colSummaryData) {
-                    html += `<tr><td>${b.branch_name}</td><td class="text-right">${formatCurrency(b.actual_collection)}</td>
-                      <td class="text-right">${formatCurrency(b.total_collection)}</td>
-                      <td class="text-right">${formatCurrency(b.penalty)}</td>
-                      <td class="text-right">${formatCurrency(b.advance_payment)}</td>
-                      <td class="text-right">${formatCurrency(b.total_released || 0)}</td>
-                      <td class="text-right">${formatCurrency(b.ending_loan_release)}</td>
-                      <td class="text-right">${b.past_due_accounts || 0}</td>
-                      <td class="text-right">${formatCurrency(b.past_due_amount || 0)}</td>
-                      <td class="text-right">${b.total_delinquent || 0}</td>
-                      <td class="text-right">${formatCurrency(b.delinquent_amount || 0)}</td>
-                      <td class="text-right">${formatCurrency(b.total_outstanding || 0)}</td>
-                      <td class="text-right">${Number(b.par || 0).toFixed(1)}%</td></tr>`;
-                  }
-                  html += `</tbody><tfoot><tr class="grand-total"><td>Grand Total</td>
-                    <td class="text-right">${formatCurrency(gt.actual_collection)}</td>
-                    <td class="text-right">${formatCurrency(gt.total_collection)}</td>
-                    <td class="text-right">${formatCurrency(gt.penalty)}</td>
-                    <td class="text-right">${formatCurrency(gt.advance_payment)}</td>
-                    <td class="text-right">${formatCurrency(gt.total_released)}</td>
-                    <td class="text-right"></td>
-                    <td class="text-right">${gt.past_due}</td><td class="text-right">${formatCurrency(gt.past_due_amount || 0)}</td>
-                    <td class="text-right">${gt.delinquent}</td><td class="text-right">${formatCurrency(gt.delinquent_amount || 0)}</td>
-                    <td class="text-right">${formatCurrency(gt.total_outstanding || 0)}</td><td class="text-right"></td></tr></tfoot></table>
-                    <div class="signatures">
-                      <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
-                      <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
-                      <div><div class="sig-line"></div><p class="sig-name">Approved By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
-                    </div>
-                    <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
-                  </body></html>`;
-                  printWindow(html);
-                } else {
-                  let html = `<!DOCTYPE html><html><head><title>Collection Summary</title>
-                    <style>${printStyles}</style></head><body>
-                    ${companyHeaderHtml(companyInfo)}
-                    <div class="report-title">Collection Summary (Detailed)</div>
-                    <div class="report-subtitle">${periodLabel}</div>`;
-
-                  const allMonths = colSummaryData as any[];
-                  let monthGrand = { actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, released: 0, past_due_amount: 0, delinquent_amount: 0, total_outstanding: 0 };
-                  let dayGrand = { actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, released: 0 };
-
+                if (csGroupBy === 'branch') {
+                  const branchMap: Record<string, any> = {};
                   for (const m of allMonths) {
-                    const mn = num;
-                    monthGrand.actual_collection += mn(m.actual_collection);
-                    monthGrand.total_collection += mn(m.total_collection);
-                    monthGrand.penalty += mn(m.penalty);
-                    monthGrand.advance_payment += mn(m.advance_payment);
-                    monthGrand.released += mn(m.actual_released_month);
-                    monthGrand.past_due_amount = Math.max(monthGrand.past_due_amount, mn(m.past_due_amount));
-                    monthGrand.delinquent_amount = Math.max(monthGrand.delinquent_amount, mn(m.delinquent_amount));
-                    monthGrand.total_outstanding = Math.max(monthGrand.total_outstanding, mn(m.total_outstanding));
+                    if (!branchMap[m.branch_name]) branchMap[m.branch_name] = { branch_name: m.branch_name, actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, released: 0, ending_loan_release: 0, past_due_amount: 0, delinquent_amount: 0, total_outstanding: 0, par: 0, months: [] };
+                    const b = branchMap[m.branch_name];
+                    b.actual_collection += num(m.actual_collection);
+                    b.total_collection += num(m.total_collection);
+                    b.penalty += num(m.penalty);
+                    b.advance_payment += num(m.advance_payment);
+                    b.released += num(m.actual_released_month);
+                    b.ending_loan_release = Math.max(b.ending_loan_release, num(m.ending_loan_release));
+                    b.past_due_amount = Math.max(b.past_due_amount, num(m.past_due_amount));
+                    b.delinquent_amount = Math.max(b.delinquent_amount, num(m.delinquent_amount));
+                    b.total_outstanding = Math.max(b.total_outstanding, num(m.total_outstanding));
+                    b.par = Math.max(b.par, num(m.par));
+                    b.months.push(m);
+                  }
 
+                  for (const b of Object.values(branchMap) as any[]) {
+                    html += `<h3>${b.branch_name}</h3>
+                      <h4>Branch Totals — Actual: ${formatCurrency(b.actual_collection)} | Total: ${formatCurrency(b.total_collection)} | Rate: ${b.total_collection > 0 ? Math.round(b.actual_collection / b.total_collection * 100) + '%' : '—'}</h4>
+                      <table><thead><tr>
+                        <th>Month</th><th class="text-right">Actual</th><th class="text-right">Total</th>
+                        <th class="text-right">Rate</th><th class="text-right">Penalty</th><th class="text-right">Advance</th><th class="text-right">Released</th>
+                      </tr></thead><tbody>`;
+                    for (const sm of b.months) {
+                      const smRate = num(sm.total_collection) > 0 ? Math.round(num(sm.actual_collection) / num(sm.total_collection) * 100) : null;
+                      html += `<tr><td>${sm.month}</td>
+                        <td class="text-right">${formatCurrency(sm.actual_collection)}</td>
+                        <td class="text-right">${formatCurrency(sm.total_collection)}</td>
+                        <td class="text-right">${smRate !== null ? smRate + '%' : '—'}</td>
+                        <td class="text-right">${formatCurrency(sm.penalty)}</td>
+                        <td class="text-right">${formatCurrency(sm.advance_payment)}</td>
+                        <td class="text-right">${formatCurrency(sm.actual_released_month)}</td></tr>`;
+                      for (const d of (sm.days || [])) {
+                        const dRate = num(d.total_collection) > 0 ? Math.round(num(d.actual_collection) / num(d.total_collection) * 100) : null;
+                        html += `<tr style="font-size:11px;color:#666;"><td style="padding-left:24px;">${new Date(d.report_date).toLocaleDateString()}</td>
+                          <td class="text-right">${formatCurrency(d.actual_collection)}</td>
+                          <td class="text-right">${formatCurrency(d.total_collection)}</td>
+                          <td class="text-right">${dRate !== null ? dRate + '%' : '—'}</td>
+                          <td class="text-right">${formatCurrency(d.penalty)}</td>
+                          <td class="text-right">${formatCurrency(d.advance_payment)}</td>
+                          <td class="text-right">${formatCurrency(d.actual_released_day)}</td></tr>`;
+                      }
+                    }
+                    html += `</tbody></table>`;
+                    html += `<p><strong>Portfolio:</strong> Past Due ${formatCurrency(b.past_due_amount)} | Delinq ${formatCurrency(b.delinquent_amount)} | Outstanding ${formatCurrency(b.total_outstanding)} | PAR ${b.par.toFixed(1)}%</p>`;
+                  }
+                } else {
+                  let dayGrand = { actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, released: 0 };
+                  for (const m of allMonths) {
+                    const mRate = num(m.total_collection) > 0 ? Math.round(num(m.actual_collection) / num(m.total_collection) * 100) : null;
                     html += `<h3>${m.branch_name} — ${m.month}</h3>
                       <table><thead><tr>
                         <th>Date</th><th class="text-right">Actual</th><th class="text-right">Total</th>
@@ -2315,63 +2294,66 @@ export const ReportsPage = () => {
                       <td class="text-right">${formatCurrency(m.total_outstanding || 0)}</td>
                       <td class="text-right">${Number(m.par || 0).toFixed(1)}%</td></tr>`;
                   }
-                  html += `</tbody></table>
-                    <div class="signatures">
-                      <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
-                      <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
-                      <div><div class="sig-line"></div><p class="sig-name">Approved By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
-                    </div>
-                    <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
-                  </body></html>`;
-                  printWindow(html);
+                  html += `</tbody></table>`;
                 }
+
+                html += `<div class="signatures">
+                    <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+                    <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+                    <div><div class="sig-line"></div><p class="sig-name">Approved By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+                  </div>
+                  <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
+                </body></html>`;
+                printWindow(html);
               }}>Print</Button>
               <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
-                if (colSummaryMode === 'branch') {
-                  const baseCols = [
+                const months = colSummaryData as any[];
+                const csvName = `collection-summary-${csStartDate}-to-${csEndDate}`;
+
+                if (csGroupBy === 'branch') {
+                  const branchMap: Record<string, any> = {};
+                  for (const m of months) {
+                    const bn = m.branch_name;
+                    if (!branchMap[bn]) branchMap[bn] = { branch_name: bn, actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, released: 0, ending_loan_release: 0, past_due_amount: 0, delinquent_amount: 0, total_outstanding: 0, par: 0 };
+                    const b = branchMap[bn];
+                    b.actual_collection += Number(m.actual_collection) || 0;
+                    b.total_collection += Number(m.total_collection) || 0;
+                    b.penalty += Number(m.penalty) || 0;
+                    b.advance_payment += Number(m.advance_payment) || 0;
+                    b.released += Number(m.actual_released_month) || 0;
+                    b.ending_loan_release = Math.max(b.ending_loan_release, Number(m.ending_loan_release) || 0);
+                    b.past_due_amount = Math.max(b.past_due_amount, Number(m.past_due_amount) || 0);
+                    b.delinquent_amount = Math.max(b.delinquent_amount, Number(m.delinquent_amount) || 0);
+                    b.total_outstanding = Math.max(b.total_outstanding, Number(m.total_outstanding) || 0);
+                    b.par = Math.max(b.par, Number(m.par) || 0);
+                  }
+                  exportCSV(Object.values(branchMap), `${csvName}-branch`, [
                     { key: 'branch_name', label: 'Branch' },
-                    { key: 'actual_collection', label: 'Actual Collection', format: (v: any) => formatCurrency(v) },
-                    { key: 'total_collection', label: 'Total Collection', format: (v: any) => formatCurrency(v) },
+                    { key: 'actual_collection', label: 'Actual', format: (v: any) => formatCurrency(v) },
+                    { key: 'total_collection', label: 'Total', format: (v: any) => formatCurrency(v) },
                     { key: 'penalty', label: 'Penalty', format: (v: any) => formatCurrency(v) },
-                    { key: 'advance_payment', label: 'Advance Payment', format: (v: any) => formatCurrency(v) },
-                    { key: 'total_released', label: 'Released', format: (v: any) => formatCurrency(v) },
-                    { key: 'ending_loan_release', label: 'Ending Loan Release', format: (v: any) => formatCurrency(v) },
-                    { key: 'past_due_accounts', label: 'Past Due Accts' },
-                    { key: 'past_due_amount', label: 'Past Due Amount', format: (v: any) => formatCurrency(v) },
-                    { key: 'total_delinquent', label: 'Delinq Accts' },
-                    { key: 'delinquent_amount', label: 'Delinquent Amount', format: (v: any) => formatCurrency(v) },
+                    { key: 'advance_payment', label: 'Advance', format: (v: any) => formatCurrency(v) },
+                    { key: 'released', label: 'Released', format: (v: any) => formatCurrency(v) },
+                    { key: 'ending_loan_release', label: 'Ending Release', format: (v: any) => formatCurrency(v) },
+                    { key: 'past_due_amount', label: 'Past Due $', format: (v: any) => formatCurrency(v) },
+                    { key: 'delinquent_amount', label: 'Delinq $', format: (v: any) => formatCurrency(v) },
                     { key: 'total_outstanding', label: 'Outstanding', format: (v: any) => formatCurrency(v) },
                     { key: 'par', label: 'PAR %', format: (v: any) => `${Number(v || 0).toFixed(1)}%` },
-                  ];
-                  exportCSV(colSummaryData, `collection-summary-${csStartDate}-to-${csEndDate}`, baseCols);
+                  ]);
                 } else {
-                  const months = colSummaryData as any[];
                   const monthRows = months.map((m: any) => ({
-                    month: m.month,
-                    branch_name: m.branch_name,
-                    actual_collection: m.actual_collection,
-                    total_collection: m.total_collection,
-                    penalty: m.penalty,
-                    advance_payment: m.advance_payment,
-                    released: m.actual_released_month,
-                    past_due_amount: m.past_due_amount || 0,
-                    delinquent_amount: m.delinquent_amount || 0,
-                    total_outstanding: m.total_outstanding || 0,
-                    par: m.par || 0,
+                    month: m.month, branch_name: m.branch_name, actual_collection: m.actual_collection,
+                    total_collection: m.total_collection, penalty: m.penalty, advance_payment: m.advance_payment,
+                    released: m.actual_released_month, past_due_amount: m.past_due_amount || 0,
+                    delinquent_amount: m.delinquent_amount || 0, total_outstanding: m.total_outstanding || 0, par: m.par || 0,
                   }));
                   const dayRows = months.flatMap((m: any) => (m.days || []).map((d: any) => ({
-                    month: m.month,
-                    branch_name: m.branch_name,
-                    report_date: d.report_date,
-                    actual_collection: d.actual_collection,
-                    total_collection: d.total_collection,
-                    penalty: d.penalty,
-                    advance_payment: d.advance_payment,
-                    released: d.actual_released_day,
+                    month: m.month, branch_name: m.branch_name, report_date: d.report_date,
+                    actual_collection: d.actual_collection, total_collection: d.total_collection,
+                    penalty: d.penalty, advance_payment: d.advance_payment, released: d.actual_released_day,
                   })));
-                  const monthCols = [
-                    { key: 'month', label: 'Month' },
-                    { key: 'branch_name', label: 'Branch' },
+                  exportCSV(monthRows, `${csvName}-monthly`, [
+                    { key: 'month', label: 'Month' }, { key: 'branch_name', label: 'Branch' },
                     { key: 'actual_collection', label: 'Actual', format: (v: any) => formatCurrency(v) },
                     { key: 'total_collection', label: 'Total', format: (v: any) => formatCurrency(v) },
                     { key: 'penalty', label: 'Penalty', format: (v: any) => formatCurrency(v) },
@@ -2381,20 +2363,15 @@ export const ReportsPage = () => {
                     { key: 'delinquent_amount', label: 'Delinq $', format: (v: any) => formatCurrency(v) },
                     { key: 'total_outstanding', label: 'Outstanding', format: (v: any) => formatCurrency(v) },
                     { key: 'par', label: 'PAR %', format: (v: any) => `${Number(v || 0).toFixed(1)}%` },
-                  ];
-                  const dayCols = [
-                    { key: 'month', label: 'Month' },
-                    { key: 'branch_name', label: 'Branch' },
-                    { key: 'report_date', label: 'Date' },
-                    { key: 'actual_collection', label: 'Actual', format: (v: any) => formatCurrency(v) },
+                  ]);
+                  setTimeout(() => exportCSV(dayRows, `${csvName}-daily`, [
+                    { key: 'month', label: 'Month' }, { key: 'branch_name', label: 'Branch' },
+                    { key: 'report_date', label: 'Date' }, { key: 'actual_collection', label: 'Actual', format: (v: any) => formatCurrency(v) },
                     { key: 'total_collection', label: 'Total', format: (v: any) => formatCurrency(v) },
                     { key: 'penalty', label: 'Penalty', format: (v: any) => formatCurrency(v) },
                     { key: 'advance_payment', label: 'Advance', format: (v: any) => formatCurrency(v) },
                     { key: 'released', label: 'Released', format: (v: any) => formatCurrency(v) },
-                  ];
-                  const csvName = `collection-summary-${csStartDate}-to-${csEndDate}`;
-                  exportCSV(monthRows, `${csvName}-monthly`, monthCols);
-                  setTimeout(() => exportCSV(dayRows, `${csvName}-daily`, dayCols), 100);
+                  ]), 100);
                 }
               }}>Export CSV</Button>
             </div>
@@ -2402,160 +2379,205 @@ export const ReportsPage = () => {
           <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Collection Summary — ${new Date(csStartDate).toLocaleDateString()} to ${new Date(csEndDate).toLocaleDateString()}`}>
             {colSummaryLoading ? (
               <div className="text-center py-8"><Loader size="md" /></div>
-            ) : colSummaryMode === 'branch' ? (
+            ) : colSummaryData.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">No data for this period</div>
+            ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm whitespace-nowrap">
-                  <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Actual</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Rate</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Penalty</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Advance</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Released</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Ending Release</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Past Due</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Past Due $</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Delinq</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Delinq $</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Outstanding</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">PAR</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {colSummaryData.length === 0 ? (
-                      <tr><td colSpan={14} className="text-center py-8 text-gray-400">No data for this period</td></tr>
-                    ) : colSummaryData.map((r: any, i: number) => {
-                      const actual = Number(r.actual_collection) || 0;
-                      const total = Number(r.total_collection) || 0;
-                      const rate = total > 0 ? Math.round((actual / total) * 100) : null;
-                      return (
-                      <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                        <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{r.branch_name}</td>
-                        <td className="py-3 px-4 text-right text-green-600 font-medium">{formatCurrency(actual)}</td>
-                        <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(total)}</td>
-                        <td className="py-3 px-4 text-right">
-                          {rate !== null ? <Tag color={rate >= 80 ? 'green' : rate >= 50 ? 'orange' : 'red'}>{rate}%</Tag> : <span className="text-gray-400">—</span>}
-                        </td>
-                        <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(r.penalty)}</td>
-                        <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(r.advance_payment)}</td>
-                        <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(r.total_released || 0)}</td>
-                        <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(r.ending_loan_release)}</td>
-                        <td className="py-3 px-4 text-right"><Tag>{r.past_due_accounts || 0}</Tag></td>
-                        <td className="py-3 px-4 text-right text-red-600 font-medium">{formatCurrency(r.past_due_amount || 0)}</td>
-                        <td className="py-3 px-4 text-right"><Tag color="red">{r.total_delinquent || 0}</Tag></td>
-                        <td className="py-3 px-4 text-right text-orange-600 font-medium">{formatCurrency(r.delinquent_amount || 0)}</td>
-                        <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(r.total_outstanding || 0)}</td>
-                        <td className="py-3 px-4 text-right">
-                          <Tag color={Number(r.par) >= 10 ? 'red' : Number(r.par) >= 5 ? 'orange' : 'green'}>{Number(r.par).toFixed(1)}%</Tag>
-                        </td>
+                {csGroupBy === 'branch' ? (
+                  <table className="w-full text-sm whitespace-nowrap">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-700">
+                        <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400 w-8"></th>
+                        <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Actual</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Rate</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Penalty</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Advance</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Released</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Past Due $</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Delinq $</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Outstanding</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">PAR</th>
                       </tr>
-                      );
-                    })}
-                  </tbody>
-                  {colSummaryData.length > 0 && (
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const branchMap: Record<string, any> = {};
+                        for (const m of colSummaryData) {
+                          const bn = m.branch_name;
+                          if (!branchMap[bn]) branchMap[bn] = { branch_name: bn, actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, released: 0, ending_loan_release: 0, past_due_amount: 0, delinquent_amount: 0, total_outstanding: 0, par: 0, months: [] };
+                          const b = branchMap[bn];
+                          b.actual_collection += Number(m.actual_collection) || 0;
+                          b.total_collection += Number(m.total_collection) || 0;
+                          b.penalty += Number(m.penalty) || 0;
+                          b.advance_payment += Number(m.advance_payment) || 0;
+                          b.released += Number(m.actual_released_month) || 0;
+                          b.ending_loan_release = Math.max(b.ending_loan_release, Number(m.ending_loan_release) || 0);
+                          b.past_due_amount = Math.max(b.past_due_amount, Number(m.past_due_amount) || 0);
+                          b.delinquent_amount = Math.max(b.delinquent_amount, Number(m.delinquent_amount) || 0);
+                          b.total_outstanding = Math.max(b.total_outstanding, Number(m.total_outstanding) || 0);
+                          b.par = Math.max(b.par, Number(m.par) || 0);
+                          b.months.push(m);
+                        }
+                        const branches = Object.values(branchMap);
+                        const allRows: any[] = [];
+                        let brGrand = { actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, released: 0 };
+                        for (let bi = 0; bi < branches.length; bi++) {
+                          const b = branches[bi] as any;
+                          const bRate = b.total_collection > 0 ? Math.round((b.actual_collection / b.total_collection) * 100) : null;
+                          brGrand.actual_collection += b.actual_collection;
+                          brGrand.total_collection += b.total_collection;
+                          brGrand.penalty += b.penalty;
+                          brGrand.advance_payment += b.advance_payment;
+                          brGrand.released += b.released;
+                          const bKey = `branch|${b.branch_name}`;
+                          const bExpanded = expandedKeys.has(bKey);
+                          allRows.push(
+                            <tr key={`b-${bi}`} className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50" onClick={() => { const n = new Set(expandedKeys); if (bExpanded) n.delete(bKey); else n.add(bKey); setExpandedKeys(n); }}>
+                              <td className="py-3 px-4 text-gray-500">{bExpanded ? '▼' : '▶'}</td>
+                              <td className="py-3 px-4 text-gray-900 dark:text-white">{b.branch_name}</td>
+                              <td className="py-3 px-4 text-right text-green-600">{formatCurrency(b.actual_collection)}</td>
+                              <td className="py-3 px-4 text-right text-gray-800 dark:text-gray-200">{formatCurrency(b.total_collection)}</td>
+                              <td className="py-3 px-4 text-right">{bRate !== null ? <Tag color={bRate >= 80 ? 'green' : bRate >= 50 ? 'orange' : 'red'}>{bRate}%</Tag> : '—'}</td>
+                              <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(b.penalty)}</td>
+                              <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(b.advance_payment)}</td>
+                              <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(b.released)}</td>
+                              <td className="py-3 px-4 text-right text-red-600">{formatCurrency(b.past_due_amount)}</td>
+                              <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(b.delinquent_amount)}</td>
+                              <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(b.total_outstanding)}</td>
+                              <td className="py-3 px-4 text-right"><Tag color={Number(b.par) >= 10 ? 'red' : Number(b.par) >= 5 ? 'orange' : 'green'}>{Number(b.par).toFixed(1)}%</Tag></td>
+                            </tr>
+                          );
+                          if (bExpanded) {
+                            for (let mi = 0; mi < b.months.length; mi++) {
+                              const sm = b.months[mi];
+                              const smRate = Number(sm.total_collection) > 0 ? Math.round((Number(sm.actual_collection) / Number(sm.total_collection)) * 100) : null;
+                              const mKey = `${bKey}|${sm.month}`;
+                              const mExpanded = expandedKeys.has(mKey);
+                              allRows.push(
+                                <tr key={`m-${bi}-${mi}`} className="border-b border-gray-100 dark:border-gray-700/50 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30" onClick={(e) => { e.stopPropagation(); const n = new Set(expandedKeys); if (mExpanded) n.delete(mKey); else n.add(mKey); setExpandedKeys(n); }}>
+                                  <td className="py-2 px-4 text-gray-400 pl-8">{mExpanded ? '▼' : '▶'}</td>
+                                  <td className="py-2 px-4 text-sm text-gray-600 dark:text-gray-400">{sm.month}</td>
+                                  <td className="py-2 px-4 text-right text-sm">{formatCurrency(sm.actual_collection)}</td>
+                                  <td className="py-2 px-4 text-right text-sm">{formatCurrency(sm.total_collection)}</td>
+                                  <td className="py-2 px-4 text-right text-sm">{smRate !== null ? `${smRate}%` : '—'}</td>
+                                  <td className="py-2 px-4 text-right text-sm">{formatCurrency(sm.penalty)}</td>
+                                  <td className="py-2 px-4 text-right text-sm">{formatCurrency(sm.advance_payment)}</td>
+                                  <td className="py-2 px-4 text-right text-sm">{formatCurrency(sm.actual_released_month)}</td>
+                                  <td colSpan={4}></td>
+                                </tr>
+                              );
+                              if (mExpanded && sm.days) {
+                                for (let di = 0; di < sm.days.length; di++) {
+                                  const d = sm.days[di];
+                                  const dRate = Number(d.total_collection) > 0 ? Math.round((Number(d.actual_collection) / Number(d.total_collection)) * 100) : null;
+                                  allRows.push(
+                                    <tr key={`d-${bi}-${mi}-${di}`} className="border-b border-gray-100 dark:border-gray-700/20 text-gray-500 dark:text-gray-500">
+                                      <td></td>
+                                      <td className="py-1.5 px-4 text-xs pl-12">{new Date(d.report_date).toLocaleDateString()}</td>
+                                      <td className="py-1.5 px-4 text-right text-xs">{formatCurrency(d.actual_collection)}</td>
+                                      <td className="py-1.5 px-4 text-right text-xs">{formatCurrency(d.total_collection)}</td>
+                                      <td className="py-1.5 px-4 text-right text-xs">{dRate !== null ? `${dRate}%` : '—'}</td>
+                                      <td className="py-1.5 px-4 text-right text-xs">{formatCurrency(d.penalty)}</td>
+                                      <td className="py-1.5 px-4 text-right text-xs">{formatCurrency(d.advance_payment)}</td>
+                                      <td className="py-1.5 px-4 text-right text-xs">{formatCurrency(d.actual_released_day)}</td>
+                                      <td colSpan={4}></td>
+                                    </tr>
+                                  );
+                                }
+                              }
+                            }
+                          }
+                        }
+                        return allRows;
+                      })()}
+                    </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
-                        <td className="py-3 px-4 font-bold text-gray-900 dark:text-white">Grand Total</td>
-                        <td className="py-3 px-4 text-right text-green-600">{formatCurrency(colSummaryData.reduce((s: number, r: any) => s + (Number(r.actual_collection) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, r: any) => s + (Number(r.total_collection) || 0), 0))}</td>
+                        <td colSpan={2} className="py-3 px-4 font-bold text-gray-900 dark:text-white">Grand Total</td>
+                        <td className="py-3 px-4 text-right text-green-600">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => s + (Number(m.actual_collection) || 0), 0)); })()}</td>
+                        <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => s + (Number(m.total_collection) || 0), 0)); })()}</td>
                         <td></td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, r: any) => s + (Number(r.penalty) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, r: any) => s + (Number(r.advance_payment) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, r: any) => s + (Number(r.total_released || 0) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, r: any) => s + (Number(r.ending_loan_release) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right">{colSummaryData.reduce((s: number, r: any) => s + (Number(r.past_due_accounts) || 0), 0)}</td>
-                        <td className="py-3 px-4 text-right text-red-600">{formatCurrency(colSummaryData.reduce((s: number, r: any) => s + (Number(r.past_due_amount) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right">{colSummaryData.reduce((s: number, r: any) => s + (Number(r.total_delinquent) || 0), 0)}</td>
-                        <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(colSummaryData.reduce((s: number, r: any) => s + (Number(r.delinquent_amount) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, r: any) => s + (Number(r.total_outstanding) || 0), 0))}</td>
+                        <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => s + (Number(m.penalty) || 0), 0)); })()}</td>
+                        <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => s + (Number(m.advance_payment) || 0), 0)); })()}</td>
+                        <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => s + (Number(m.actual_released_month) || 0), 0)); })()}</td>
+                        <td className="py-3 px-4 text-right text-red-600">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.past_due_amount) || 0), 0)); })()}</td>
+                        <td className="py-3 px-4 text-right text-orange-600">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.delinquent_amount) || 0), 0)); })()}</td>
+                        <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.total_outstanding) || 0), 0)); })()}</td>
                         <td className="py-3 px-4 text-right"></td>
                       </tr>
                     </tfoot>
-                  )}
-                </table>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm whitespace-nowrap">
-                  <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400 w-8"></th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Month</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Actual</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Rate</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Penalty</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Advance</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Released</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Past Due $</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Delinq $</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Outstanding</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">PAR</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {colSummaryData.length === 0 ? (
-                      <tr><td colSpan={13} className="text-center py-8 text-gray-400">No data for this period</td></tr>
-                    ) : colSummaryData.flatMap((m: any, mi: number) => {
-                      const actual = Number(m.actual_collection) || 0;
-                      const total = Number(m.total_collection) || 0;
-                      const rate = total > 0 ? Math.round((actual / total) * 100) : null;
-                      const monthKey = `${m.branch_name}|${m.month}`;
-                      const isExpanded = expandedMonths.has(monthKey);
-                      const toggleExpand = () => {
-                        const next = new Set(expandedMonths);
-                        if (isExpanded) next.delete(monthKey); else next.add(monthKey);
-                        setExpandedMonths(next);
-                      };
-                      const rows: any[] = [];
-                      rows.push(
-                        <tr key={`m-${mi}`} className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50" onClick={toggleExpand}>
-                          <td className="py-3 px-4 text-gray-500">{isExpanded ? '▼' : '▶'}</td>
-                          <td className="py-3 px-4 text-gray-900 dark:text-white">{m.month}</td>
-                          <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{m.branch_name}</td>
-                          <td className="py-3 px-4 text-right text-green-600">{formatCurrency(actual)}</td>
-                          <td className="py-3 px-4 text-right text-gray-800 dark:text-gray-200">{formatCurrency(total)}</td>
-                          <td className="py-3 px-4 text-right">{rate !== null ? <Tag color={rate >= 80 ? 'green' : rate >= 50 ? 'orange' : 'red'}>{rate}%</Tag> : '—'}</td>
-                          <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(m.penalty)}</td>
-                          <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(m.advance_payment)}</td>
-                          <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(m.actual_released_month)}</td>
-                          <td className="py-3 px-4 text-right text-red-600">{formatCurrency(m.past_due_amount || 0)}</td>
-                          <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(m.delinquent_amount || 0)}</td>
-                          <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(m.total_outstanding || 0)}</td>
-                          <td className="py-3 px-4 text-right">
-                            <Tag color={Number(m.par) >= 10 ? 'red' : Number(m.par) >= 5 ? 'orange' : 'green'}>{Number(m.par).toFixed(1)}%</Tag>
-                          </td>
-                        </tr>
-                      );
-                      if (isExpanded && m.days) {
-                        for (let di = 0; di < m.days.length; di++) {
-                          const d = m.days[di];
-                          const dActual = Number(d.actual_collection) || 0;
-                          const dTotal = Number(d.total_collection) || 0;
-                          const dRate = dTotal > 0 ? Math.round((dActual / dTotal) * 100) : null;
-                          rows.push(
-                            <tr key={`d-${mi}-${di}`} className="border-b border-gray-100 dark:border-gray-700/30 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/20">
-                              <td></td>
-                              <td className="py-2 px-4 text-xs text-gray-400 pl-8">{new Date(d.report_date).toLocaleDateString()}</td>
-                              <td className="py-2 px-4 text-xs">{d.branch_name}</td>
-                              <td className="py-2 px-4 text-right text-xs">{formatCurrency(dActual)}</td>
-                              <td className="py-2 px-4 text-right text-xs">{formatCurrency(dTotal)}</td>
-                              <td className="py-2 px-4 text-right text-xs">{dRate !== null ? `${dRate}%` : '—'}</td>
-                              <td className="py-2 px-4 text-right text-xs">{formatCurrency(d.penalty)}</td>
-                              <td className="py-2 px-4 text-right text-xs">{formatCurrency(d.advance_payment)}</td>
-                              <td className="py-2 px-4 text-right text-xs">{formatCurrency(d.actual_released_day)}</td>
-                              <td colSpan={4}></td>
-                            </tr>
-                          );
+                  </table>
+                ) : (
+                  <table className="w-full text-sm whitespace-nowrap">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-700">
+                        <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400 w-8"></th>
+                        <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Month</th>
+                        <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Actual</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Rate</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Penalty</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Advance</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Released</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Past Due $</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Delinq $</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Outstanding</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">PAR</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {colSummaryData.flatMap((m: any, mi: number) => {
+                        const actual = Number(m.actual_collection) || 0;
+                        const total = Number(m.total_collection) || 0;
+                        const rate = total > 0 ? Math.round((actual / total) * 100) : null;
+                        const mKey = `month|${m.branch_name}|${m.month}`;
+                        const isExpanded = expandedKeys.has(mKey);
+                        const rows: any[] = [];
+                        rows.push(
+                          <tr key={`m-${mi}`} className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50" onClick={() => { const n = new Set(expandedKeys); if (isExpanded) n.delete(mKey); else n.add(mKey); setExpandedKeys(n); }}>
+                            <td className="py-3 px-4 text-gray-500">{isExpanded ? '▼' : '▶'}</td>
+                            <td className="py-3 px-4 text-gray-900 dark:text-white">{m.month}</td>
+                            <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{m.branch_name}</td>
+                            <td className="py-3 px-4 text-right text-green-600">{formatCurrency(actual)}</td>
+                            <td className="py-3 px-4 text-right text-gray-800 dark:text-gray-200">{formatCurrency(total)}</td>
+                            <td className="py-3 px-4 text-right">{rate !== null ? <Tag color={rate >= 80 ? 'green' : rate >= 50 ? 'orange' : 'red'}>{rate}%</Tag> : '—'}</td>
+                            <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(m.penalty)}</td>
+                            <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(m.advance_payment)}</td>
+                            <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(m.actual_released_month)}</td>
+                            <td className="py-3 px-4 text-right text-red-600">{formatCurrency(m.past_due_amount || 0)}</td>
+                            <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(m.delinquent_amount || 0)}</td>
+                            <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(m.total_outstanding || 0)}</td>
+                            <td className="py-3 px-4 text-right"><Tag color={Number(m.par) >= 10 ? 'red' : Number(m.par) >= 5 ? 'orange' : 'green'}>{Number(m.par).toFixed(1)}%</Tag></td>
+                          </tr>
+                        );
+                        if (isExpanded && m.days) {
+                          for (let di = 0; di < m.days.length; di++) {
+                            const d = m.days[di];
+                            const dActual = Number(d.actual_collection) || 0;
+                            const dTotal = Number(d.total_collection) || 0;
+                            const dRate = dTotal > 0 ? Math.round((dActual / dTotal) * 100) : null;
+                            rows.push(
+                              <tr key={`d-${mi}-${di}`} className="border-b border-gray-100 dark:border-gray-700/30 text-gray-500 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/20">
+                                <td></td>
+                                <td className="py-2 px-4 text-xs pl-8">{new Date(d.report_date).toLocaleDateString()}</td>
+                                <td className="py-2 px-4 text-xs">{d.branch_name}</td>
+                                <td className="py-2 px-4 text-right text-xs">{formatCurrency(dActual)}</td>
+                                <td className="py-2 px-4 text-right text-xs">{formatCurrency(dTotal)}</td>
+                                <td className="py-2 px-4 text-right text-xs">{dRate !== null ? `${dRate}%` : '—'}</td>
+                                <td className="py-2 px-4 text-right text-xs">{formatCurrency(d.penalty)}</td>
+                                <td className="py-2 px-4 text-right text-xs">{formatCurrency(d.advance_payment)}</td>
+                                <td className="py-2 px-4 text-right text-xs">{formatCurrency(d.actual_released_day)}</td>
+                                <td colSpan={4}></td>
+                              </tr>
+                            );
+                          }
                         }
-                      }
-                      return rows;
-                    })}
-                  </tbody>
-                  {colSummaryData.length > 0 && (
+                        return rows;
+                      })}
+                    </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
                         <td colSpan={3} className="py-3 px-4 font-bold text-gray-900 dark:text-white">Grand Total</td>
@@ -2571,8 +2593,8 @@ export const ReportsPage = () => {
                         <td className="py-3 px-4 text-right"></td>
                       </tr>
                     </tfoot>
-                  )}
-                </table>
+                  </table>
+                )}
               </div>
             )}
           </Panel>
