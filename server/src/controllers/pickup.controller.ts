@@ -71,8 +71,17 @@ export class PickupController {
           [pickup.id, paymentIds]
         );
 
+        // Calculate how much needs to be added to expected_cash BEFORE inserting cash_transactions
+        // (otherwise the NOT EXISTS check would find 0 since we just inserted them all)
+        const { rows: needCash } = await client.query(
+          `SELECT COALESCE(SUM(p.amount), 0) as total
+           FROM payments p
+           WHERE p.id = ANY($1) AND NOT EXISTS (SELECT 1 FROM cash_transactions ct WHERE ct.payment_id = p.id)`,
+          [paymentIds]
+        );
+        const newCashTotal = parseFloat(needCash[0]?.total) || 0;
+
         // Record cash transactions for the remitted payments (cash now physically with cashier).
-        // Only create if one doesn't already exist (old behavior pre-created it at payment time).
         for (const pay of payments) {
           const { rows: existing } = await client.query(
             `SELECT id FROM cash_transactions WHERE payment_id = $1`, [pay.id]
@@ -85,14 +94,7 @@ export class PickupController {
             );
           }
         }
-        // Only increment expected_cash for payments that didn't already have a cash transaction
-        const { rows: needCash } = await client.query(
-          `SELECT COALESCE(SUM(p.amount), 0) as total
-           FROM payments p
-           WHERE p.id = ANY($1) AND NOT EXISTS (SELECT 1 FROM cash_transactions ct WHERE ct.payment_id = p.id)`,
-          [paymentIds]
-        );
-        const newCashTotal = parseFloat(needCash[0]?.total) || 0;
+
         if (newCashTotal > 0) {
           await client.query(
             `UPDATE cashier_sessions SET expected_cash = expected_cash + $1 WHERE id = $2`,

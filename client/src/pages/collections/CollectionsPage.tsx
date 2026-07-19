@@ -17,15 +17,15 @@ export const CollectionsPage = () => {
   const [visitOpen, setVisitOpen] = useState(false);
   const [visitForm, setVisitForm] = useState<any>({});
   const [currentId, setCurrentId] = useState('');
-  const [tab, setTab] = useState<'all' | 'due' | 'overdue' | 'delinquent'>('all');
+  const [tab, setTab] = useState<'all' | 'due' | 'past_due' | 'delinquent'>('all');
   const limit = 20;
   const fetchData = async () => {
     setLoading(true);
     toaster.clear();
     try {
       let data: any;
-      if (tab === 'overdue') {
-        data = await collectionsApi.getOverdue();
+      if (tab === 'past_due') {
+        data = await collectionsApi.getPastDue();
         setCollections(data.data.data || data.data);
         setTotal((data.data.data || data.data).length);
       } else if (tab === 'delinquent') {
@@ -87,9 +87,9 @@ export const CollectionsPage = () => {
       </div>
 
       <div className="flex gap-2">
-        {(['all', 'due', 'overdue', 'delinquent'] as const).map(t => (
+        {(['all', 'due', 'past_due', 'delinquent'] as const).map(t => (
           <Button key={t} appearance={tab === t ? 'primary' : 'ghost'} onClick={() => { setTab(t); setPage(1); }}>
-            {t === 'all' ? 'All' : t === 'due' ? 'Due Today' : t === 'overdue' ? 'Overdue' : 'Delinquent'}
+            {t === 'all' ? 'All' : t === 'due' ? 'Due Today' : t === 'past_due' ? 'Past Due' : 'Delinquent'}
           </Button>
         ))}
       </div>

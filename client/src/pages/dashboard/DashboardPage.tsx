@@ -246,7 +246,7 @@ export const DashboardPage = () => {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Overdue</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Past Due</p>
                     <h3 className="text-2xl font-bold text-red-500 mt-1">{stats.overdueCount}</h3>
                   </div>
                   <div className="w-12 h-12 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center">
@@ -684,7 +684,7 @@ export const DashboardPage = () => {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4" onClick={() => navigate('/collections')}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Overdue</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Past Due</p>
                     <h3 className="text-2xl font-bold text-red-500 mt-1">{stats.overdueCount}</h3>
                   </div>
                   <div className="w-12 h-12 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center">

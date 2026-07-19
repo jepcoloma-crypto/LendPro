@@ -182,7 +182,7 @@ router.get('/cash-reports/daily-cash-position', authenticate, authorize('super-a
 // Collections
 router.get('/collections', authenticate, collectionController.getAll.bind(collectionController));
 router.get('/collections/due-today', authenticate, collectionController.getDueToday.bind(collectionController));
-router.get('/collections/overdue', authenticate, collectionController.getOverdue.bind(collectionController));
+router.get('/collections/past-due', authenticate, collectionController.getPastDue.bind(collectionController));
 router.get('/collections/:id', authenticate, collectionController.getById.bind(collectionController));
 router.put('/collections/:id', authenticate, auditLog('update', 'collection'), collectionController.update.bind(collectionController));
 router.post('/collections/:id/visits', authenticate, auditLog('visit', 'collection'), collectionController.updateVisit.bind(collectionController));

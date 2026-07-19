@@ -51,7 +51,7 @@ export class ReportController {
         `SELECT l.id as loan_id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
                 bor.first_name || ' ' || bor.last_name as borrower_name, bor.mobile, bor.borrower_code,
                 COALESCE(branch.name, 'Unassigned') as branch_name,
-                CASE WHEN MAX(CURRENT_DATE - a.due_date) >= 5 THEN 'delinquent' ELSE 'overdue' END as computed_status,
+                CASE WHEN l.maturity_date < CURRENT_DATE THEN 'past_due' ELSE 'delinquent' END as computed_status,
                 COALESCE(SUM(a.total_due - COALESCE(a.paid_amount,0)), 0) as total_overdue,
                 COALESCE(MAX(CURRENT_DATE - a.due_date), 0)::int as days_overdue,
                 (SELECT MAX(payment_date) FROM payments WHERE loan_id = l.id AND status = 'completed') as last_payment_date,
@@ -62,7 +62,7 @@ export class ReportController {
          LEFT JOIN branches branch ON branch.id = bor.branch_id
          LEFT JOIN users u ON u.id = l.collector_id
          WHERE ${where}
-         GROUP BY l.id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
+         GROUP BY l.id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date, l.maturity_date,
                   bor.first_name, bor.last_name, bor.mobile, bor.borrower_code, branch.name, u.first_name, u.last_name
          ORDER BY MAX(CURRENT_DATE - a.due_date) DESC`,
         params
@@ -917,13 +917,14 @@ export class ReportController {
             GROUP BY br.branch_id
           ),
           past_due AS (
-            SELECT br.branch_id, COUNT(*) as past_due_count,
+            SELECT br.branch_id, COUNT(DISTINCT l.id) as past_due_count,
               COALESCE(SUM(l.outstanding_balance), 0) as past_due_amount
             FROM loans l
             JOIN borrowers br ON br.id = l.borrower_id
             WHERE l.maturity_date < $2::date
               AND l.outstanding_balance > 0
               AND l.status NOT IN ('closed', 'written-off', 'cancelled')
+              AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.due_date < $2::date AND COALESCE(a.paid_amount,0) < a.total_due)
               AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
             GROUP BY br.branch_id
           ),
@@ -933,7 +934,9 @@ export class ReportController {
             FROM loans l
             JOIN borrowers br ON br.id = l.borrower_id
             JOIN amortization_schedules a ON a.loan_id = l.id
-            WHERE l.status NOT IN ('closed', 'written-off', 'cancelled')
+            WHERE l.maturity_date >= $2::date
+              AND l.outstanding_balance > 0
+              AND l.status NOT IN ('closed', 'written-off', 'cancelled')
               AND a.due_date < $2::date
               AND COALESCE(a.paid_amount, 0) < a.total_due
               AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
@@ -1037,13 +1040,14 @@ export class ReportController {
           GROUP BY br.branch_id
         ),
         past_due AS (
-          SELECT br.branch_id, COUNT(*) as past_due_count,
+          SELECT br.branch_id, COUNT(DISTINCT l.id) as past_due_count,
             COALESCE(SUM(l.outstanding_balance), 0) as past_due_amount
           FROM loans l
           JOIN borrowers br ON br.id = l.borrower_id
           WHERE l.maturity_date < $2::date
             AND l.outstanding_balance > 0
             AND l.status NOT IN ('closed', 'written-off', 'cancelled')
+            AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.due_date < $2::date AND COALESCE(a.paid_amount,0) < a.total_due)
             AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
           GROUP BY br.branch_id
         ),
@@ -1053,7 +1057,9 @@ export class ReportController {
           FROM loans l
           JOIN borrowers br ON br.id = l.borrower_id
           JOIN amortization_schedules a ON a.loan_id = l.id
-          WHERE l.status NOT IN ('closed', 'written-off', 'cancelled')
+          WHERE l.maturity_date >= $2::date
+            AND l.outstanding_balance > 0
+            AND l.status NOT IN ('closed', 'written-off', 'cancelled')
             AND a.due_date < $2::date
             AND COALESCE(a.paid_amount, 0) < a.total_due
             AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)

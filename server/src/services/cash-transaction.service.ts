@@ -33,11 +33,14 @@ export async function autoRecordTransaction(params: {
     created_by: params.userId,
   });
 
-  const delta = params.direction === 'in' ? params.amount : -params.amount;
-  await cashierSessionRepo.query(
-    `UPDATE cashier_sessions SET expected_cash = expected_cash + $1 WHERE id = $2`,
-    [delta, shift.id]
-  );
+  // Only adjust expected_cash for actual physical cash movements
+  if (params.paymentMethod === 'cash') {
+    const delta = params.direction === 'in' ? params.amount : -params.amount;
+    await cashierSessionRepo.query(
+      `UPDATE cashier_sessions SET expected_cash = expected_cash + $1 WHERE id = $2`,
+      [delta, shift.id]
+    );
+  }
 
   return txn;
 }

@@ -35,9 +35,14 @@ export class CollectionController {
         l.loan_number, l.outstanding_balance,
         b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
         CASE WHEN l.status = 'closed' THEN 'closed'
-             WHEN COALESCE(SUM(CASE WHEN a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due
-                              THEN 1 ELSE 0 END), 0) > 0 THEN 'delinquent'
-             WHEN l.maturity_date < CURRENT_DATE AND l.outstanding_balance > 0 THEN 'overdue'
+             WHEN l.maturity_date < CURRENT_DATE
+                  AND l.outstanding_balance > 0
+                  AND COALESCE(SUM(CASE WHEN a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due THEN 1 ELSE 0 END), 0) > 0
+                  THEN 'past_due'
+             WHEN l.maturity_date >= CURRENT_DATE
+                  AND l.outstanding_balance > 0
+                  AND COALESCE(SUM(CASE WHEN a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due THEN 1 ELSE 0 END), 0) > 0
+                  THEN 'delinquent'
              ELSE 'active' END as computed_status,
         l.outstanding_balance as total_due,
         COALESCE(SUM(CASE WHEN a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due
@@ -108,7 +113,7 @@ export class CollectionController {
     }
   }
 
-  async getOverdue(req: AuthRequest, res: Response, next: NextFunction) {
+  async getPastDue(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const result = await collectionRepo.query(
         `SELECT c.id, c.loan_id, c.borrower_id, c.collector_id,
@@ -117,7 +122,7 @@ export class CollectionController {
           c.created_at, c.updated_at,
           l.loan_number, l.outstanding_balance as total_due,
           b.first_name || ' ' || b.last_name as borrower_name, b.mobile,
-          'overdue' as computed_status,
+          'past_due' as computed_status,
           l.outstanding_balance as total_overdue,
           COALESCE((SELECT MAX(CURRENT_DATE - a.due_date)::int
                    FROM amortization_schedules a
@@ -130,11 +135,15 @@ export class CollectionController {
          WHERE l.maturity_date < CURRENT_DATE
            AND l.outstanding_balance > 0
            AND l.status != 'closed'
+           AND EXISTS (SELECT 1 FROM amortization_schedules a
+                       WHERE a.loan_id = l.id
+                         AND a.due_date < CURRENT_DATE
+                         AND COALESCE(a.paid_amount,0) < a.total_due)
          ORDER BY l.maturity_date`
       );
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error('collections.getOverdue error:', error);
+      console.error('collections.getPastDue error:', error);
       next(new AppError(500, error.message));
     }
   }
