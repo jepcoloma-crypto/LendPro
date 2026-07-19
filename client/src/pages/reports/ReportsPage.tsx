@@ -107,6 +107,12 @@ export const ReportsPage = () => {
   const [csStartDate, setCsStartDate] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
   const [csEndDate, setCsEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [csBranchFilter, setCsBranchFilter] = useState<string | null>(null);
+  const [advSummaryData, setAdvSummaryData] = useState<any[]>([]);
+  const [advSummaryLoading, setAdvSummaryLoading] = useState(false);
+  const [advSummaryStart, setAdvSummaryStart] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
+  const [advSummaryEnd, setAdvSummaryEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [advSummaryBranch, setAdvSummaryBranch] = useState<string | null>(null);
+  const [advSummaryTotal, setAdvSummaryTotal] = useState<any>({ total_advance: 0, total_payments: 0, payment_count: 0 });
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
   const [loansGrantedData, setLoansGrantedData] = useState<any[]>([]);
@@ -476,6 +482,20 @@ export const ReportsPage = () => {
   }, [activeTab, expectedColStart, expectedColEnd, expectedColBranch, expectedColCollector]);
 
   useEffect(() => {
+    if (activeTab !== 'advance-summary') return;
+    const fetch = async () => {
+      setAdvSummaryLoading(true);
+      try {
+        const { data } = await reportsApi.getAdvanceSummary({ startDate: advSummaryStart, endDate: advSummaryEnd, branchId: advSummaryBranch });
+        setAdvSummaryData(data.data?.rows || []);
+        setAdvSummaryTotal(data.data?.summary || { total_advance: 0, total_payments: 0, payment_count: 0 });
+      } catch { toaster.push(<Message type="error">Failed to load advance summary</Message>, { placement: 'topEnd' }); }
+      finally { setAdvSummaryLoading(false); }
+    };
+    fetch();
+  }, [activeTab, advSummaryStart, advSummaryEnd, advSummaryBranch]);
+
+  useEffect(() => {
     if (activeTab !== 'portfolio-summary') return;
     const fetch = async () => {
       setPortfolioLoading(true);
@@ -772,6 +792,7 @@ export const ReportsPage = () => {
       { key: 'borrower-master-list', label: 'Borrower Master List' },
       { key: 'amort', label: 'Amortization Schedule' },
       { key: 'application-types', label: 'Application Types' },
+        { key: 'advance-summary', label: 'Advance Summary' },
     ]},
     { key: 'performance', label: 'Performance', tabs: [
       { key: 'branch-performance', label: 'Branch Performance' },
@@ -2611,6 +2632,111 @@ export const ReportsPage = () => {
                     </tfoot>
                   </table>
                 )}
+              </div>
+            )}
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'advance-summary' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <input type="date" value={advSummaryStart} onChange={(e) => setAdvSummaryStart(e.target.value)} className="rs-input pl-3 w-40" />
+              <input type="date" value={advSummaryEnd} onChange={(e) => setAdvSummaryEnd(e.target.value)} className="rs-input pl-3 w-40" />
+              <div className="w-40">
+                <SelectPicker
+                  placeholder="All branches"
+                  data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                  value={advSummaryBranch}
+                  onChange={(v) => setAdvSummaryBranch(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                  size="sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 print-hide">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} size="sm" onClick={() => {
+                const rows = advSummaryData;
+                let html = `<!DOCTYPE html><html><head><title>Advance Summary</title>
+                  <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px;}table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;}.text-right{text-align:right;}h2{color:#333;}.grand-total td{font-weight:bold;border-top:2px solid #333;}.print-hide{display:none;}</style></head><body>
+                  <h2>Advance Summary</h2>
+                  <p>${new Date(advSummaryStart).toLocaleDateString()} to ${new Date(advSummaryEnd).toLocaleDateString()}</p>`;
+                html += `<table><thead><tr><th>Date</th><th>Payment #</th><th>Borrower</th><th>Loan #</th><th class="text-right">Amount</th><th class="text-right">Advance</th><th class="text-right">Current Adv Bal</th><th class="text-right">Outstanding</th><th>Branch</th></tr></thead><tbody>`;
+                for (const r of rows) {
+                  html += `<tr><td>${new Date(r.payment_date).toLocaleDateString()}</td><td>${r.payment_number}</td><td>${r.borrower_name} (${r.borrower_code})</td><td>${r.loan_number}</td>
+                    <td class="text-right">${formatCurrency(r.payment_amount)}</td><td class="text-right">${formatCurrency(r.advance_amount)}</td>
+                    <td class="text-right">${formatCurrency(r.current_advance_balance)}</td><td class="text-right">${formatCurrency(r.outstanding_balance)}</td><td>${r.branch_name}</td></tr>`;
+                }
+                html += `</tbody><tfoot><tr class="grand-total"><td colspan="4">Total (${advSummaryTotal.payment_count} payments)</td>
+                  <td class="text-right">${formatCurrency(advSummaryTotal.total_payments)}</td><td class="text-right">${formatCurrency(advSummaryTotal.total_advance)}</td><td></td><td></td><td></td></tr></tfoot></table>`;
+                html += `</body></html>`;
+                printWindow(html);
+              }}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} size="sm" onClick={() => {
+                exportCSV(advSummaryData, `advance-summary-${advSummaryStart}-to-${advSummaryEnd}`, [
+                  { key: 'payment_date', label: 'Date', format: (v: any) => new Date(v).toLocaleDateString() },
+                  { key: 'payment_number', label: 'Payment #' },
+                  { key: 'borrower_name', label: 'Borrower' },
+                  { key: 'borrower_code', label: 'Code' },
+                  { key: 'loan_number', label: 'Loan #' },
+                  { key: 'payment_amount', label: 'Amount', format: (v: any) => formatCurrency(v) },
+                  { key: 'advance_amount', label: 'Advance', format: (v: any) => formatCurrency(v) },
+                  { key: 'current_advance_balance', label: 'Current Adv Bal', format: (v: any) => formatCurrency(v) },
+                  { key: 'outstanding_balance', label: 'Outstanding', format: (v: any) => formatCurrency(v) },
+                  { key: 'branch_name', label: 'Branch' },
+                ]);
+              }}>Export CSV</Button>
+            </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Advance Summary — ${new Date(advSummaryStart).toLocaleDateString()} to ${new Date(advSummaryEnd).toLocaleDateString()}`}>
+            {advSummaryLoading ? (
+              <div className="text-center py-8"><Loader size="md" /></div>
+            ) : advSummaryData.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">No advance payments found for this period</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Date</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Payment #</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Borrower</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Loan #</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Amount</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Advance</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Current Adv Bal</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Outstanding</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {advSummaryData.map((r: any, i: number) => (
+                      <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/20">
+                        <td className="py-2 px-4">{new Date(r.payment_date).toLocaleDateString()}</td>
+                        <td className="py-2 px-4 text-gray-600">{r.payment_number}</td>
+                        <td className="py-2 px-4">{r.borrower_name}<br /><span className="text-xs text-gray-400">{r.borrower_code}</span></td>
+                        <td className="py-2 px-4 text-gray-600">{r.loan_number}</td>
+                        <td className="py-2 px-4 text-right">{formatCurrency(r.payment_amount)}</td>
+                        <td className="py-2 px-4 text-right text-blue-600 font-medium">{formatCurrency(r.advance_amount)}</td>
+                        <td className="py-2 px-4 text-right text-gray-600">{formatCurrency(r.current_advance_balance)}</td>
+                        <td className="py-2 px-4 text-right text-gray-600">{formatCurrency(r.outstanding_balance)}</td>
+                        <td className="py-2 px-4 text-gray-500">{r.branch_name}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
+                      <td colSpan={4} className="py-3 px-4 font-bold text-gray-900 dark:text-white">Total ({advSummaryTotal.payment_count} payments)</td>
+                      <td className="py-3 px-4 text-right">{formatCurrency(advSummaryTotal.total_payments)}</td>
+                      <td className="py-3 px-4 text-right text-blue-600">{formatCurrency(advSummaryTotal.total_advance)}</td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             )}
           </Panel>

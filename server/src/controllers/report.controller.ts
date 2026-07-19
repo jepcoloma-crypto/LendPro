@@ -1200,6 +1200,45 @@ export class ReportController {
       next(new AppError(500, error.message));
     }
   }
+
+  async getAdvanceSummary(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { startDate, endDate, branchId } = req.query;
+      const rows = await paymentRepo.query(`
+        SELECT
+          p.payment_date::date as payment_date,
+          p.payment_number,
+          p.amount as payment_amount,
+          p.advance_amount,
+          br.borrower_code,
+          br.first_name || ' ' || br.last_name as borrower_name,
+          l.loan_number,
+          l.advance_balance as current_advance_balance,
+          l.outstanding_balance,
+          COALESCE(b.name, 'Unassigned') as branch_name
+        FROM payments p
+        JOIN loans l ON l.id = p.loan_id
+        JOIN borrowers br ON br.id = p.borrower_id
+        LEFT JOIN branches b ON b.id = br.branch_id
+        WHERE p.status = 'completed'
+          AND p.advance_amount > 0
+          AND p.payment_date::date BETWEEN $1::date AND $2::date
+          AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
+        ORDER BY p.payment_date DESC, br.last_name, l.loan_number
+      `, [startDate, endDate, branchId || null]);
+
+      const summary = rows.reduce((acc: any, r: any) => {
+        acc.total_advance += Number(r.advance_amount) || 0;
+        acc.total_payments += Number(r.payment_amount) || 0;
+        acc.payment_count += 1;
+        return acc;
+      }, { total_advance: 0, total_payments: 0, payment_count: 0 });
+
+      res.json({ success: true, data: { rows, summary } });
+    } catch (error: any) {
+      next(new AppError(500, error.message));
+    }
+  }
 }
 
 export const reportController = new ReportController();
