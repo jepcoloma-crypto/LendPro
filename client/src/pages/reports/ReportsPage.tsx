@@ -2217,10 +2217,10 @@ export const ReportsPage = () => {
 
                   for (const b of Object.values(branchMap) as any[]) {
                     html += `<h3>${b.branch_name}</h3>
-                      <h4>Branch Totals — Actual: ${formatCurrency(b.actual_collection)} | Total: ${formatCurrency(b.total_collection)} | Rate: ${b.total_collection > 0 ? Math.round(b.actual_collection / b.total_collection * 100) + '%' : '—'}</h4>
+                      <h4>Branch Totals — Cash Collected: ${formatCurrency(b.actual_collection)} | Total Collections: ${formatCurrency(b.total_collection)} | Rate: ${b.total_collection > 0 ? Math.round(b.actual_collection / b.total_collection * 100) + '%' : '—'}</h4>
                       <table><thead><tr>
-                        <th>Month</th><th class="text-right">Actual</th><th class="text-right">Total</th>
-                        <th class="text-right">Rate</th><th class="text-right">Penalty</th><th class="text-right">Advance</th><th class="text-right">Released</th>
+                        <th>Month</th><th class="text-right">Cash Collected</th><th class="text-right">Total Collections</th>
+                        <th class="text-right">Rate</th><th class="text-right">Penalty</th><th class="text-right">Advance</th><th class="text-right">Disbursed</th>
                       </tr></thead><tbody>`;
                     for (const sm of b.months) {
                       const smRate = num(sm.total_collection) > 0 ? Math.round(num(sm.actual_collection) / num(sm.total_collection) * 100) : null;
@@ -2244,7 +2244,7 @@ export const ReportsPage = () => {
                       }
                     }
                     html += `</tbody></table>`;
-                    html += `<p><strong>Portfolio:</strong> Past Due ${formatCurrency(b.past_due_amount)} | Delinq ${formatCurrency(b.delinquent_amount)} | Outstanding ${formatCurrency(b.total_outstanding)} | PAR ${b.par.toFixed(1)}%</p>`;
+                    html += `<p><strong>Portfolio:</strong> Past Due ${formatCurrency(b.past_due_amount)} | Delinq ${formatCurrency(b.delinquent_amount)} | Outstanding ${formatCurrency(b.total_outstanding)} | Total Principal ${formatCurrency(b.ending_loan_release)} | PAR ${b.par.toFixed(1)}%</p>`;
                   }
                 } else {
                   let dayGrand = { actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, released: 0 };
@@ -2253,8 +2253,8 @@ export const ReportsPage = () => {
                     const mLabel = new Date(m.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                     html += `<h3>${m.branch_name} — ${mLabel}</h3>
                       <table><thead><tr>
-                        <th>Date</th><th class="text-right">Actual</th><th class="text-right">Total</th>
-                        <th class="text-right">Rate</th><th class="text-right">Penalty</th><th class="text-right">Advance</th><th class="text-right">Released</th>
+                        <th>Date</th><th class="text-right">Cash Collected</th><th class="text-right">Total Collections</th>
+                        <th class="text-right">Rate</th><th class="text-right">Penalty</th><th class="text-right">Advance</th><th class="text-right">Disbursed</th>
                       </tr></thead><tbody>`;
                     for (const d of (m.days || [])) {
                       const dRate = num(d.total_collection) > 0 ? Math.round((num(d.actual_collection) / num(d.total_collection)) * 100) : null;
@@ -2283,7 +2283,7 @@ export const ReportsPage = () => {
 
                   html += `<h3>Portfolio Summary (as of ${new Date(csEndDate).toLocaleDateString()})</h3>
                     <table><thead><tr>
-                      <th>Branch</th><th>Month</th><th class="text-right">Past Due $</th><th class="text-right">Delinq $</th><th class="text-right">Outstanding</th><th class="text-right">PAR</th>
+                      <th>Branch</th><th>Month</th><th class="text-right">Past Due $</th><th class="text-right">Delinq $</th><th class="text-right">Outstanding</th><th class="text-right">Total Principal</th><th class="text-right">PAR</th>
                     </tr></thead><tbody>`;
                   for (const m of allMonths) {
                     const pLabel = new Date(m.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -2291,6 +2291,7 @@ export const ReportsPage = () => {
                       <td class="text-right">${formatCurrency(m.past_due_amount || 0)}</td>
                       <td class="text-right">${formatCurrency(m.delinquent_amount || 0)}</td>
                       <td class="text-right">${formatCurrency(m.total_outstanding || 0)}</td>
+                      <td class="text-right">${formatCurrency(m.ending_loan_release || 0)}</td>
                       <td class="text-right">${Number(m.par || 0).toFixed(1)}%</td></tr>`;
                   }
                   html += `</tbody></table>`;
@@ -2328,12 +2329,12 @@ export const ReportsPage = () => {
                   }
                   exportCSV(Object.values(branchMap), `${csvName}-branch`, [
                     { key: 'branch_name', label: 'Branch' },
-                    { key: 'actual_collection', label: 'Actual', format: (v: any) => formatCurrency(v) },
-                    { key: 'total_collection', label: 'Total', format: (v: any) => formatCurrency(v) },
+                    { key: 'actual_collection', label: 'Cash Collected', format: (v: any) => formatCurrency(v) },
+                    { key: 'total_collection', label: 'Total Collections', format: (v: any) => formatCurrency(v) },
                     { key: 'penalty', label: 'Penalty', format: (v: any) => formatCurrency(v) },
                     { key: 'advance_payment', label: 'Advance', format: (v: any) => formatCurrency(v) },
-                    { key: 'released', label: 'Released', format: (v: any) => formatCurrency(v) },
-                    { key: 'ending_loan_release', label: 'Ending Release', format: (v: any) => formatCurrency(v) },
+                    { key: 'released', label: 'Disbursed', format: (v: any) => formatCurrency(v) },
+                    { key: 'ending_loan_release', label: 'Total Principal', format: (v: any) => formatCurrency(v) },
                     { key: 'past_due_amount', label: 'Past Due $', format: (v: any) => formatCurrency(v) },
                     { key: 'delinquent_amount', label: 'Delinq $', format: (v: any) => formatCurrency(v) },
                     { key: 'total_outstanding', label: 'Outstanding', format: (v: any) => formatCurrency(v) },
@@ -2345,7 +2346,7 @@ export const ReportsPage = () => {
                     month: fmtCsvMonth(m.month), branch_name: m.branch_name, actual_collection: m.actual_collection,
                     total_collection: m.total_collection, penalty: m.penalty, advance_payment: m.advance_payment,
                     released: m.actual_released_month, past_due_amount: m.past_due_amount || 0,
-                    delinquent_amount: m.delinquent_amount || 0, total_outstanding: m.total_outstanding || 0, par: m.par || 0,
+                    delinquent_amount: m.delinquent_amount || 0, total_outstanding: m.total_outstanding || 0, total_principal: m.ending_loan_release || 0, par: m.par || 0,
                   }));
                   const dayRows = months.flatMap((m: any) => (m.days || []).map((d: any) => ({
                     month: fmtCsvMonth(m.month), branch_name: m.branch_name, report_date: d.report_date,
@@ -2354,23 +2355,24 @@ export const ReportsPage = () => {
                   })));
                   exportCSV(monthRows, `${csvName}-monthly`, [
                     { key: 'month', label: 'Month' }, { key: 'branch_name', label: 'Branch' },
-                    { key: 'actual_collection', label: 'Actual', format: (v: any) => formatCurrency(v) },
-                    { key: 'total_collection', label: 'Total', format: (v: any) => formatCurrency(v) },
+                    { key: 'actual_collection', label: 'Cash Collected', format: (v: any) => formatCurrency(v) },
+                    { key: 'total_collection', label: 'Total Collections', format: (v: any) => formatCurrency(v) },
                     { key: 'penalty', label: 'Penalty', format: (v: any) => formatCurrency(v) },
                     { key: 'advance_payment', label: 'Advance', format: (v: any) => formatCurrency(v) },
-                    { key: 'released', label: 'Released', format: (v: any) => formatCurrency(v) },
+                    { key: 'released', label: 'Disbursed', format: (v: any) => formatCurrency(v) },
                     { key: 'past_due_amount', label: 'Past Due $', format: (v: any) => formatCurrency(v) },
                     { key: 'delinquent_amount', label: 'Delinq $', format: (v: any) => formatCurrency(v) },
                     { key: 'total_outstanding', label: 'Outstanding', format: (v: any) => formatCurrency(v) },
+                    { key: 'total_principal', label: 'Total Principal', format: (v: any) => formatCurrency(v) },
                     { key: 'par', label: 'PAR %', format: (v: any) => `${Number(v || 0).toFixed(1)}%` },
                   ]);
                   setTimeout(() => exportCSV(dayRows, `${csvName}-daily`, [
                     { key: 'month', label: 'Month' }, { key: 'branch_name', label: 'Branch' },
-                    { key: 'report_date', label: 'Date' }, { key: 'actual_collection', label: 'Actual', format: (v: any) => formatCurrency(v) },
-                    { key: 'total_collection', label: 'Total', format: (v: any) => formatCurrency(v) },
+                    { key: 'report_date', label: 'Date' }, { key: 'actual_collection', label: 'Cash Collected', format: (v: any) => formatCurrency(v) },
+                    { key: 'total_collection', label: 'Total Collections', format: (v: any) => formatCurrency(v) },
                     { key: 'penalty', label: 'Penalty', format: (v: any) => formatCurrency(v) },
                     { key: 'advance_payment', label: 'Advance', format: (v: any) => formatCurrency(v) },
-                    { key: 'released', label: 'Released', format: (v: any) => formatCurrency(v) },
+                    { key: 'released', label: 'Disbursed', format: (v: any) => formatCurrency(v) },
                   ]), 100);
                 }
               }}>Export CSV</Button>
@@ -2389,15 +2391,16 @@ export const ReportsPage = () => {
                       <tr className="border-b border-gray-200 dark:border-gray-700">
                         <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400 w-8"></th>
                         <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
-                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Actual</th>
-                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Cash Collected</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total Collections</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Rate</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Penalty</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Advance</th>
-                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Released</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Disbursed</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Past Due $</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Delinq $</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Outstanding</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total Principal</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">PAR</th>
                       </tr>
                     </thead>
@@ -2446,6 +2449,7 @@ export const ReportsPage = () => {
                               <td className="py-3 px-4 text-right text-red-600">{formatCurrency(b.past_due_amount)}</td>
                               <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(b.delinquent_amount)}</td>
                               <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(b.total_outstanding)}</td>
+                              <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(b.ending_loan_release)}</td>
                               <td className="py-3 px-4 text-right"><Tag color={Number(b.par) >= 10 ? 'red' : Number(b.par) >= 5 ? 'orange' : 'green'}>{Number(b.par).toFixed(1)}%</Tag></td>
                             </tr>
                           );
@@ -2465,7 +2469,7 @@ export const ReportsPage = () => {
                                   <td className="py-2 px-4 text-right text-sm">{formatCurrency(sm.penalty)}</td>
                                   <td className="py-2 px-4 text-right text-sm">{formatCurrency(sm.advance_payment)}</td>
                                   <td className="py-2 px-4 text-right text-sm">{formatCurrency(sm.actual_released_month)}</td>
-                                  <td colSpan={4}></td>
+                                  <td colSpan={5}></td>
                                 </tr>
                               );
                               if (mExpanded && sm.days) {
@@ -2482,7 +2486,7 @@ export const ReportsPage = () => {
                                       <td className="py-1.5 px-4 text-right text-xs">{formatCurrency(d.penalty)}</td>
                                       <td className="py-1.5 px-4 text-right text-xs">{formatCurrency(d.advance_payment)}</td>
                                       <td className="py-1.5 px-4 text-right text-xs">{formatCurrency(d.actual_released_day)}</td>
-                                      <td colSpan={4}></td>
+                                      <td colSpan={5}></td>
                                     </tr>
                                   );
                                 }
@@ -2505,6 +2509,7 @@ export const ReportsPage = () => {
                         <td className="py-3 px-4 text-right text-red-600">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.past_due_amount) || 0), 0)); })()}</td>
                         <td className="py-3 px-4 text-right text-orange-600">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.delinquent_amount) || 0), 0)); })()}</td>
                         <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.total_outstanding) || 0), 0)); })()}</td>
+                        <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.ending_loan_release) || 0), 0)); })()}</td>
                         <td className="py-3 px-4 text-right"></td>
                       </tr>
                     </tfoot>
@@ -2516,15 +2521,16 @@ export const ReportsPage = () => {
                         <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400 w-8"></th>
                         <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Month</th>
                         <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
-                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Actual</th>
-                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Cash Collected</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total Collections</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Rate</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Penalty</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Advance</th>
-                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Released</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Disbursed</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Past Due $</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Delinq $</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Outstanding</th>
+                        <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total Principal</th>
                         <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">PAR</th>
                       </tr>
                     </thead>
@@ -2550,6 +2556,7 @@ export const ReportsPage = () => {
                             <td className="py-3 px-4 text-right text-red-600">{formatCurrency(m.past_due_amount || 0)}</td>
                             <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(m.delinquent_amount || 0)}</td>
                             <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(m.total_outstanding || 0)}</td>
+                            <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">{formatCurrency(m.ending_loan_release || 0)}</td>
                             <td className="py-3 px-4 text-right"><Tag color={Number(m.par) >= 10 ? 'red' : Number(m.par) >= 5 ? 'orange' : 'green'}>{Number(m.par).toFixed(1)}%</Tag></td>
                           </tr>
                         );
@@ -2570,7 +2577,7 @@ export const ReportsPage = () => {
                                 <td className="py-2 px-4 text-right text-xs">{formatCurrency(d.penalty)}</td>
                                 <td className="py-2 px-4 text-right text-xs">{formatCurrency(d.advance_payment)}</td>
                                 <td className="py-2 px-4 text-right text-xs">{formatCurrency(d.actual_released_day)}</td>
-                                <td colSpan={4}></td>
+                                <td colSpan={5}></td>
                               </tr>
                             );
                           }
@@ -2590,6 +2597,7 @@ export const ReportsPage = () => {
                         <td className="py-3 px-4 text-right text-red-600">{formatCurrency(colSummaryData.reduce((s: number, m: any) => Math.max(s, Number(m.past_due_amount) || 0), 0))}</td>
                         <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(colSummaryData.reduce((s: number, m: any) => Math.max(s, Number(m.delinquent_amount) || 0), 0))}</td>
                         <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, m: any) => Math.max(s, Number(m.total_outstanding) || 0), 0))}</td>
+                        <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, m: any) => Math.max(s, Number(m.ending_loan_release) || 0), 0))}</td>
                         <td className="py-3 px-4 text-right"></td>
                       </tr>
                     </tfoot>
