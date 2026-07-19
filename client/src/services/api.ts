@@ -200,6 +200,7 @@ export const reportsApi = {
   getBorrowerMasterList: (params?: any) => api.get('/reports/borrower-master-list', { params }),
   getCollectionSummary: (params?: any) => api.get('/reports/collection-summary', { params }),
   getAdvanceSummary: (params?: any) => api.get('/reports/advance-summary', { params }),
+  getPenaltyDetail: (params?: any) => api.get('/reports/penalty-detail', { params }),
 };
 
 // Expenses

@@ -113,6 +113,12 @@ export const ReportsPage = () => {
   const [advSummaryEnd, setAdvSummaryEnd] = useState(new Date().toISOString().slice(0, 10));
   const [advSummaryBranch, setAdvSummaryBranch] = useState<string | null>(null);
   const [advSummaryTotal, setAdvSummaryTotal] = useState<any>({ total_advance: 0, total_payments: 0, payment_count: 0 });
+  const [penaltyDetailData, setPenaltyDetailData] = useState<any[]>([]);
+  const [penaltyDetailLoading, setPenaltyDetailLoading] = useState(false);
+  const [penaltyDetailStart, setPenaltyDetailStart] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
+  const [penaltyDetailEnd, setPenaltyDetailEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [penaltyDetailBranch, setPenaltyDetailBranch] = useState<string | null>(null);
+  const [penaltyDetailTotal, setPenaltyDetailTotal] = useState<any>({ total_penalty_collected: 0, total_penalty_waived: 0, total_penalty: 0, payment_count: 0 });
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
   const [loansGrantedData, setLoansGrantedData] = useState<any[]>([]);
@@ -145,6 +151,7 @@ export const ReportsPage = () => {
   const [disbursementStart, setDisbursementStart] = useState<string | null>(null);
   const [disbursementEnd, setDisbursementEnd] = useState<string | null>(null);
   const [disbursementBranch, setDisbursementBranch] = useState<string | null>(null);
+  const [disbursementSummary, setDisbursementSummary] = useState<any>({ total_disbursed: 0, total_net_proceeds: 0, count: 0 });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -496,6 +503,20 @@ export const ReportsPage = () => {
   }, [activeTab, advSummaryStart, advSummaryEnd, advSummaryBranch]);
 
   useEffect(() => {
+    if (activeTab !== 'penalty-detail') return;
+    const fetch = async () => {
+      setPenaltyDetailLoading(true);
+      try {
+        const { data } = await reportsApi.getPenaltyDetail({ startDate: penaltyDetailStart, endDate: penaltyDetailEnd, branchId: penaltyDetailBranch });
+        setPenaltyDetailData(data.data?.rows || []);
+        setPenaltyDetailTotal(data.data?.summary || { total_penalty_collected: 0, total_penalty_waived: 0, total_penalty: 0, payment_count: 0 });
+      } catch { toaster.push(<Message type="error">Failed to load penalty detail</Message>, { placement: 'topEnd' }); }
+      finally { setPenaltyDetailLoading(false); }
+    };
+    fetch();
+  }, [activeTab, penaltyDetailStart, penaltyDetailEnd, penaltyDetailBranch]);
+
+  useEffect(() => {
     if (activeTab !== 'portfolio-summary') return;
     const fetch = async () => {
       setPortfolioLoading(true);
@@ -534,7 +555,8 @@ export const ReportsPage = () => {
         if (disbursementEnd) params.endDate = disbursementEnd;
         if (disbursementBranch) params.branchId = disbursementBranch;
         const { data } = await reportsApi.getDisbursements(params);
-        setDisbursementData(data.data || []);
+        setDisbursementData(data.data?.rows || []);
+        setDisbursementSummary(data.data?.summary || { total_disbursed: 0, total_net_proceeds: 0, count: 0 });
       } catch { toaster.push(<Message type="error">Failed to load disbursements</Message>, { placement: 'topEnd' }); }
       finally { setDisbursementLoading(false); }
     };
@@ -792,7 +814,8 @@ export const ReportsPage = () => {
       { key: 'borrower-master-list', label: 'Borrower Master List' },
       { key: 'amort', label: 'Amortization Schedule' },
       { key: 'application-types', label: 'Application Types' },
-        { key: 'advance-summary', label: 'Advance Summary' },
+      { key: 'advance-summary', label: 'Advance Summary' },
+      { key: 'penalty-detail', label: 'Penalty Detail' },
     ]},
     { key: 'performance', label: 'Performance', tabs: [
       { key: 'branch-performance', label: 'Branch Performance' },
@@ -2014,45 +2037,56 @@ export const ReportsPage = () => {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Disbursement Report', disbursementData, [
-                { key: 'disbursed_at', label: 'Date', format: (v) => new Date(v).toLocaleDateString() },
-                { key: 'loan_number', label: 'Loan #' },
-                { key: 'borrower_name', label: 'Borrower' },
-                { key: 'branch_name', label: 'Branch' },
-                { key: 'disbursement_method', label: 'Method' },
-                { key: 'reference_number', label: 'Reference' },
-                { key: 'disbursed_amount', label: 'Amount', format: (v) => formatCurrency(v) },
-                { key: 'notes', label: 'Notes' },
-                { key: 'disbursed_by_name', label: 'Disbursed By' },
-              ])}>Print</Button>
-            <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
-              exportCSV(disbursementData, 'disbursements', [
-                { key: 'disbursed_at', label: 'Date', format: (v) => new Date(v).toLocaleDateString() },
-                { key: 'loan_number', label: 'Loan #' },
-                { key: 'borrower_name', label: 'Borrower' },
-                { key: 'branch_name', label: 'Branch' },
-                { key: 'disbursement_method', label: 'Method' },
-                { key: 'reference_number', label: 'Reference' },
-                { key: 'disbursed_amount', label: 'Amount', format: (v) => formatCurrency(v) },
-                { key: 'principal_amount', label: 'Loan Amount', format: (v) => formatCurrency(v) },
-                { key: 'net_proceeds', label: 'Net Proceeds', format: (v) => formatCurrency(v) },
-                { key: 'notes', label: 'Notes' },
-                { key: 'disbursed_by_name', label: 'Disbursed By' },
-              ]);
-            }}>Export CSV</Button>
-          </div>
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
+                let html = `<!DOCTYPE html><html><head><title>Disbursement Report</title>
+                  <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px;}table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;}.text-right{text-align:right;}h2{color:#333;}.grand-total td{font-weight:bold;border-top:2px solid #333;}.print-hide{display:none;}</style></head><body>
+                  <h2>Disbursement Report</h2>
+                  <p>${disbursementStart ? new Date(disbursementStart).toLocaleDateString() : 'All'} — ${disbursementEnd ? new Date(disbursementEnd).toLocaleDateString() : 'All'}</p>
+                  <table><thead><tr><th>Date</th><th>Loan #</th><th>Borrower</th><th>Code</th><th>Product</th><th>Type</th><th>Branch</th><th>Method</th><th>Loan Amt</th><th>Net Proceeds</th><th>Term</th><th>Rate</th><th>Ref</th><th>Disbursed By</th></tr></thead><tbody>`;
+                for (const r of disbursementData) {
+                  html += `<tr><td>${new Date(r.disbursed_at).toLocaleDateString()}</td><td>${r.loan_number}</td><td>${r.borrower_name}</td><td>${r.borrower_code || ''}</td><td>${r.product_name || '-'}</td><td>${r.application_type || '-'}</td><td>${r.branch_name}</td><td>${r.disbursement_method}</td>
+                    <td class="text-right">${formatCurrency(r.principal_amount)}</td><td class="text-right">${formatCurrency(r.net_proceeds)}</td><td>${r.term_months || '-'}mo</td><td>${r.interest_rate ? r.interest_rate + '%' : '-'}</td><td>${r.reference_number || '-'}</td><td>${r.disbursed_by_name || '-'}</td></tr>`;
+                }
+                html += `</tbody><tfoot><tr class="grand-total"><td colspan="8">Total (${disbursementSummary.count} disbursements)</td>
+                  <td class="text-right">${formatCurrency(disbursementSummary.total_disbursed)}</td><td class="text-right">${formatCurrency(disbursementSummary.total_net_proceeds)}</td><td colspan="4"></td></tr></tfoot></table></body></html>`;
+                printWindow(html);
+              }}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+                exportCSV(disbursementData, 'disbursements', [
+                  { key: 'disbursed_at', label: 'Date', format: (v: any) => new Date(v).toLocaleDateString() },
+                  { key: 'loan_number', label: 'Loan #' },
+                  { key: 'borrower_name', label: 'Borrower' },
+                  { key: 'borrower_code', label: 'Code' },
+                  { key: 'product_name', label: 'Product' },
+                  { key: 'application_type', label: 'Type' },
+                  { key: 'branch_name', label: 'Branch' },
+                  { key: 'disbursement_method', label: 'Method' },
+                  { key: 'reference_number', label: 'Reference' },
+                  { key: 'principal_amount', label: 'Loan Amount', format: (v: any) => formatCurrency(v) },
+                  { key: 'net_proceeds', label: 'Net Proceeds', format: (v: any) => formatCurrency(v) },
+                  { key: 'term_months', label: 'Term (mos)' },
+                  { key: 'interest_rate', label: 'Rate', format: (v: any) => v ? v + '%' : '' },
+                  { key: 'disbursed_by_name', label: 'Disbursed By' },
+                ]);
+              }}>Export CSV</Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 border border-blue-200 dark:border-blue-800">
               <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Disbursed</p>
-              <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{formatCurrency(disbursementData.reduce((s: number, r: any) => s + Number(r.net_proceeds || 0), 0))}</p>
-              <p className="text-xs text-blue-500">{disbursementData.length} transactions</p>
+              <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{formatCurrency(disbursementSummary.total_disbursed)}</p>
+              <p className="text-xs text-blue-500">{disbursementSummary.count} transactions</p>
+            </div>
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 border border-green-200 dark:border-green-800">
+              <p className="text-xs text-green-600 dark:text-green-400 font-medium">Net Proceeds</p>
+              <p className="text-xl font-bold text-green-700 dark:text-green-300">{formatCurrency(disbursementSummary.total_net_proceeds)}</p>
+              <p className="text-xs text-green-500">after charges</p>
             </div>
             {(() => {
               const methods = [...new Set(disbursementData.map((r: any) => r.disbursement_method))].sort();
-              return methods.map((m: any) => {
-                const total = disbursementData.filter((r: any) => r.disbursement_method === m).reduce((s: number, r: any) => s + Number(r.net_proceeds || 0), 0);
+              return methods.slice(0, 3).map((m: any) => {
+                const total = disbursementData.filter((r: any) => r.disbursement_method === m).reduce((s: number, r: any) => s + Number(r.disbursed_amount || 0), 0);
                 const colors: Record<string, any> = { Cash: { bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-200 dark:border-green-800', text: 'text-green-700 dark:text-green-300', label: 'text-green-600 dark:text-green-400' }, 'Bank Transfer': { bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800', text: 'text-purple-700 dark:text-purple-300', label: 'text-purple-600 dark:text-purple-400' }, Check: { bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-200 dark:border-orange-800', text: 'text-orange-700 dark:text-orange-300', label: 'text-orange-600 dark:text-orange-400' } };
                 const c = colors[m] || { bg: 'bg-gray-50 dark:bg-gray-700/20', border: 'border-gray-200 dark:border-gray-700', text: 'text-gray-700 dark:text-gray-300', label: 'text-gray-600 dark:text-gray-400' };
                 const count = disbursementData.filter((r: any) => r.disbursement_method === m).length;
@@ -2068,20 +2102,60 @@ export const ReportsPage = () => {
           </div>
 
           <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header="Disbursement Report">
-            <Table data={disbursementData} loading={disbursementLoading} height={500} rowHeight={45}>
-              <Column width={100}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.disbursed_at).toLocaleDateString()}</Cell></Column>
-              <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
-              <Column width={170}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
-              <Column width={100}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
-              <Column width={90}><HeaderCell>Method</HeaderCell><Cell>{(r: any) => <Tag>{r.disbursement_method}</Tag>}</Cell></Column>
-              <Column width={130}><HeaderCell>Reference</HeaderCell><Cell>{(r: any) => r.reference_number || '-'}</Cell></Column>
-              <Column width={120}><HeaderCell>Loan Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
-              <Column width={120}><HeaderCell>Net Proceeds</HeaderCell><Cell>{(r: any) => <span className="font-semibold text-green-600">{formatCurrency(r.net_proceeds)}</span>}</Cell></Column>
-              {/* Amount column hidden but kept — remove comment to restore */}
-              {/* <Column width={120}><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => <span className="font-semibold">{formatCurrency(r.disbursed_amount)}</span>}</Cell></Column> */}
-              <Column width={150}><HeaderCell>Notes</HeaderCell><Cell>{(r: any) => r.notes || '-'}</Cell></Column>
-              <Column width={140}><HeaderCell>Disbursed By</HeaderCell><Cell dataKey="disbursed_by_name" /></Column>
-            </Table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Date</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Loan #</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Borrower</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Code</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Product</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Type</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Method</th>
+                    <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Loan Amt</th>
+                    <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Net Proceeds</th>
+                    <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Term</th>
+                    <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Rate</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Ref</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Disbursed By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {disbursementData.length === 0 ? (
+                    <tr><td colSpan={14} className="text-center py-8 text-gray-400">No disbursements for this period</td></tr>
+                  ) : disbursementData.map((r: any, i: number) => (
+                    <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/20">
+                      <td className="py-2 px-4">{new Date(r.disbursed_at).toLocaleDateString()}</td>
+                      <td className="py-2 px-4 text-gray-600">{r.loan_number}</td>
+                      <td className="py-2 px-4">{r.borrower_name}</td>
+                      <td className="py-2 px-4 text-xs text-gray-400">{r.borrower_code || '-'}</td>
+                      <td className="py-2 px-4 text-gray-600">{r.product_name || '-'}</td>
+                      <td className="py-2 px-4">{r.application_type ? <Tag color={r.application_type === 'Renewal' ? 'blue' : 'green'}>{r.application_type}</Tag> : '-'}</td>
+                      <td className="py-2 px-4 text-gray-600">{r.branch_name}</td>
+                      <td className="py-2 px-4"><Tag>{r.disbursement_method}</Tag></td>
+                      <td className="py-2 px-4 text-right">{formatCurrency(r.principal_amount)}</td>
+                      <td className="py-2 px-4 text-right font-semibold text-green-600">{formatCurrency(r.net_proceeds)}</td>
+                      <td className="py-2 px-4 text-right text-gray-500">{r.term_months || '-'}mo</td>
+                      <td className="py-2 px-4 text-right text-gray-500">{r.interest_rate ? r.interest_rate + '%' : '-'}</td>
+                      <td className="py-2 px-4 text-gray-500">{r.reference_number || '-'}</td>
+                      <td className="py-2 px-4 text-gray-500">{r.disbursed_by_name || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {disbursementData.length > 0 && (
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
+                      <td colSpan={8} className="py-3 px-4 font-bold text-gray-900 dark:text-white">Total ({disbursementSummary.count})</td>
+                      <td className="py-3 px-4 text-right">{formatCurrency(disbursementSummary.total_disbursed)}</td>
+                      <td className="py-3 px-4 text-right text-green-600">{formatCurrency(disbursementSummary.total_net_proceeds)}</td>
+                      <td colSpan={4}></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
           </Panel>
         </div>
       )}
@@ -2732,6 +2806,135 @@ export const ReportsPage = () => {
                       <td className="py-3 px-4 text-right">{formatCurrency(advSummaryTotal.total_payments)}</td>
                       <td className="py-3 px-4 text-right text-blue-600">{formatCurrency(advSummaryTotal.total_advance)}</td>
                       <td></td>
+                      <td></td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'penalty-detail' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <input type="date" value={penaltyDetailStart} onChange={(e) => setPenaltyDetailStart(e.target.value)} className="rs-input pl-3 w-40" />
+              <input type="date" value={penaltyDetailEnd} onChange={(e) => setPenaltyDetailEnd(e.target.value)} className="rs-input pl-3 w-40" />
+              <div className="w-40">
+                <SelectPicker
+                  placeholder="All branches"
+                  data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                  value={penaltyDetailBranch}
+                  onChange={(v) => setPenaltyDetailBranch(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                  size="sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 print-hide">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} size="sm" onClick={() => {
+                const rows = penaltyDetailData;
+                let html = `<!DOCTYPE html><html><head><title>Penalty Detail</title>
+                  <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px;}table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;}.text-right{text-align:right;}h2{color:#333;}.grand-total td{font-weight:bold;border-top:2px solid #333;}</style></head><body>
+                  <h2>Penalty Detail</h2>
+                  <p>${new Date(penaltyDetailStart).toLocaleDateString()} to ${new Date(penaltyDetailEnd).toLocaleDateString()}</p>
+                  <table><thead><tr><th>Date</th><th>Payment #</th><th>Borrower</th><th>Loan #</th><th class="text-right">Amount</th><th class="text-right">Penalty</th><th class="text-right">Waived</th><th class="text-right">Total Penalty</th><th class="text-right">Outstanding</th><th>Branch</th></tr></thead><tbody>`;
+                for (const r of rows) {
+                  html += `<tr><td>${new Date(r.payment_date).toLocaleDateString()}</td><td>${r.payment_number}</td><td>${r.borrower_name} (${r.borrower_code})</td><td>${r.loan_number}</td>
+                    <td class="text-right">${formatCurrency(r.payment_amount)}</td><td class="text-right">${formatCurrency(r.penalty_amount)}</td>
+                    <td class="text-right">${formatCurrency(r.penalty_waived)}</td><td class="text-right">${formatCurrency(r.total_penalty)}</td>
+                    <td class="text-right">${formatCurrency(r.outstanding_balance)}</td><td>${r.branch_name}</td></tr>`;
+                }
+                html += `</tbody><tfoot><tr class="grand-total"><td colspan="4">Total (${penaltyDetailTotal.payment_count} payments)</td>
+                  <td class="text-right">${formatCurrency(penaltyDetailTotal.total_penalty_collected + penaltyDetailTotal.total_penalty_waived)}</td>
+                  <td class="text-right">${formatCurrency(penaltyDetailTotal.total_penalty_collected)}</td><td class="text-right">${formatCurrency(penaltyDetailTotal.total_penalty_waived)}</td>
+                  <td class="text-right">${formatCurrency(penaltyDetailTotal.total_penalty)}</td><td></td><td></td></tr></tfoot></table></body></html>`;
+                printWindow(html);
+              }}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} size="sm" onClick={() => {
+                exportCSV(penaltyDetailData, `penalty-detail-${penaltyDetailStart}-to-${penaltyDetailEnd}`, [
+                  { key: 'payment_date', label: 'Date', format: (v: any) => new Date(v).toLocaleDateString() },
+                  { key: 'payment_number', label: 'Payment #' },
+                  { key: 'borrower_name', label: 'Borrower' },
+                  { key: 'borrower_code', label: 'Code' },
+                  { key: 'loan_number', label: 'Loan #' },
+                  { key: 'payment_amount', label: 'Amount', format: (v: any) => formatCurrency(v) },
+                  { key: 'penalty_amount', label: 'Penalty Collected', format: (v: any) => formatCurrency(v) },
+                  { key: 'penalty_waived', label: 'Penalty Waived', format: (v: any) => formatCurrency(v) },
+                  { key: 'total_penalty', label: 'Total Penalty', format: (v: any) => formatCurrency(v) },
+                  { key: 'outstanding_balance', label: 'Outstanding', format: (v: any) => formatCurrency(v) },
+                  { key: 'branch_name', label: 'Branch' },
+                ]);
+              }}>Export CSV</Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-3 border border-red-200 dark:border-red-800">
+              <p className="text-xs text-red-600 dark:text-red-400 font-medium">Penalty Collected</p>
+              <p className="text-xl font-bold text-red-700 dark:text-red-300">{formatCurrency(penaltyDetailTotal.total_penalty_collected)}</p>
+            </div>
+            <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-3 border border-orange-200 dark:border-orange-800">
+              <p className="text-xs text-orange-600 dark:text-orange-400 font-medium">Penalty Waived</p>
+              <p className="text-xl font-bold text-orange-700 dark:text-orange-300">{formatCurrency(penaltyDetailTotal.total_penalty_waived)}</p>
+            </div>
+            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3 border border-purple-200 dark:border-purple-800">
+              <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">Total Penalty Incurred</p>
+              <p className="text-xl font-bold text-purple-700 dark:text-purple-300">{formatCurrency(penaltyDetailTotal.total_penalty)}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-700/20 rounded-xl p-3 border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Payments with Penalty</p>
+              <p className="text-xl font-bold text-gray-700 dark:text-gray-300">{penaltyDetailTotal.payment_count}</p>
+            </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Penalty Detail — ${new Date(penaltyDetailStart).toLocaleDateString()} to ${new Date(penaltyDetailEnd).toLocaleDateString()}`}>
+            {penaltyDetailLoading ? (
+              <div className="text-center py-8"><Loader size="md" /></div>
+            ) : penaltyDetailData.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">No penalty payments found for this period</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Date</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Payment #</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Borrower</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Loan #</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Amount</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Penalty</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Waived</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total Penalty</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Outstanding</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {penaltyDetailData.map((r: any, i: number) => (
+                      <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/20">
+                        <td className="py-2 px-4">{new Date(r.payment_date).toLocaleDateString()}</td>
+                        <td className="py-2 px-4 text-gray-600">{r.payment_number}</td>
+                        <td className="py-2 px-4">{r.borrower_name}<br /><span className="text-xs text-gray-400">{r.borrower_code}</span></td>
+                        <td className="py-2 px-4 text-gray-600">{r.loan_number}</td>
+                        <td className="py-2 px-4 text-right">{formatCurrency(r.payment_amount)}</td>
+                        <td className="py-2 px-4 text-right text-red-600 font-medium">{formatCurrency(r.penalty_amount)}</td>
+                        <td className="py-2 px-4 text-right text-orange-500">{formatCurrency(r.penalty_waived)}</td>
+                        <td className="py-2 px-4 text-right text-purple-600 font-medium">{formatCurrency(r.total_penalty)}</td>
+                        <td className="py-2 px-4 text-right text-gray-600">{formatCurrency(r.outstanding_balance)}</td>
+                        <td className="py-2 px-4 text-gray-500">{r.branch_name}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
+                      <td colSpan={4} className="py-3 px-4 font-bold text-gray-900 dark:text-white">Total ({penaltyDetailTotal.payment_count} payments)</td>
+                      <td className="py-3 px-4 text-right">{formatCurrency(penaltyDetailTotal.total_penalty_collected + penaltyDetailTotal.total_penalty_waived)}</td>
+                      <td className="py-3 px-4 text-right text-red-600">{formatCurrency(penaltyDetailTotal.total_penalty_collected)}</td>
+                      <td className="py-3 px-4 text-right text-orange-500">{formatCurrency(penaltyDetailTotal.total_penalty_waived)}</td>
+                      <td className="py-3 px-4 text-right text-purple-600">{formatCurrency(penaltyDetailTotal.total_penalty)}</td>
                       <td></td>
                       <td></td>
                     </tr>

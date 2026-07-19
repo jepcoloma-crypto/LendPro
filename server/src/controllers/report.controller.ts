@@ -630,15 +630,19 @@ export class ReportController {
            ld.disbursed_at, ld.disbursement_method, ld.amount as disbursed_amount,
            ld.reference_number, ld.notes,
            l.loan_number, l.principal_amount, l.net_proceeds,
+           l.term_months, l.interest_rate, l.payment_frequency,
+           lp.name as product_name,
            br.first_name || ' ' || br.last_name as borrower_name,
-           b.name as branch_name,
+           br.borrower_code,
+           la.application_type,
+           COALESCE(b.name, 'Unassigned') as branch_name,
            du.first_name || ' ' || du.last_name as disbursed_by_name
          FROM loan_disbursements ld
          JOIN loans l ON l.id = ld.loan_id
          JOIN borrowers br ON br.id = l.borrower_id
-         JOIN loan_applications la ON la.id = l.application_id
-         JOIN users u ON u.id = la.collector_id
-         JOIN branches b ON b.id = u.branch_id
+         LEFT JOIN loan_applications la ON la.id = l.application_id
+         LEFT JOIN loan_products lp ON lp.id = l.product_id
+         LEFT JOIN branches b ON b.id = br.branch_id
          LEFT JOIN users du ON du.id = ld.disbursed_by
          WHERE ($1::date IS NULL OR ld.disbursed_at >= $1::date)
            AND ($2::date IS NULL OR ld.disbursed_at <= $2::date)
@@ -646,7 +650,11 @@ export class ReportController {
          ORDER BY ld.disbursed_at DESC`,
         [startDate || null, endDate || null, branchId || null]
       );
-      res.json({ success: true, data: rows });
+
+      const total = rows.reduce((s: number, r: any) => s + Number(r.disbursed_amount || 0), 0);
+      const netTotal = rows.reduce((s: number, r: any) => s + Number(r.net_proceeds || 0), 0);
+
+      res.json({ success: true, data: { rows, summary: { total_disbursed: total, total_net_proceeds: netTotal, count: rows.length } } });
     } catch (error: any) {
       next(new AppError(500, error.message));
     }
@@ -1233,6 +1241,47 @@ export class ReportController {
         acc.payment_count += 1;
         return acc;
       }, { total_advance: 0, total_payments: 0, payment_count: 0 });
+
+      res.json({ success: true, data: { rows, summary } });
+    } catch (error: any) {
+      next(new AppError(500, error.message));
+    }
+  }
+
+  async getPenaltyDetail(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { startDate, endDate, branchId } = req.query;
+      const rows = await paymentRepo.query(`
+        SELECT
+          p.payment_date::date as payment_date,
+          p.payment_number,
+          p.amount as payment_amount,
+          p.penalty_amount,
+          p.penalty_waived,
+          (COALESCE(p.penalty_amount, 0) + COALESCE(p.penalty_waived, 0)) as total_penalty,
+          br.borrower_code,
+          br.first_name || ' ' || br.last_name as borrower_name,
+          l.loan_number,
+          l.outstanding_balance,
+          COALESCE(b.name, 'Unassigned') as branch_name
+        FROM payments p
+        JOIN loans l ON l.id = p.loan_id
+        JOIN borrowers br ON br.id = p.borrower_id
+        LEFT JOIN branches b ON b.id = br.branch_id
+        WHERE p.status = 'completed'
+          AND (COALESCE(p.penalty_amount, 0) > 0 OR COALESCE(p.penalty_waived, 0) > 0)
+          AND p.payment_date::date BETWEEN $1::date AND $2::date
+          AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
+        ORDER BY p.payment_date DESC, br.last_name, l.loan_number
+      `, [startDate, endDate, branchId || null]);
+
+      const summary = rows.reduce((acc: any, r: any) => {
+        acc.total_penalty_collected += Number(r.penalty_amount) || 0;
+        acc.total_penalty_waived += Number(r.penalty_waived) || 0;
+        acc.total_penalty += Number(r.total_penalty) || 0;
+        acc.payment_count += 1;
+        return acc;
+      }, { total_penalty_collected: 0, total_penalty_waived: 0, total_penalty: 0, payment_count: 0 });
 
       res.json({ success: true, data: { rows, summary } });
     } catch (error: any) {
