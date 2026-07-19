@@ -2130,17 +2130,17 @@ export const ReportsPage = () => {
                       <td className="py-2 px-4">{new Date(r.disbursed_at).toLocaleDateString()}</td>
                       <td className="py-2 px-4 text-gray-600">{r.loan_number}</td>
                       <td className="py-2 px-4">{r.borrower_name}</td>
-                      <td className="py-2 px-4 text-xs text-gray-400">{r.borrower_code || '-'}</td>
-                      <td className="py-2 px-4 text-gray-600">{r.product_name || '-'}</td>
+                      <td className="py-2 px-4 text-xs text-gray-500 dark:text-gray-400">{r.borrower_code || '-'}</td>
+                      <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.product_name || '-'}</td>
                       <td className="py-2 px-4">{r.application_type ? <Tag color={r.application_type === 'Renewal' ? 'blue' : 'green'}>{r.application_type}</Tag> : '-'}</td>
-                      <td className="py-2 px-4 text-gray-600">{r.branch_name}</td>
+                      <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.branch_name}</td>
                       <td className="py-2 px-4"><Tag>{r.disbursement_method}</Tag></td>
                       <td className="py-2 px-4 text-right">{formatCurrency(r.principal_amount)}</td>
-                      <td className="py-2 px-4 text-right font-semibold text-green-600">{formatCurrency(r.net_proceeds)}</td>
-                      <td className="py-2 px-4 text-right text-gray-500">{r.term_months || '-'}mo</td>
-                      <td className="py-2 px-4 text-right text-gray-500">{r.interest_rate ? r.interest_rate + '%' : '-'}</td>
-                      <td className="py-2 px-4 text-gray-500">{r.reference_number || '-'}</td>
-                      <td className="py-2 px-4 text-gray-500">{r.disbursed_by_name || '-'}</td>
+                      <td className="py-2 px-4 text-right font-semibold text-green-600 dark:text-green-400">{formatCurrency(r.net_proceeds)}</td>
+                      <td className="py-2 px-4 text-right text-gray-600 dark:text-gray-400">{r.term_months || '-'}mo</td>
+                      <td className="py-2 px-4 text-right text-gray-600 dark:text-gray-400">{r.interest_rate ? r.interest_rate + '%' : '-'}</td>
+                      <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.reference_number || '-'}</td>
+                      <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.disbursed_by_name || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2790,13 +2790,13 @@ export const ReportsPage = () => {
                       <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/20">
                         <td className="py-2 px-4">{new Date(r.payment_date).toLocaleDateString()}</td>
                         <td className="py-2 px-4 text-gray-600">{r.payment_number}</td>
-                        <td className="py-2 px-4">{r.borrower_name}<br /><span className="text-xs text-gray-400">{r.borrower_code}</span></td>
-                        <td className="py-2 px-4 text-gray-600">{r.loan_number}</td>
+                        <td className="py-2 px-4">{r.borrower_name}<br /><span className="text-xs text-gray-500 dark:text-gray-400">{r.borrower_code}</span></td>
+                        <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.loan_number}</td>
                         <td className="py-2 px-4 text-right">{formatCurrency(r.payment_amount)}</td>
                         <td className="py-2 px-4 text-right text-blue-600 font-medium">{formatCurrency(r.advance_amount)}</td>
-                        <td className="py-2 px-4 text-right text-gray-600">{formatCurrency(r.current_advance_balance)}</td>
-                        <td className="py-2 px-4 text-right text-gray-600">{formatCurrency(r.outstanding_balance)}</td>
-                        <td className="py-2 px-4 text-gray-500">{r.branch_name}</td>
+                        <td className="py-2 px-4 text-right text-gray-600 dark:text-gray-400">{formatCurrency(r.current_advance_balance)}</td>
+                        <td className="py-2 px-4 text-right text-gray-600 dark:text-gray-400">{formatCurrency(r.outstanding_balance)}</td>
+                        <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.branch_name}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -2917,14 +2917,14 @@ export const ReportsPage = () => {
                       <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/20">
                         <td className="py-2 px-4">{new Date(r.payment_date).toLocaleDateString()}</td>
                         <td className="py-2 px-4 text-gray-600">{r.payment_number}</td>
-                        <td className="py-2 px-4">{r.borrower_name}<br /><span className="text-xs text-gray-400">{r.borrower_code}</span></td>
-                        <td className="py-2 px-4 text-gray-600">{r.loan_number}</td>
+                        <td className="py-2 px-4">{r.borrower_name}<br /><span className="text-xs text-gray-500 dark:text-gray-400">{r.borrower_code}</span></td>
+                        <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.loan_number}</td>
                         <td className="py-2 px-4 text-right">{formatCurrency(r.payment_amount)}</td>
                         <td className="py-2 px-4 text-right text-red-600 font-medium">{formatCurrency(r.penalty_amount)}</td>
-                        <td className="py-2 px-4 text-right text-orange-500">{formatCurrency(r.penalty_waived)}</td>
+                        <td className="py-2 px-4 text-right text-orange-500 dark:text-orange-400">{formatCurrency(r.penalty_waived)}</td>
                         <td className="py-2 px-4 text-right text-purple-600 font-medium">{formatCurrency(r.total_penalty)}</td>
-                        <td className="py-2 px-4 text-right text-gray-600">{formatCurrency(r.outstanding_balance)}</td>
-                        <td className="py-2 px-4 text-gray-500">{r.branch_name}</td>
+                        <td className="py-2 px-4 text-right text-gray-600 dark:text-gray-400">{formatCurrency(r.outstanding_balance)}</td>
+                        <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.branch_name}</td>
                       </tr>
                     ))}
                   </tbody>
