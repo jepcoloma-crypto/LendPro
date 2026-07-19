@@ -2226,7 +2226,8 @@ export const ReportsPage = () => {
                       </tr></thead><tbody>`;
                     for (const sm of b.months) {
                       const smRate = num(sm.total_collection) > 0 ? Math.round(num(sm.actual_collection) / num(sm.total_collection) * 100) : null;
-                      html += `<tr><td>${sm.month}</td>
+                      const smLabel = new Date(sm.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                      html += `<tr><td>${smLabel}</td>
                         <td class="text-right">${formatCurrency(sm.actual_collection)}</td>
                         <td class="text-right">${formatCurrency(sm.total_collection)}</td>
                         <td class="text-right">${smRate !== null ? smRate + '%' : '—'}</td>
@@ -2235,7 +2236,7 @@ export const ReportsPage = () => {
                         <td class="text-right">${formatCurrency(sm.actual_released_month)}</td></tr>`;
                       for (const d of (sm.days || [])) {
                         const dRate = num(d.total_collection) > 0 ? Math.round(num(d.actual_collection) / num(d.total_collection) * 100) : null;
-                        html += `<tr style="font-size:11px;color:#666;"><td style="padding-left:24px;">${new Date(d.report_date).toLocaleDateString()}</td>
+                        html += `<tr style="font-size:11px;color:#666;"><td style="padding-left:24px;">${new Date(d.report_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
                           <td class="text-right">${formatCurrency(d.actual_collection)}</td>
                           <td class="text-right">${formatCurrency(d.total_collection)}</td>
                           <td class="text-right">${dRate !== null ? dRate + '%' : '—'}</td>
@@ -2251,7 +2252,8 @@ export const ReportsPage = () => {
                   let dayGrand = { actual_collection: 0, total_collection: 0, penalty: 0, advance_payment: 0, released: 0 };
                   for (const m of allMonths) {
                     const mRate = num(m.total_collection) > 0 ? Math.round(num(m.actual_collection) / num(m.total_collection) * 100) : null;
-                    html += `<h3>${m.branch_name} — ${m.month}</h3>
+                    const mLabel = new Date(m.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    html += `<h3>${m.branch_name} — ${mLabel}</h3>
                       <table><thead><tr>
                         <th>Date</th><th class="text-right">Actual</th><th class="text-right">Total</th>
                         <th class="text-right">Rate</th><th class="text-right">Penalty</th><th class="text-right">Advance</th><th class="text-right">Released</th>
@@ -2263,7 +2265,7 @@ export const ReportsPage = () => {
                       dayGrand.penalty += num(d.penalty);
                       dayGrand.advance_payment += num(d.advance_payment);
                       dayGrand.released += num(d.actual_released_day);
-                      html += `<tr><td>${new Date(d.report_date).toLocaleDateString()}</td>
+                      html += `<tr><td>${new Date(d.report_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
                         <td class="text-right">${formatCurrency(d.actual_collection)}</td>
                         <td class="text-right">${formatCurrency(d.total_collection)}</td>
                         <td class="text-right">${dRate !== null ? dRate + '%' : '—'}</td>
@@ -2286,7 +2288,8 @@ export const ReportsPage = () => {
                       <th>Branch</th><th>Month</th><th class="text-right">Past Due $</th><th class="text-right">Delinq $</th><th class="text-right">Outstanding</th><th class="text-right">PAR</th>
                     </tr></thead><tbody>`;
                   for (const m of allMonths) {
-                    html += `<tr><td>${m.branch_name}</td><td>${m.month}</td>
+                    const pLabel = new Date(m.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    html += `<tr><td>${m.branch_name}</td><td>${pLabel}</td>
                       <td class="text-right">${formatCurrency(m.past_due_amount || 0)}</td>
                       <td class="text-right">${formatCurrency(m.delinquent_amount || 0)}</td>
                       <td class="text-right">${formatCurrency(m.total_outstanding || 0)}</td>
@@ -2339,14 +2342,15 @@ export const ReportsPage = () => {
                     { key: 'par', label: 'PAR %', format: (v: any) => `${Number(v || 0).toFixed(1)}%` },
                   ]);
                 } else {
+                  const fmtCsvMonth = (m: string) => new Date(m + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                   const monthRows = months.map((m: any) => ({
-                    month: m.month, branch_name: m.branch_name, actual_collection: m.actual_collection,
+                    month: fmtCsvMonth(m.month), branch_name: m.branch_name, actual_collection: m.actual_collection,
                     total_collection: m.total_collection, penalty: m.penalty, advance_payment: m.advance_payment,
                     released: m.actual_released_month, past_due_amount: m.past_due_amount || 0,
                     delinquent_amount: m.delinquent_amount || 0, total_outstanding: m.total_outstanding || 0, par: m.par || 0,
                   }));
                   const dayRows = months.flatMap((m: any) => (m.days || []).map((d: any) => ({
-                    month: m.month, branch_name: m.branch_name, report_date: d.report_date,
+                    month: fmtCsvMonth(m.month), branch_name: m.branch_name, report_date: d.report_date,
                     actual_collection: d.actual_collection, total_collection: d.total_collection,
                     penalty: d.penalty, advance_payment: d.advance_payment, released: d.actual_released_day,
                   })));
@@ -2456,7 +2460,7 @@ export const ReportsPage = () => {
                               allRows.push(
                                 <tr key={`m-${bi}-${mi}`} className="border-b border-gray-100 dark:border-gray-700/50 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30" onClick={(e) => { e.stopPropagation(); const n = new Set(expandedKeys); if (mExpanded) n.delete(mKey); else n.add(mKey); setExpandedKeys(n); }}>
                                   <td className="py-2 px-4 text-gray-400 pl-8">{mExpanded ? '▼' : '▶'}</td>
-                                  <td className="py-2 px-4 text-sm text-gray-600 dark:text-gray-400">{sm.month}</td>
+                                  <td className="py-2 px-4 text-sm text-gray-600 dark:text-gray-400">{new Date(sm.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</td>
                                   <td className="py-2 px-4 text-right text-sm">{formatCurrency(sm.actual_collection)}</td>
                                   <td className="py-2 px-4 text-right text-sm">{formatCurrency(sm.total_collection)}</td>
                                   <td className="py-2 px-4 text-right text-sm">{smRate !== null ? `${smRate}%` : '—'}</td>
@@ -2473,7 +2477,7 @@ export const ReportsPage = () => {
                                   allRows.push(
                                     <tr key={`d-${bi}-${mi}-${di}`} className="border-b border-gray-100 dark:border-gray-700/20 text-gray-500 dark:text-gray-500">
                                       <td></td>
-                                      <td className="py-1.5 px-4 text-xs pl-12">{new Date(d.report_date).toLocaleDateString()}</td>
+                                      <td className="py-1.5 px-4 text-xs pl-12">{new Date(d.report_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
                                       <td className="py-1.5 px-4 text-right text-xs">{formatCurrency(d.actual_collection)}</td>
                                       <td className="py-1.5 px-4 text-right text-xs">{formatCurrency(d.total_collection)}</td>
                                       <td className="py-1.5 px-4 text-right text-xs">{dRate !== null ? `${dRate}%` : '—'}</td>
@@ -2537,7 +2541,7 @@ export const ReportsPage = () => {
                         rows.push(
                           <tr key={`m-${mi}`} className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50" onClick={() => { const n = new Set(expandedKeys); if (isExpanded) n.delete(mKey); else n.add(mKey); setExpandedKeys(n); }}>
                             <td className="py-3 px-4 text-gray-500">{isExpanded ? '▼' : '▶'}</td>
-                            <td className="py-3 px-4 text-gray-900 dark:text-white">{m.month}</td>
+                            <td className="py-3 px-4 text-gray-900 dark:text-white">{new Date(m.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</td>
                             <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{m.branch_name}</td>
                             <td className="py-3 px-4 text-right text-green-600">{formatCurrency(actual)}</td>
                             <td className="py-3 px-4 text-right text-gray-800 dark:text-gray-200">{formatCurrency(total)}</td>
@@ -2560,7 +2564,7 @@ export const ReportsPage = () => {
                             rows.push(
                               <tr key={`d-${mi}-${di}`} className="border-b border-gray-100 dark:border-gray-700/30 text-gray-500 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/20">
                                 <td></td>
-                                <td className="py-2 px-4 text-xs pl-8">{new Date(d.report_date).toLocaleDateString()}</td>
+                                <td className="py-2 px-4 text-xs pl-8">{new Date(d.report_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
                                 <td className="py-2 px-4 text-xs">{d.branch_name}</td>
                                 <td className="py-2 px-4 text-right text-xs">{formatCurrency(dActual)}</td>
                                 <td className="py-2 px-4 text-right text-xs">{formatCurrency(dTotal)}</td>
