@@ -10,6 +10,14 @@ import { CollectorRemittancePage } from '../audit/CollectorRemittancePage';
 const { Column, HeaderCell, Cell } = Table;
 
 export const ReportsPage = () => {
+  const sumSnapshotByBranch = (data: any[], key: string): number => {
+    const perBranch: Record<string, number> = {};
+    for (const row of data) {
+      const bn = row.branch_name;
+      perBranch[bn] = Math.max(perBranch[bn] || 0, Number(row[key]) || 0);
+    }
+    return Object.values(perBranch).reduce((s, v) => s + v, 0);
+  };
   const [activeTab, setActiveTab] = useState('aging');
   const [activeCategory, setActiveCategory] = useState('collections');
   const [agingData, setAgingData] = useState<any[]>([]);
@@ -2506,10 +2514,10 @@ export const ReportsPage = () => {
                         <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => s + (Number(m.penalty) || 0), 0)); })()}</td>
                         <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => s + (Number(m.advance_payment) || 0), 0)); })()}</td>
                         <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => s + (Number(m.actual_released_month) || 0), 0)); })()}</td>
-                        <td className="py-3 px-4 text-right text-red-600">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.past_due_amount) || 0), 0)); })()}</td>
-                        <td className="py-3 px-4 text-right text-orange-600">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.delinquent_amount) || 0), 0)); })()}</td>
-                        <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.total_outstanding) || 0), 0)); })()}</td>
-                        <td className="py-3 px-4 text-right">{(() => { const d = colSummaryData; return formatCurrency(d.reduce((s: number, m: any) => Math.max(s, Number(m.ending_loan_release) || 0), 0)); })()}</td>
+                        <td className="py-3 px-4 text-right text-red-600">{formatCurrency(sumSnapshotByBranch(colSummaryData, 'past_due_amount'))}</td>
+                        <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(sumSnapshotByBranch(colSummaryData, 'delinquent_amount'))}</td>
+                        <td className="py-3 px-4 text-right">{formatCurrency(sumSnapshotByBranch(colSummaryData, 'total_outstanding'))}</td>
+                        <td className="py-3 px-4 text-right">{formatCurrency(sumSnapshotByBranch(colSummaryData, 'ending_loan_release'))}</td>
                         <td className="py-3 px-4 text-right"></td>
                       </tr>
                     </tfoot>
@@ -2594,10 +2602,10 @@ export const ReportsPage = () => {
                         <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, m: any) => s + (Number(m.penalty) || 0), 0))}</td>
                         <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, m: any) => s + (Number(m.advance_payment) || 0), 0))}</td>
                         <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, m: any) => s + (Number(m.actual_released_month) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right text-red-600">{formatCurrency(colSummaryData.reduce((s: number, m: any) => Math.max(s, Number(m.past_due_amount) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(colSummaryData.reduce((s: number, m: any) => Math.max(s, Number(m.delinquent_amount) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, m: any) => Math.max(s, Number(m.total_outstanding) || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(colSummaryData.reduce((s: number, m: any) => Math.max(s, Number(m.ending_loan_release) || 0), 0))}</td>
+                        <td className="py-3 px-4 text-right text-red-600">{formatCurrency(sumSnapshotByBranch(colSummaryData, 'past_due_amount'))}</td>
+                        <td className="py-3 px-4 text-right text-orange-600">{formatCurrency(sumSnapshotByBranch(colSummaryData, 'delinquent_amount'))}</td>
+                        <td className="py-3 px-4 text-right">{formatCurrency(sumSnapshotByBranch(colSummaryData, 'total_outstanding'))}</td>
+                        <td className="py-3 px-4 text-right">{formatCurrency(sumSnapshotByBranch(colSummaryData, 'ending_loan_release'))}</td>
                         <td className="py-3 px-4 text-right"></td>
                       </tr>
                     </tfoot>
