@@ -1100,7 +1100,7 @@ export class ReportController {
         const monthlyMap: Record<string, any> = {};
         for (const r of rows) {
           const d = r.report_date;
-          const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+          const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
           const key = `${r.branch_name}|${monthKey}`;
           if (!monthlyMap[key]) {
             monthlyMap[key] = {
@@ -1145,7 +1145,7 @@ export class ReportController {
         const monthMap: Record<string, any> = {};
         for (const r of rows) {
           const d = r.report_date;
-          const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+          const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
           const key = `${r.branch_name}|${monthKey}`;
           if (!monthMap[key]) {
             monthMap[key] = {
