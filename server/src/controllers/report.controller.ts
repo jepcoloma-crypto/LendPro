@@ -762,8 +762,8 @@ export class ReportController {
            COALESCE(SUM(p.penalty_amount), 0) as total_penalty
          FROM payments p
          JOIN loans l ON l.id = p.loan_id
-         LEFT JOIN users u ON u.id = l.collector_id
-         LEFT JOIN branches b ON b.id = u.branch_id
+         JOIN borrowers br ON br.id = l.borrower_id
+         LEFT JOIN branches b ON b.id = br.branch_id
          WHERE p.status = 'completed'
            AND p.payment_date::date BETWEEN $1::date AND $2::date
            AND ($3::uuid IS NULL OR b.id = $3::uuid OR (b.id IS NULL AND $3::uuid = '00000000-0000-0000-0000-000000000000'))
