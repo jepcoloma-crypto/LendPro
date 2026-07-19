@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Panel, Table, Tag, Button, SelectPicker, DatePicker, DateRangePicker, Message, toaster, Loader } from 'rsuite';
+import { Panel, Table, Tag, Button, SelectPicker, DatePicker, Message, toaster, Loader } from 'rsuite';
 import { loansApi, reportsApi, borrowersApi, usersApi, branchesApi } from '../../services/api';
 import { Download, Printer, ExternalLink } from 'lucide-react';
 import { formatCurrency, exportCSV } from '../../utils/format';
@@ -2157,22 +2157,10 @@ export const ReportsPage = () => {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div className="flex gap-3 items-center">
-              <DateRangePicker
-                value={[new Date(csStartDate), new Date(csEndDate)]}
-                onChange={(v) => { if (v) { setCsStartDate(v[0].toLocaleDateString('en-CA')); setCsEndDate(v[1].toLocaleDateString('en-CA')); } }}
-                ranges={[
-                  { label: 'Today', value: [new Date(), new Date()] },
-                  { label: 'This Month', value: [new Date(new Date().getFullYear(), new Date().getMonth(), 1), new Date()] },
-                  { label: 'Last Month', value: [new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1), new Date(new Date().getFullYear(), new Date().getMonth(), 0)] },
-                  { label: 'This Quarter', value: [new Date(new Date().getFullYear(), Math.floor(new Date().getMonth() / 3) * 3, 1), new Date()] },
-                  { label: 'This Year', value: [new Date(new Date().getFullYear(), 0, 1), new Date()] },
-                ]}
-                cleanable={false}
-                oneTap
-                style={{ width: 260 }}
-                size="sm"
-                placeholder="Select date range"
-              />
+              <span className="text-sm text-gray-500">From:</span>
+              <input type="date" value={csStartDate} onChange={(e) => setCsStartDate(e.target.value)} className="rs-input pl-3 w-40" />
+              <span className="text-sm text-gray-500">To:</span>
+              <input type="date" value={csEndDate} onChange={(e) => setCsEndDate(e.target.value)} className="rs-input pl-3 w-40" />
               <SelectPicker
                 placeholder="Branch"
                 data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
