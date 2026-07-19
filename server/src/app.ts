@@ -45,29 +45,80 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Rate limiting (generous in dev)
-const limiter = rateLimit({
+// --- Rate Limiting ---
+const isProd = config.nodeEnv === 'production';
+const tooMany = { success: false, error: 'Too many requests, please try again later.' };
+
+// Key by userId for authenticated requests, IP otherwise (fairer for shared-IP offices)
+const userKey = (req: express.Request): string =>
+  (req as any).user?.userId || req.ip || 'unknown';
+
+// 1. Global safety net — all incoming requests regardless of route
+const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: config.nodeEnv === 'production' ? 100 : 5000,
+  max: isProd ? 1000 : 10000,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: 'Too many requests, please try again later.' },
+  message: tooMany,
 });
-app.use('/api/auth', limiter);
+app.use(globalLimiter);
 
-// Stricter rate limit for sensitive operations
+// 2. General API limiter — all /api routes, keyed by user
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isProd ? 300 : 5000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: tooMany,
+});
+app.use('/api', apiLimiter);
+
+// 3. Write operation limiter — POST/PUT/DELETE/PATCH on /api (skip reads)
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isProd ? 100 : 2000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  skip: (req) => !['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method),
+  message: { success: false, error: 'Too many write requests, please try again later.' },
+});
+app.use('/api', writeLimiter);
+
+// 4. Auth-specific limiter — tighter than general API limit
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isProd ? 100 : 5000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: tooMany,
+});
+app.use('/api/auth', authLimiter);
+
+// 5. Strict limit for sensitive operations (login, password reset, import, backup/restore)
 const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: config.nodeEnv === 'production' ? 20 : 200,
+  max: isProd ? 20 : 200,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: 'Too many requests, please try again later.' },
+  message: tooMany,
 });
 app.use('/api/auth/login', strictLimiter);
 app.use('/api/auth/forgot-password', strictLimiter);
 app.use('/api/utilities/backup', strictLimiter);
 app.use('/api/utilities/restore', strictLimiter);
 app.use('/api/payments/import', strictLimiter);
+
+// 6. Twilio webhook (unauthenticated, IP-based)
+const twilioLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isProd ? 30 : 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: tooMany,
+});
+app.use('/twilio/webhook', twilioLimiter);
 
 // Static files (uploads) — authenticated access only
 app.use('/uploads', authenticate, express.static(path.join(__dirname, '..', 'uploads')));

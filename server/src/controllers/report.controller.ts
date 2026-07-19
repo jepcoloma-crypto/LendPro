@@ -1140,6 +1140,59 @@ export class ReportController {
         return res.json({ success: true, data: { mode: 'monthly', rows: Object.values(monthlyMap) } });
       }
 
+      if (groupBy === 'unified') {
+        const monthMap: Record<string, any> = {};
+        for (const r of rows) {
+          const monthKey = String(r.report_date).slice(0, 7);
+          const key = `${r.branch_name}|${monthKey}`;
+          if (!monthMap[key]) {
+            monthMap[key] = {
+              month: monthKey,
+              branch_name: r.branch_name,
+              actual_collection: 0,
+              total_collection: 0,
+              penalty: 0,
+              advance_payment: 0,
+              actual_released_month: 0,
+              total_release: 0,
+              ending_loan_release: 0,
+              past_due_accounts: 0,
+              past_due_amount: 0,
+              total_delinquent: 0,
+              delinquent_amount: 0,
+              total_outstanding: 0,
+              par: 0,
+              days: [],
+            };
+          }
+          const m = monthMap[key];
+          m.actual_collection += Number(r.actual_collection) || 0;
+          m.total_collection += Number(r.total_collection) || 0;
+          m.penalty += Number(r.penalty) || 0;
+          m.advance_payment += Number(r.advance_payment) || 0;
+          m.actual_released_month += Number(r.actual_released_day) || 0;
+          m.total_release = Math.max(m.total_release, Number(r.total_release) || 0);
+          m.ending_loan_release = Math.max(m.ending_loan_release, Number(r.ending_loan_release) || 0);
+          m.past_due_accounts = Math.max(m.past_due_accounts, Number(r.past_due_accounts) || 0);
+          m.past_due_amount = Math.max(m.past_due_amount, Number(r.past_due_amount) || 0);
+          m.total_delinquent = Math.max(m.total_delinquent, Number(r.total_delinquent) || 0);
+          m.delinquent_amount = Math.max(m.delinquent_amount, Number(r.delinquent_amount) || 0);
+          m.total_outstanding = Math.max(m.total_outstanding, Number(r.total_outstanding) || 0);
+          m.par = Math.max(m.par, Number(r.par) || 0);
+          m.days.push({
+            report_date: r.report_date,
+            branch_name: r.branch_name,
+            total_collection: r.total_collection,
+            actual_collection: r.actual_collection,
+            penalty: r.penalty,
+            advance_payment: r.advance_payment,
+            actual_released_day: r.actual_released_day,
+            total_release: r.total_release,
+          });
+        }
+        return res.json({ success: true, data: { mode: 'unified', months: Object.values(monthMap) } });
+      }
+
       res.json({ success: true, data: { mode: 'daily', rows } });
     } catch (error: any) {
       next(new AppError(500, error.message));
