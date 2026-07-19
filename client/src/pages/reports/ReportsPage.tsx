@@ -2079,9 +2079,9 @@ export const ReportsPage = () => {
               <p className="text-xs text-blue-500">{disbursementSummary.count} transactions</p>
             </div>
             <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 border border-green-200 dark:border-green-800">
-              <p className="text-xs text-green-600 dark:text-green-400 font-medium">Net Proceeds</p>
-              <p className="text-xl font-bold text-green-700 dark:text-green-300">{formatCurrency(disbursementSummary.total_net_proceeds)}</p>
-              <p className="text-xs text-green-500">after charges</p>
+              <p className="text-xs text-green-600 dark:text-green-400 font-medium">Total Principal</p>
+              <p className="text-xl font-bold text-green-700 dark:text-green-300">{formatCurrency(disbursementSummary.total_principal)}</p>
+              <p className="text-xs text-green-500">loan amount</p>
             </div>
             {(() => {
               const methods = [...new Set(disbursementData.map((r: any) => r.disbursement_method))].sort();
@@ -2148,7 +2148,7 @@ export const ReportsPage = () => {
                   <tfoot>
                     <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
                       <td colSpan={8} className="py-3 px-4 font-bold text-gray-900 dark:text-white">Total ({disbursementSummary.count})</td>
-                      <td className="py-3 px-4 text-right">{formatCurrency(disbursementSummary.total_disbursed)}</td>
+                      <td className="py-3 px-4 text-right">{formatCurrency(disbursementSummary.total_principal)}</td>
                       <td className="py-3 px-4 text-right text-green-600">{formatCurrency(disbursementSummary.total_net_proceeds)}</td>
                       <td colSpan={4}></td>
                     </tr>

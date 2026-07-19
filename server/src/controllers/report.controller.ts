@@ -651,10 +651,11 @@ export class ReportController {
         [startDate || null, endDate || null, branchId || null]
       );
 
-      const total = rows.reduce((s: number, r: any) => s + Number(r.disbursed_amount || 0), 0);
+      const totalPrincipal = rows.reduce((s: number, r: any) => s + Number(r.principal_amount || 0), 0);
+      const totalDisbursed = rows.reduce((s: number, r: any) => s + Number(r.disbursed_amount || 0), 0);
       const netTotal = rows.reduce((s: number, r: any) => s + Number(r.net_proceeds || 0), 0);
 
-      res.json({ success: true, data: { rows, summary: { total_disbursed: total, total_net_proceeds: netTotal, count: rows.length } } });
+      res.json({ success: true, data: { rows, summary: { total_principal: totalPrincipal, total_disbursed: totalDisbursed, total_net_proceeds: netTotal, count: rows.length } } });
     } catch (error: any) {
       next(new AppError(500, error.message));
     }
