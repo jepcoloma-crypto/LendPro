@@ -634,18 +634,19 @@ export class ReportController {
            br.first_name || ' ' || br.last_name as borrower_name,
            br.borrower_code,
            la.application_type,
-           COALESCE(b.name, 'Unassigned') as branch_name,
-           du.first_name || ' ' || du.last_name as disbursed_by_name
-         FROM loan_disbursements ld
+            COALESCE(b.name, 'Unassigned') as branch_name,
+            du.first_name || ' ' || du.last_name as disbursed_by_name,
+            CASE WHEN la.id IS NULL THEN 'Historical' ELSE 'System' END as origin
+          FROM loan_disbursements ld
          JOIN loans l ON l.id = ld.loan_id
          JOIN borrowers br ON br.id = l.borrower_id
          LEFT JOIN loan_applications la ON la.id = l.application_id
          LEFT JOIN loan_products lp ON lp.id = l.product_id
          LEFT JOIN branches b ON b.id = br.branch_id
          LEFT JOIN users du ON du.id = ld.disbursed_by
-         WHERE ($1::date IS NULL OR ld.disbursed_at >= $1::date)
-           AND ($2::date IS NULL OR ld.disbursed_at <= $2::date)
-           AND ($3::uuid IS NULL OR b.id = $3::uuid)
+          WHERE ($1::date IS NULL OR ld.disbursed_at::date >= $1::date)
+            AND ($2::date IS NULL OR ld.disbursed_at::date <= $2::date)
+            AND ($3::uuid IS NULL OR b.id = $3::uuid)
          ORDER BY ld.disbursed_at DESC`,
         [startDate || null, endDate || null, branchId || null]
       );

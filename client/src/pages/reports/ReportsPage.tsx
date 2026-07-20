@@ -2042,13 +2042,13 @@ export const ReportsPage = () => {
                   <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px;}table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #ddd;}.text-right{text-align:right;}h2{color:#333;}.grand-total td{font-weight:bold;border-top:2px solid #333;}.print-hide{display:none;}</style></head><body>
                   <h2>Disbursement Report</h2>
                   <p>${disbursementStart ? new Date(disbursementStart).toLocaleDateString() : 'All'} — ${disbursementEnd ? new Date(disbursementEnd).toLocaleDateString() : 'All'}</p>
-                  <table><thead><tr><th>Date</th><th>Loan #</th><th>Borrower</th><th>Code</th><th>Product</th><th>Type</th><th>Branch</th><th>Method</th><th>Loan Amt</th><th>Net Proceeds</th><th>Term</th><th>Rate</th><th>Ref</th><th>Disbursed By</th></tr></thead><tbody>`;
+                  <table><thead><tr><th>Date</th><th>Loan #</th><th>Borrower</th><th>Code</th><th>Product</th><th>Type</th><th>Branch</th><th>Method</th><th>Loan Amt</th><th>Net Proceeds</th><th>Term</th><th>Rate</th><th>Ref</th><th>Disbursed By</th><th>Origin</th></tr></thead><tbody>`;
                 for (const r of disbursementData) {
                   html += `<tr><td>${new Date(r.disbursed_at).toLocaleDateString()}</td><td>${r.loan_number}</td><td>${r.borrower_name}</td><td>${r.borrower_code || ''}</td><td>${r.product_name || '-'}</td><td>${r.application_type || '-'}</td><td>${r.branch_name}</td><td>${r.disbursement_method}</td>
-                    <td class="text-right">${formatCurrency(r.principal_amount)}</td><td class="text-right">${formatCurrency(r.net_proceeds)}</td><td>${r.term_months || '-'}mo</td><td>${r.interest_rate ? r.interest_rate + '%' : '-'}</td><td>${r.reference_number || '-'}</td><td>${r.disbursed_by_name || '-'}</td></tr>`;
+                    <td class="text-right">${formatCurrency(r.principal_amount)}</td><td class="text-right">${formatCurrency(r.net_proceeds)}</td><td>${r.term_months || '-'}mo</td><td>${r.interest_rate ? r.interest_rate + '%' : '-'}</td><td>${r.reference_number || '-'}</td><td>${r.disbursed_by_name || '-'}</td><td>${r.origin || '-'}</td></tr>`;
                 }
                 html += `</tbody><tfoot><tr class="grand-total"><td colspan="8">Total (${disbursementSummary.count} disbursements)</td>
-                  <td class="text-right">${formatCurrency(disbursementSummary.total_disbursed)}</td><td class="text-right">${formatCurrency(disbursementSummary.total_net_proceeds)}</td><td colspan="4"></td></tr></tfoot></table></body></html>`;
+                  <td class="text-right">${formatCurrency(disbursementSummary.total_principal)}</td><td class="text-right">${formatCurrency(disbursementSummary.total_net_proceeds)}</td><td colspan="5"></td></tr></tfoot></table></body></html>`;
                 printWindow(html);
               }}>Print</Button>
               <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
@@ -2067,6 +2067,7 @@ export const ReportsPage = () => {
                   { key: 'term_months', label: 'Term (mos)' },
                   { key: 'interest_rate', label: 'Rate', format: (v: any) => v ? v + '%' : '' },
                   { key: 'disbursed_by_name', label: 'Disbursed By' },
+                  { key: 'origin', label: 'Origin' },
                 ]);
               }}>Export CSV</Button>
             </div>
@@ -2120,11 +2121,12 @@ export const ReportsPage = () => {
                     <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Rate</th>
                     <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Ref</th>
                     <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Disbursed By</th>
+                    <th className="text-center py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Origin</th>
                   </tr>
                 </thead>
                 <tbody>
                   {disbursementData.length === 0 ? (
-                    <tr><td colSpan={14} className="text-center py-8 text-gray-400">No disbursements for this period</td></tr>
+                    <tr><td colSpan={15} className="text-center py-8 text-gray-400">No disbursements for this period</td></tr>
                   ) : disbursementData.map((r: any, i: number) => (
                     <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/20">
                       <td className="py-2 px-4">{new Date(r.disbursed_at).toLocaleDateString()}</td>
@@ -2141,6 +2143,7 @@ export const ReportsPage = () => {
                       <td className="py-2 px-4 text-right text-gray-600 dark:text-gray-400">{r.interest_rate ? r.interest_rate + '%' : '-'}</td>
                       <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.reference_number || '-'}</td>
                       <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.disbursed_by_name || '-'}</td>
+                      <td className="py-2 px-4 text-center"><Tag color={r.origin === 'Historical' ? 'orange' : 'green'}>{r.origin}</Tag></td>
                     </tr>
                   ))}
                 </tbody>
@@ -2150,7 +2153,7 @@ export const ReportsPage = () => {
                       <td colSpan={8} className="py-3 px-4 font-bold text-gray-900 dark:text-white">Total ({disbursementSummary.count})</td>
                       <td className="py-3 px-4 text-right">{formatCurrency(disbursementSummary.total_principal)}</td>
                       <td className="py-3 px-4 text-right text-green-600">{formatCurrency(disbursementSummary.total_net_proceeds)}</td>
-                      <td colSpan={4}></td>
+                      <td colSpan={5}></td>
                     </tr>
                   </tfoot>
                 )}
