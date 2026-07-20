@@ -1485,17 +1485,17 @@ const [collectors, setCollectors] = useState<any[]>([]);
         </Modal.Footer>
       </Modal>
 
-      {/* Credit Limit Warning Modal */}
+      {/* Credit Limit / Delinquent Warning Modal */}
       <Modal open={creditLimitOpen} onClose={() => setCreditLimitOpen(false)} size="sm">
         <Modal.Header>
-          <Modal.Title><span className="text-red-600">Credit Limit Exceeded</span></Modal.Title>
+          <Modal.Title><span className="text-red-600">{creditLimitMsg.toLowerCase().includes('delinquent') ? 'Delinquent Loan' : 'Credit Limit Exceeded'}</span></Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="flex flex-col items-center text-center py-4">
             <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4">
               <DollarSign className="w-8 h-8 text-red-600" />
             </div>
-            <p className="text-gray-700 dark:text-gray-300 text-lg font-semibold mb-2">Total Loan Amount Exceeds Credit Limit</p>
+            <p className="text-gray-700 dark:text-gray-300 text-lg font-semibold mb-2">{creditLimitMsg.toLowerCase().includes('delinquent') ? 'Borrower Has Delinquent Loans' : 'Total Loan Amount Exceeds Credit Limit'}</p>
             <p className="text-gray-500 dark:text-gray-400">{creditLimitMsg}</p>
           </div>
         </Modal.Body>
