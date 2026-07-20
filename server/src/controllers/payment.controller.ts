@@ -53,6 +53,35 @@ export class PaymentController {
         }
       }
 
+      // Always attribute the payment to the loan's assigned collector (if active)
+      // so Cash Pickup shows the correct collector's unremitted amount
+      if (req.body.loanId) {
+        const loanResult = await pool.query(
+          `SELECT l.collector_id, u.is_active as collector_active
+           FROM loans l
+           LEFT JOIN users u ON u.id = l.collector_id
+           WHERE l.id = $1`,
+          [req.body.loanId]
+        );
+        if (loanResult.rows.length > 0) {
+          const loanCollectorId = loanResult.rows[0].collector_id;
+          const collectorActive = loanResult.rows[0].collector_active;
+          if (loanCollectorId && collectorActive === true) {
+            req.body.collectorId = loanCollectorId;
+          } else if (!loanCollectorId) {
+            // No collector assigned to loan — if current user is a collector,
+            // attribute the payment to them so it appears in Cash Pickup
+            const userResult = await pool.query(
+              `SELECT r.slug FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
+              [req.user!.userId]
+            );
+            if (userResult.rows[0]?.slug === 'collector') {
+              req.body.collectorId = req.user!.userId;
+            }
+          }
+        }
+      }
+
       const payment = await paymentService.receivePayment(req.body, req.user!.userId);
       // Only record cash if paid directly at the office (no collector involved)
       // Collector payments record cash when the pickup is processed
