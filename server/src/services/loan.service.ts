@@ -62,12 +62,17 @@ export class LoanService {
 
     await this.checkCreditLimit(app.borrower_id, Number(app.principal_amount));
 
-    const delinquentLoans = await loanRepo.query(
-      `SELECT COUNT(*) as count FROM loans l WHERE l.borrower_id = $1 AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due)`,
-      [app.borrower_id]
-    );
-    const delinquentCount = parseInt(delinquentLoans[0]?.count || '0', 10);
-    if (delinquentCount > 0) throw new Error('Borrower has delinquent loan(s). Please settle outstanding debts before applying.');
+    const prevBalance = parseFloat(app.previous_balance) || 0;
+    // Skip delinquent check for renewals (previous_balance > 0) since the old balance
+    // is consolidated into the new loan and settled at release.
+    if (prevBalance <= 0) {
+      const delinquentLoans = await loanRepo.query(
+        `SELECT COUNT(*) as count FROM loans l WHERE l.borrower_id = $1 AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.due_date < CURRENT_DATE - INTERVAL '5 days' AND COALESCE(a.paid_amount,0) < a.total_due)`,
+        [app.borrower_id]
+      );
+      const delinquentCount = parseInt(delinquentLoans[0]?.count || '0', 10);
+      if (delinquentCount > 0) throw new Error('Borrower has delinquent loan(s). Please settle outstanding debts before applying.');
+    }
 
     const updated = await loanApplicationRepo.update(id, { status: 'submitted', submitted_at: new Date() });
     return updated;
