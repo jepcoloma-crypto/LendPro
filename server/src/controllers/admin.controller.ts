@@ -828,14 +828,14 @@ export class AdminController {
          LEFT JOIN amortization_schedules s ON s.loan_id = l.id
          WHERE l.status NOT IN ('written-off', 'pending')
          GROUP BY l.id, l.loan_number, l.outstanding_balance, l.advance_balance
-         HAVING ABS(l.outstanding_balance + COALESCE(l.advance_balance, 0) - COALESCE(SUM(s.total_due - s.paid_amount), 0)) > 0.01`
+         HAVING ABS(l.outstanding_balance - COALESCE(SUM(s.total_due - s.paid_amount), 0)) > 0.01`
       );
       balanceIssues.forEach((r: any) => issues.push({
         type: 'balance_mismatch',
         severity: 'high',
         entity: `Loan ${r.loan_number}`,
-        detail: `Outstanding balance (${parseFloat(r.outstanding_balance).toFixed(2)}) + advance (${parseFloat(r.advance_balance).toFixed(2)}) = ${(parseFloat(r.outstanding_balance) + parseFloat(r.advance_balance)).toFixed(2)} ≠ sum of remaining schedule dues (${parseFloat(r.sum_remaining).toFixed(2)})`,
-        amount: Math.abs((parseFloat(r.outstanding_balance) + parseFloat(r.advance_balance)) - parseFloat(r.sum_remaining)),
+        detail: `Outstanding balance (${parseFloat(r.outstanding_balance).toFixed(2)}) ≠ sum of remaining schedule dues (${parseFloat(r.sum_remaining).toFixed(2)})`,
+        amount: Math.abs(parseFloat(r.outstanding_balance) - parseFloat(r.sum_remaining)),
         id: r.id,
       }));
 
