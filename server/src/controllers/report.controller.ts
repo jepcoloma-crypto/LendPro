@@ -481,22 +481,23 @@ export class ReportController {
             l.principal_amount, l.interest_amount, l.total_amount, l.net_proceeds,
             l.term_months, l.payment_frequency, l.status,
             la.application_type, la.previous_balance,
-            b.name as branch_name,
+            COALESCE(b.name, br2.name) as branch_name,
            br.first_name || ' ' || br.last_name as borrower_name,
            br.present_address, br.present_city, br.present_province,
            COALESCE(lc.total_charges, 0) as total_charges,
            COALESCE(pi.total_paid_interest, 0) as paid_interest
          FROM loans l
-         JOIN loan_applications la ON la.id = l.application_id
          JOIN borrowers br ON br.id = l.borrower_id
-         JOIN users u ON u.id = la.collector_id
-         JOIN branches b ON b.id = u.branch_id
+         LEFT JOIN loan_applications la ON la.id = l.application_id
+         LEFT JOIN users u ON u.id = COALESCE(la.collector_id, l.collector_id)
+         LEFT JOIN branches b ON b.id = u.branch_id
+         LEFT JOIN branches br2 ON br2.id = br.branch_id
          LEFT JOIN (SELECT loan_id, SUM(amount) as total_charges FROM loan_charges GROUP BY loan_id) lc ON lc.loan_id = l.id
          LEFT JOIN (SELECT loan_id, SUM(interest_amount) as total_paid_interest FROM payments WHERE status = 'completed' GROUP BY loan_id) pi ON pi.loan_id = l.id
          WHERE l.release_date IS NOT NULL
            AND ($1::date IS NULL OR l.release_date >= $1::date)
            AND ($2::date IS NULL OR l.release_date <= $2::date)
-           AND ($3::uuid IS NULL OR b.id = $3::uuid)
+           AND ($3::uuid IS NULL OR COALESCE(b.id, br2.id) = $3::uuid)
          ORDER BY l.release_date DESC`,
         [startDate || null, endDate || null, branchId || null]
       );
