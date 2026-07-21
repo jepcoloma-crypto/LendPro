@@ -6,7 +6,7 @@ export const formatCurrency = (amount: number | string | null | undefined): stri
 type RsuiteColor = 'green' | 'red' | 'blue' | 'orange' | 'violet' | 'cyan' | 'yellow';
 
 const statusColorMap: Record<string, RsuiteColor> = {
-  active: 'green', closed: 'blue', pending: 'orange', delinquent: 'red',
+  active: 'green', closed: 'blue', pending: 'orange', delinquent: 'red', past_due: 'orange',
   submitted: 'blue', 'under-review': 'orange', investigation: 'violet',
   approved: 'green', rejected: 'red', released: 'cyan', draft: 'yellow',
   restructured: 'orange', 'written-off': 'violet', paid: 'green',

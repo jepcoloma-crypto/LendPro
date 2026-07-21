@@ -296,8 +296,11 @@ export const LoansPage = () => {
             <Form.Group>
               <Form.ControlLabel>Status</Form.ControlLabel>
               <Form.Control name="status" accepter={SelectPicker} data={[
-                { label: 'Active', value: 'active' }, { label: 'Delinquent', value: 'delinquent' },
-                { label: 'Closed', value: 'closed' }, { label: 'Pending', value: 'pending' },
+                { label: 'Active', value: 'active' },
+                { label: 'Delinquent', value: 'delinquent' },
+                { label: 'Past Due', value: 'past_due' },
+                { label: 'Closed', value: 'closed' },
+                { label: 'Pending', value: 'pending' },
               ]} style={{ width: '100%' }} />
             </Form.Group>
           </Form>
