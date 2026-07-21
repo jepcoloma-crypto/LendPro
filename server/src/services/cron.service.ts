@@ -7,9 +7,10 @@ export class CronService {
 
   start() {
     this.jobs.push(schedule('0 2 * * 6', () => this.applyPenalties()));
+    this.jobs.push(schedule('30 2 * * *', () => this.updateLoanStatuses()));
     this.jobs.push(schedule('0 8 * * *', () => this.sendPaymentReminders()));
     this.jobs.push(schedule('30 8 * * *', () => this.sendOverdueNotices()));
-    console.log('✓ Cron jobs scheduled (penalties 2AM, reminders 8AM, overdue 8:30AM)');
+    console.log('✓ Cron jobs scheduled (penalties 2AM Sat, statuses 2:30AM daily, reminders 8AM, overdue 8:30AM)');
   }
 
   stop() {
@@ -66,6 +67,37 @@ export class CronService {
       console.log(`[Cron] Penalties applied: ${applied} applied, ${skipped} skipped`);
     } catch (err: any) {
       console.error('[Cron] Penalty application failed:', err.message);
+    }
+  }
+
+  private async updateLoanStatuses() {
+    try {
+      const result = await pool.query(`
+        UPDATE loans SET status = computed.new_status, updated_at = NOW()
+        FROM (
+          SELECT l.id,
+            CASE
+              WHEN l.outstanding_balance <= 0 THEN 'closed'
+              WHEN l.maturity_date < CURRENT_DATE
+                AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.total_due > COALESCE(a.paid_amount, 0))
+              THEN 'past_due'
+              WHEN l.maturity_date >= CURRENT_DATE
+                AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.total_due > COALESCE(a.paid_amount, 0))
+              THEN 'delinquent'
+              ELSE 'active'
+            END AS new_status
+          FROM loans l
+          WHERE l.status NOT IN ('paid', 'written-off', 'cancelled', 'pending')
+        ) computed
+        WHERE loans.id = computed.id AND loans.status IS DISTINCT FROM computed.new_status
+        RETURNING loans.id, loans.loan_number, loans.status
+      `);
+      if (result.rowCount && result.rowCount > 0) {
+        console.log(`[Cron] Loan statuses updated: ${result.rowCount} loan(s)`);
+        result.rows.forEach(r => console.log(`  ${r.loan_number}: ${r.status}`));
+      }
+    } catch (err: any) {
+      console.error('[Cron] Loan status update failed:', err.message);
     }
   }
 
