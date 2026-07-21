@@ -19,13 +19,13 @@ export class PickupController {
       const shift = await cashierSessionRepo.findOne({ user_id: req.user!.userId, status: 'open' });
       if (!shift) throw new AppError(400, 'No open shift found. Open a shift first.');
 
-      // Fetch unremitted payments for this collector
+      // Fetch unremitted payments for this collector (by received_by — who actually collected the cash)
       const { rows: payments } = await pool.query(
         `SELECT p.id, p.amount, p.payment_number, p.loan_id, p.borrower_id, p.payment_method, p.created_at,
                 CONCAT(b.first_name, ' ', b.last_name) as borrower_name
          FROM payments p
          LEFT JOIN borrowers b ON b.id = p.borrower_id
-         WHERE p.collector_id = $1 AND p.remittance_status = 'pending' AND p.status != 'cancelled'
+         WHERE p.received_by = $1 AND p.remittance_status = 'pending' AND p.status != 'cancelled'
          ORDER BY p.created_at ASC`,
         [collector_id]
       );
@@ -205,7 +205,7 @@ export class PickupController {
          FROM payments p
          LEFT JOIN borrowers b ON b.id = p.borrower_id
          LEFT JOIN loans l ON l.id = p.loan_id
-         WHERE p.collector_id = $1 AND p.remittance_status = 'pending' AND p.status != 'cancelled'
+         WHERE p.received_by = $1 AND p.remittance_status = 'pending' AND p.status != 'cancelled'
          ORDER BY p.created_at ASC`,
         [collector_id]
       );
@@ -229,7 +229,7 @@ export class PickupController {
          LEFT JOIN borrowers b ON b.id = p.borrower_id
          LEFT JOIN loans l ON l.id = p.loan_id
          LEFT JOIN collector_pickups cp ON cp.id = p.pickup_id
-         WHERE p.collector_id = $1 AND p.remittance_status = 'remitted' AND p.status != 'cancelled'
+         WHERE p.received_by = $1 AND p.remittance_status = 'remitted' AND p.status != 'cancelled'
          ORDER BY p.remitted_at DESC`,
         [collector_id]
       );
@@ -247,14 +247,14 @@ export class PickupController {
                 COALESCE((
                   SELECT SUM(p.amount::numeric)
                   FROM payments p
-                  WHERE p.collector_id = u.id AND p.remittance_status = 'pending' AND p.status != 'cancelled'
+                  WHERE p.received_by = u.id AND p.remittance_status = 'pending' AND p.status != 'cancelled'
                 ), 0) as outstanding_amount,
                 COUNT(pf.id) FILTER (WHERE pf.remittance_status = 'pending' AND pf.status != 'cancelled') as pending_count,
                 COUNT(pf.id) FILTER (WHERE pf.remittance_status = 'remitted') as remitted_count
          FROM users u
          JOIN roles r ON r.id = u.role_id
          LEFT JOIN branches b ON b.id = u.branch_id
-         LEFT JOIN payments pf ON pf.collector_id = u.id
+         LEFT JOIN payments pf ON pf.received_by = u.id
            WHERE r.slug = 'collector' AND u.is_active = true
          GROUP BY u.id, u.first_name, u.last_name, b.name
          ORDER BY u.first_name`

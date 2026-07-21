@@ -401,6 +401,72 @@ export class LoanService {
       days_overdue: 0,
     });
 
+    // Close old active loans on renewal — the borrower's previous balance
+    // was deducted from this loan's proceeds, so the old obligation is settled.
+    // Distribute the outstanding balance across the old loan's unpaid schedules
+    // and create a settlement payment so the amortization reflects the payoff.
+    if (app.application_type === 'Renewal' && prevBalance > 0) {
+      const oldLoans = await loanRepo.query(
+        `SELECT id, total_amount FROM loans WHERE borrower_id = $1 AND status = 'active' AND id != $2`,
+        [app.borrower_id, loan.id]
+      );
+      for (const oldLoan of oldLoans) {
+        const schedules = await amortizationScheduleRepo.query(
+          `SELECT id, installment_no, total_due, paid_amount
+           FROM amortization_schedules WHERE loan_id = $1
+           AND COALESCE(paid_amount,0) < total_due ORDER BY installment_no`,
+          [oldLoan.id]
+        );
+        if (schedules.length === 0) continue;
+        let remaining = 0;
+        for (const s of schedules) remaining += Number(s.total_due) - Number(s.paid_amount);
+        if (remaining <= 0) continue;
+        const payment = await paymentRepo.create({
+          loan_id: oldLoan.id,
+          borrower_id: app.borrower_id,
+          amount: remaining,
+          principal_amount: remaining,
+          interest_amount: 0,
+          penalty_amount: 0,
+          penalty_waived: 0,
+          advance_amount: 0,
+          payment_method: 'historical',
+          payment_date: relDate,
+          status: 'completed',
+          payment_number: 'SETTLE-' + loan.loan_number,
+          notes: 'Renewal settlement',
+        });
+        const allocs: any[] = [];
+        let distRemaining = remaining;
+        for (const s of schedules) {
+          const due = Number(s.total_due);
+          const currPaid = Number(s.paid_amount);
+          const need = due - currPaid;
+          const alloc = Math.min(distRemaining, need);
+          if (alloc > 0) {
+            const newPaid = currPaid + alloc;
+            const status = newPaid >= due - 0.01 ? 'paid' : 'partial';
+            await amortizationScheduleRepo.query(
+              `UPDATE amortization_schedules SET paid_amount = $1, status = $2 WHERE id = $3`,
+              [newPaid, status, s.id]
+            );
+            allocs.push({ payment_id: payment.id, schedule_id: s.id, amount: alloc, allocated_to: 'principal' });
+            distRemaining -= alloc;
+          }
+        }
+        if (allocs.length > 0) await paymentAllocationRepo.batchCreate(allocs);
+        await loanRepo.query(
+          `UPDATE loans SET status = 'closed', outstanding_balance = 0,
+           next_payment_date = NULL, updated_at = NOW() WHERE id = $1`,
+          [oldLoan.id]
+        );
+        await loanRepo.query(
+          `UPDATE collections SET status = 'closed' WHERE loan_id = $1`,
+          [oldLoan.id]
+        );
+      }
+    }
+
     return loan;
   }
 
