@@ -652,6 +652,10 @@ export class LoanController {
   async getLoans(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const pagination = parsePagination(req.query);
+      if (!req.query.sortBy) {
+        pagination.sortBy = `CASE l.status WHEN 'active' THEN 0 WHEN 'delinquent' THEN 1 WHEN 'past_due' THEN 2 WHEN 'pending' THEN 3 ELSE 4 END`;
+        pagination.sortOrder = 'ASC';
+      }
       const status = paramStr(req.query.status);
       const search = paramStr(req.query.search);
       const borrowerId = paramStr(req.query.borrowerId);
