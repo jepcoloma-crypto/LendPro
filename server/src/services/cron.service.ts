@@ -79,10 +79,10 @@ export class CronService {
             CASE
               WHEN l.outstanding_balance <= 0 THEN 'closed'
               WHEN l.maturity_date < CURRENT_DATE
-                AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.total_due > COALESCE(a.paid_amount, 0))
+                AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.total_due > COALESCE(a.paid_amount, 0) AND a.due_date < CURRENT_DATE)
               THEN 'past_due'
               WHEN l.maturity_date >= CURRENT_DATE
-                AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.total_due > COALESCE(a.paid_amount, 0))
+                AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.total_due > COALESCE(a.paid_amount, 0) AND a.due_date < CURRENT_DATE)
               THEN 'delinquent'
               ELSE 'active'
             END AS new_status
