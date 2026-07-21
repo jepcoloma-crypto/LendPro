@@ -36,8 +36,9 @@ export const DataTable = ({ data, loading, columns, page, total, limit = 20, onP
       ))}
     </Table>
     {page !== undefined && total !== undefined && onPageChange && (
-      <div className="flex justify-center mt-4">
-        <Pagination prev next first last pages={3} activePage={page} total={total} limit={limit} onChangePage={onPageChange} />
+      <div className="flex justify-center items-center gap-4 mt-4">
+        <span className="text-sm text-gray-500 dark:text-gray-400">{(page - 1) * limit + 1}-{Math.min(page * limit, total)} of {total}</span>
+        <Pagination prev next first last pages={5} activePage={page} total={total} limit={limit} onChangePage={onPageChange} />
       </div>
     )}
   </Panel>
