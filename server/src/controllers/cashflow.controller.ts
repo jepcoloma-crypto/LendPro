@@ -287,8 +287,8 @@ export class CashflowController {
       const params: any[] = [];
       let pi = 1;
       let where = '';
-      if (startDate) { where += ` AND i.date >= $${pi++}`; params.push(startDate); }
-      if (endDate) { where += ` AND i.date <= $${pi++}`; params.push(endDate); }
+      if (startDate) { where += ` AND i.date >= $${pi++}::date`; params.push(startDate); }
+      if (endDate) { where += ` AND i.date <= $${pi++}::date`; params.push(endDate); }
       const details = await pool.query(
         `SELECT i.date, i.source, i.amount, i.description,
                 u.first_name || ' ' || u.last_name as created_by_name
@@ -297,7 +297,7 @@ export class CashflowController {
         params
       );
       const grandTotal = await pool.query(
-        `SELECT SUM(amount) as total FROM other_income WHERE 1=1${where}`,
+        `SELECT SUM(amount) as total FROM other_income i WHERE 1=1${where}`,
         params
       );
       res.json({ success: true, data: { details: details.rows, grandTotal: grandTotal.rows[0]?.total || 0 } });

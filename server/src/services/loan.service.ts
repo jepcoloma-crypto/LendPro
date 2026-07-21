@@ -635,7 +635,7 @@ export class LoanService {
           (SELECT COALESCE(SUM(pay.interest_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE l.collector_id = $1) as total_interest,
           (SELECT COALESCE(SUM(pay.penalty_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE l.collector_id = $1) as total_penalties,
           (SELECT COALESCE(SUM(l.outstanding_balance), 0) FROM loans l WHERE l.status IN ('active','delinquent') AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.status = 'overdue' AND a.due_date < CURRENT_DATE - INTERVAL '30 days') AND l.collector_id = $1) as par30_amount,
-          (SELECT COUNT(DISTINCT borrower_id) FROM loans WHERE status IN ('active','delinquent') AND collector_id = $1) as borrower_count
+          (SELECT COUNT(DISTINCT br.id) FROM borrowers br JOIN loans l ON l.borrower_id = br.id WHERE l.collector_id = $1) as borrower_count
       `
       : `
         SELECT
@@ -653,7 +653,7 @@ export class LoanService {
           (SELECT COALESCE(SUM(pay.interest_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id) as total_interest,
           (SELECT COALESCE(SUM(pay.penalty_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id) as total_penalties,
           (SELECT COALESCE(SUM(l.outstanding_balance), 0) FROM loans l WHERE l.status IN ('active','delinquent') AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.status = 'overdue' AND a.due_date < CURRENT_DATE - INTERVAL '30 days')) as par30_amount,
-          (SELECT COUNT(DISTINCT borrower_id) FROM loans WHERE status IN ('active','delinquent')) as borrower_count
+          (SELECT COUNT(*) FROM borrowers) as borrower_count
       `;
 
     const [aggResult, monthlyTrendResult, releaseTrendResult, topCollectorsResult,

@@ -550,9 +550,8 @@ export class ReportController {
              NULLIF(COUNT(l.id), 0) * 100, 1) as delinquency_rate
          FROM loans l
          JOIN loan_products lp ON lp.id = l.product_id
-         JOIN loan_applications la ON la.id = l.application_id
-         JOIN users u ON u.id = la.collector_id
-         JOIN branches b ON b.id = u.branch_id
+         JOIN borrowers br ON br.id = l.borrower_id
+         LEFT JOIN branches b ON b.id = br.branch_id
          GROUP BY lp.name, b.name
          ORDER BY b.name, lp.name`
       );
