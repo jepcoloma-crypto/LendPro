@@ -88,6 +88,9 @@ export const ReportsPage = () => {
   const [pastDueBranchFilter, setPastDueBranchFilter] = useState<string | null>(null);
   const [delinquencyBranchFilter, setDelinquencyBranchFilter] = useState<string | null>(null);
   const [delinquencyLoading, setDelinquencyLoading] = useState(false);
+const [pastDueDelData, setPastDueDelData] = useState<any[]>([]);
+const [pastDueDelLoading, setPastDueDelLoading] = useState(false);
+const [pastDueDelBranch, setPastDueDelBranch] = useState<string | null>(null);
   const [agingBranchFilter, setAgingBranchFilter] = useState<string | null>(null);
   const [agingLoading, setAgingLoading] = useState(false);
 
@@ -223,6 +226,21 @@ export const ReportsPage = () => {
     };
     fetchDelinquency();
   }, [activeTab, delinquencyBranchFilter]);
+
+  useEffect(() => {
+    const fetchPastDueDel = async () => {
+      if (activeTab !== 'past-due-delinquent') return;
+      setPastDueDelLoading(true);
+      try {
+        const params: any = {};
+        if (pastDueDelBranch) params.branchId = pastDueDelBranch;
+        const { data } = await reportsApi.getDelinquency(params);
+        setPastDueDelData(data.data || []);
+      } catch { toaster.push(<Message type="error">Failed to load past due & delinquent report</Message>, { placement: 'topEnd' }); }
+      finally { setPastDueDelLoading(false); }
+    };
+    fetchPastDueDel();
+  }, [activeTab, pastDueDelBranch]);
 
   useEffect(() => {
     const fetchProcessingCharges = async () => {
@@ -816,6 +834,7 @@ export const ReportsPage = () => {
       { key: 'application-types', label: 'Application Types' },
       { key: 'advance-summary', label: 'Advance Summary' },
       { key: 'penalty-detail', label: 'Penalty Detail' },
+      { key: 'past-due-delinquent', label: 'Past Due & Delinquent' },
     ]},
     { key: 'performance', label: 'Performance', tabs: [
       { key: 'branch-performance', label: 'Branch Performance' },
@@ -969,6 +988,70 @@ export const ReportsPage = () => {
             {delinquencyData.length > 0 && (
               <div className="flex justify-end px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-sm font-semibold">
                 <span>Total Outstanding: {formatCurrency(delinquencyData.reduce((s: number, r: any) => s + parseFloat(r.outstanding_balance || 0), 0))} &middot; Total Overdue: {formatCurrency(delinquencyData.reduce((s: number, r: any) => s + parseFloat(r.total_overdue || 0), 0))} &middot; {delinquencyData.length} loan{delinquencyData.length !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'past-due-delinquent' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <div className="w-44">
+                <SelectPicker
+                  placeholder="All branches"
+                  data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
+                  value={pastDueDelBranch}
+                  onChange={(v) => setPastDueDelBranch(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => printReport('Past Due & Delinquent', pastDueDelData, [
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'principal_amount', label: 'Principal', format: (v) => formatCurrency(v) },
+                { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
+                { key: 'total_overdue', label: 'Total Overdue', format: (v) => formatCurrency(v) },
+                { key: 'days_overdue', label: 'Days OD' },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'collector_name', label: 'Collector' },
+                { key: 'last_payment_date', label: 'Last Payment', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
+                { key: 'computed_status', label: 'Status' },
+              ])}>Print</Button>
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(pastDueDelData, 'past-due-delinquent', [
+                { key: 'borrower_name', label: 'Borrower' },
+                { key: 'loan_number', label: 'Loan #' },
+                { key: 'principal_amount', label: 'Principal' },
+                { key: 'outstanding_balance', label: 'Outstanding' },
+                { key: 'total_overdue', label: 'Total Overdue' },
+                { key: 'days_overdue', label: 'Days OD' },
+                { key: 'branch_name', label: 'Branch' },
+                { key: 'collector_name', label: 'Collector' },
+                { key: 'last_payment_date', label: 'Last Payment', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
+                { key: 'computed_status', label: 'Status' },
+              ])}>Export CSV</Button>
+            </div>
+          </div>
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={`Past Due & Delinquent Accounts (${pastDueDelData.length})`}>
+            <Table data={pastDueDelData} loading={pastDueDelLoading} height={500} rowHeight={45}>
+              <Column width={200}><HeaderCell>Borrower</HeaderCell><Cell dataKey="borrower_name" /></Column>
+              <Column width={120}><HeaderCell>Loan #</HeaderCell><Cell dataKey="loan_number" /></Column>
+              <Column width={120}><HeaderCell>Principal</HeaderCell><Cell>{(r: any) => formatCurrency(r.principal_amount)}</Cell></Column>
+              <Column width={130}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-semibold">{formatCurrency(r.outstanding_balance)}</span>}</Cell></Column>
+              <Column width={130}><HeaderCell>Total Overdue</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-medium">{formatCurrency(r.total_overdue)}</span>}</Cell></Column>
+              <Column width={90}><HeaderCell>Days OD</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_overdue}</span>}</Cell></Column>
+              <Column width={130}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
+              <Column width={120}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
+              <Column width={120}><HeaderCell>Last Payment</HeaderCell><Cell>{(r: any) => r.last_payment_date ? new Date(r.last_payment_date).toLocaleDateString() : <span className="text-gray-400">None</span>}</Cell></Column>
+              <Column width={110}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.computed_status === 'delinquent' ? 'red' : 'orange'}>{r.computed_status === 'delinquent' ? 'Delinquent' : 'Past Due'}</Tag>}</Cell></Column>
+            </Table>
+            {pastDueDelData.length > 0 && (
+              <div className="flex justify-end px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-sm font-semibold">
+                <span>Total Outstanding: {formatCurrency(pastDueDelData.reduce((s: number, r: any) => s + parseFloat(r.outstanding_balance || 0), 0))} &middot; Total Overdue: {formatCurrency(pastDueDelData.reduce((s: number, r: any) => s + parseFloat(r.total_overdue || 0), 0))} &middot; {pastDueDelData.length} loan{pastDueDelData.length !== 1 ? 's' : ''}</span>
               </div>
             )}
           </Panel>
