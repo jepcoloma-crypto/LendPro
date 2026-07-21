@@ -49,7 +49,7 @@ export class ReportController {
       if (status) { conditions.push(`CASE WHEN l.maturity_date < CURRENT_DATE THEN 'past_due' ELSE 'delinquent' END = $${idx++}::text`); params.push(status); }
       const where = conditions.join(' AND ');
       const result = await collectionRepo.query(
-        `SELECT l.id as loan_id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
+        `SELECT l.id as loan_id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date, l.maturity_date,
                 bor.first_name || ' ' || bor.last_name as borrower_name, bor.mobile, bor.borrower_code,
                 COALESCE(branch.name, 'Unassigned') as branch_name,
                 CASE WHEN l.maturity_date < CURRENT_DATE THEN 'past_due' ELSE 'delinquent' END as computed_status,

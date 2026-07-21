@@ -1032,10 +1032,12 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
                 { key: 'outstanding_balance', label: 'Outstanding', format: (v) => formatCurrency(v) },
                 { key: 'total_overdue', label: 'Total Overdue', format: (v) => formatCurrency(v) },
                 { key: 'days_overdue', label: 'Days OD' },
+                { key: 'release_date', label: 'Release Date', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
+                { key: 'maturity_date', label: 'Maturity Date', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
                 { key: 'branch_name', label: 'Branch' },
-                { key: 'collector_name', label: 'Collector' },
                 { key: 'last_payment_date', label: 'Last Payment', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
                 { key: 'computed_status', label: 'Status' },
+                { key: 'collector_name', label: 'Collector' },
               ])}>Print</Button>
               <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => exportCSV(pastDueDelData, 'past-due-delinquent', [
                 { key: 'borrower_name', label: 'Borrower' },
@@ -1044,10 +1046,12 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
                 { key: 'outstanding_balance', label: 'Outstanding' },
                 { key: 'total_overdue', label: 'Total Overdue' },
                 { key: 'days_overdue', label: 'Days OD' },
+                { key: 'release_date', label: 'Release Date', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
+                { key: 'maturity_date', label: 'Maturity Date', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
                 { key: 'branch_name', label: 'Branch' },
-                { key: 'collector_name', label: 'Collector' },
                 { key: 'last_payment_date', label: 'Last Payment', format: (v) => v ? new Date(v).toLocaleDateString() : 'N/A' },
                 { key: 'computed_status', label: 'Status' },
+                { key: 'collector_name', label: 'Collector' },
               ])}>Export CSV</Button>
             </div>
           </div>
@@ -1059,10 +1063,12 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
               <Column width={130}><HeaderCell>Outstanding</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-semibold">{formatCurrency(r.outstanding_balance)}</span>}</Cell></Column>
               <Column width={130}><HeaderCell>Total Overdue</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-medium">{formatCurrency(r.total_overdue)}</span>}</Cell></Column>
               <Column width={90}><HeaderCell>Days OD</HeaderCell><Cell>{(r: any) => <span className="text-red-500 font-bold">{r.days_overdue}</span>}</Cell></Column>
+              <Column width={120}><HeaderCell>Release Date</HeaderCell><Cell>{(r: any) => r.release_date ? new Date(r.release_date).toLocaleDateString() : <span className="text-gray-400">N/A</span>}</Cell></Column>
+              <Column width={120}><HeaderCell>Maturity Date</HeaderCell><Cell>{(r: any) => r.maturity_date ? new Date(r.maturity_date).toLocaleDateString() : <span className="text-gray-400">N/A</span>}</Cell></Column>
               <Column width={130}><HeaderCell>Branch</HeaderCell><Cell dataKey="branch_name" /></Column>
-              <Column width={120}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
               <Column width={120}><HeaderCell>Last Payment</HeaderCell><Cell>{(r: any) => r.last_payment_date ? new Date(r.last_payment_date).toLocaleDateString() : <span className="text-gray-400">None</span>}</Cell></Column>
               <Column width={110}><HeaderCell>Status</HeaderCell><Cell>{(r: any) => <Tag color={r.computed_status === 'delinquent' ? 'red' : 'orange'}>{r.computed_status === 'delinquent' ? 'Delinquent' : 'Past Due'}</Tag>}</Cell></Column>
+              <Column width={120}><HeaderCell>Collector</HeaderCell><Cell dataKey="collector_name" /></Column>
             </Table>
             {pastDueDelData.length > 0 && (
               <div className="flex justify-end px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-sm font-semibold">
