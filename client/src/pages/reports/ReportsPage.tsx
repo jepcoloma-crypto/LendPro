@@ -91,6 +91,7 @@ export const ReportsPage = () => {
 const [pastDueDelData, setPastDueDelData] = useState<any[]>([]);
 const [pastDueDelLoading, setPastDueDelLoading] = useState(false);
 const [pastDueDelBranch, setPastDueDelBranch] = useState<string | null>(null);
+const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
   const [agingBranchFilter, setAgingBranchFilter] = useState<string | null>(null);
   const [agingLoading, setAgingLoading] = useState(false);
 
@@ -234,13 +235,14 @@ const [pastDueDelBranch, setPastDueDelBranch] = useState<string | null>(null);
       try {
         const params: any = {};
         if (pastDueDelBranch) params.branchId = pastDueDelBranch;
+        if (pastDueDelStatus) params.status = pastDueDelStatus;
         const { data } = await reportsApi.getDelinquency(params);
         setPastDueDelData(data.data || []);
       } catch { toaster.push(<Message type="error">Failed to load past due & delinquent report</Message>, { placement: 'topEnd' }); }
       finally { setPastDueDelLoading(false); }
     };
     fetchPastDueDel();
-  }, [activeTab, pastDueDelBranch]);
+  }, [activeTab, pastDueDelBranch, pastDueDelStatus]);
 
   useEffect(() => {
     const fetchProcessingCharges = async () => {
@@ -1004,6 +1006,19 @@ const [pastDueDelBranch, setPastDueDelBranch] = useState<string | null>(null);
                   data={branches.map((b: any) => ({ label: b.name, value: b.id }))}
                   value={pastDueDelBranch}
                   onChange={(v) => setPastDueDelBranch(v)}
+                  style={{ width: '100%' }}
+                  cleanable
+                />
+              </div>
+              <div className="w-44">
+                <SelectPicker
+                  placeholder="All statuses"
+                  data={[
+                    { label: 'Delinquent', value: 'delinquent' },
+                    { label: 'Past Due', value: 'past_due' },
+                  ]}
+                  value={pastDueDelStatus}
+                  onChange={(v) => setPastDueDelStatus(v)}
                   style={{ width: '100%' }}
                   cleanable
                 />

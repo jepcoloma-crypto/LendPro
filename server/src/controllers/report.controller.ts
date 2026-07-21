@@ -41,11 +41,12 @@ export class ReportController {
 
   async getDelinquencyReport(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { branchId } = req.query;
+      const { branchId, status } = req.query;
       const conditions: string[] = ['a.due_date < CURRENT_DATE', 'COALESCE(a.paid_amount,0) < a.total_due', 'l.status NOT IN (\'closed\', \'written-off\', \'cancelled\')'];
       const params: any[] = [];
       let idx = 1;
       if (branchId) { conditions.push(`bor.branch_id = $${idx++}`); params.push(branchId); }
+      if (status) { conditions.push(`CASE WHEN l.maturity_date < CURRENT_DATE THEN 'past_due' ELSE 'delinquent' END = $${idx++}::text`); params.push(status); }
       const where = conditions.join(' AND ');
       const result = await collectionRepo.query(
         `SELECT l.id as loan_id, l.loan_number, l.principal_amount, l.outstanding_balance, l.release_date,
