@@ -37,7 +37,6 @@ export const LoansPage = () => {
   const [restructurePreview, setRestructurePreview] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('active');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyFormKey, setHistoryFormKey] = useState(0);
   const [historyForm, setHistoryForm] = useState<any>({ paymentFrequency: 'monthly', interestType: 'flat-rate', status: 'paid', schedule: [] });
@@ -75,7 +74,6 @@ export const LoansPage = () => {
     try {
       const params: any = { page, limit };
       if (search) params.search = search;
-      if (statusFilter) params.status = statusFilter;
       const { data } = await loansApi.getAll(params);
       setLoans(data.data);
       setTotal(data.pagination?.total || 0);
@@ -83,7 +81,7 @@ export const LoansPage = () => {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchLoans(); }, [page, search, statusFilter]);
+  useEffect(() => { fetchLoans(); }, [page, search]);
 
   useEffect(() => {
     if (!restructureOpen) { setRestructurePreview(null); return; }
@@ -183,29 +181,10 @@ export const LoansPage = () => {
         )}
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative max-w-md flex-1">
-          <input type="text" placeholder="Search by borrower name or code..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="rs-input w-full pl-9" />
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-        </div>
-        <SelectPicker
-          placeholder="All statuses"
-          data={[
-            { label: 'Active', value: 'active' },
-            { label: 'Delinquent', value: 'delinquent' },
-            { label: 'Past Due', value: 'past_due' },
-            { label: 'Closed', value: 'closed' },
-            { label: 'Pending', value: 'pending' },
-            { label: 'Paid', value: 'paid' },
-            { label: 'Written Off', value: 'written-off' },
-            { label: 'Cancelled', value: 'cancelled' },
-          ]}
-          value={statusFilter}
-          onChange={(v) => { setStatusFilter(v || 'active'); setPage(1); }}
-          style={{ width: 160 }}
-          cleanable={false}
-        />
+      <div className="relative max-w-md">
+        <input type="text" placeholder="Search by borrower name or code..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          className="rs-input w-full pl-9" />
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
       </div>
 
       <DataTable data={loans} loading={loading} page={page} total={total} limit={limit} onPageChange={setPage}
