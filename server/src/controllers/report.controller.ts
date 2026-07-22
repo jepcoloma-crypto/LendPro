@@ -646,9 +646,10 @@ export class ReportController {
          LEFT JOIN branches b ON b.id = br.branch_id
          LEFT JOIN users du ON du.id = ld.disbursed_by
           WHERE l.release_date IS NOT NULL
-            AND ($1::date IS NULL OR l.release_date::date >= $1::date)
-            AND ($2::date IS NULL OR l.release_date::date <= $2::date)
-            AND ($3::uuid IS NULL OR b.id = $3::uuid)
+             AND l.status != 'closed'
+             AND ($1::date IS NULL OR l.release_date::date >= $1::date)
+             AND ($2::date IS NULL OR l.release_date::date <= $2::date)
+             AND ($3::uuid IS NULL OR b.id = $3::uuid)
          ORDER BY l.release_date DESC`,
         [startDate || null, endDate || null, branchId || null]
       );
