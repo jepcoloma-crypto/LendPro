@@ -30,13 +30,13 @@ export default function AdvancesPage({ embedded }: { embedded?: boolean }) {
 
   useEffect(() => { fetchAdvances(); }, [page]);
 
-  const openCreate = async () => {
+  useEffect(() => {
+    usersApi.getAll({ limit: 1000 }).then(({ data }) => setEmployees(data.data || [])).catch(() => {});
+  }, []);
+
+  const openCreate = () => {
     setFormValue({ advance_date: new Date() });
     setCreateOpen(true);
-    try {
-      const { data } = await usersApi.getAll({ limit: 1000 });
-      setEmployees(data.data || []);
-    } catch {}
   };
 
   const handleCreate = async () => {
