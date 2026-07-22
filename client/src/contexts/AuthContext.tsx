@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback, Re
 import { authApi } from '../services/api';
 import { User } from '../types';
 
-const IDLE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+const IDLE_TIMEOUT = 60 * 60 * 1000; // 60 minutes
 
 interface AuthContextType {
   user: User | null;
@@ -49,6 +49,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     window.addEventListener('keydown', handleActivity, { passive: true });
     window.addEventListener('scroll', handleActivity, { passive: true });
     window.addEventListener('click', handleActivity, { passive: true });
+    window.addEventListener('touchstart', handleActivity, { passive: true });
+    window.addEventListener('touchmove', handleActivity, { passive: true });
+    window.addEventListener('api:activity', handleActivity);
     lastActivity.current = Date.now();
     idleTimer.current = setInterval(() => {
       if (Date.now() - lastActivity.current > IDLE_TIMEOUT) {
@@ -60,6 +63,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       window.removeEventListener('keydown', handleActivity);
       window.removeEventListener('scroll', handleActivity);
       window.removeEventListener('click', handleActivity);
+      window.removeEventListener('touchstart', handleActivity);
+      window.removeEventListener('touchmove', handleActivity);
+      window.removeEventListener('api:activity', handleActivity);
       if (idleTimer.current) { clearInterval(idleTimer.current); }
     };
   }, [user, handleActivity, logout]);

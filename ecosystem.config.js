@@ -23,7 +23,7 @@ module.exports = {
       DB_SSL: 'true',
       JWT_SECRET: '16914dd53a525ae20747c4307058045730fd9bd3e5ea95ddd58ecebb3d1678e612cfe4a4bd5ba0b500db6baa7568582282365b5b12838993aace34978322a73a',
       JWT_REFRESH_SECRET: '97c1a885f15f3e6d895be7c3dbc9f520d03c7fcb3c431716bd04740c606e7162fcada25077521333b884c15fd9c51b9e38054448cdce0a94b208a48244e02064',
-      JWT_EXPIRES_IN: '1h',
+      JWT_EXPIRES_IN: '4h',
       JWT_REFRESH_EXPIRES_IN: '7d',
       ALLOWED_ORIGINS: 'http://localhost:5173,https://lendpro-seven.vercel.app',
       FRONTEND_URL: 'http://localhost:5173',

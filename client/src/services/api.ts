@@ -13,36 +13,106 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+// --- Token refresh queue ---
+let isRefreshing = false;
+let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: any) => void }> = [];
+let refreshRetries = 0;
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(p => {
+    if (error) {
+      p.reject(error);
+    } else {
+      p.resolve(token!);
+    }
+  });
+  failedQueue = [];
+};
+
+const refreshAccessToken = async (): Promise<string> => {
+  const refreshToken = localStorage.getItem('refreshToken');
+  if (!refreshToken) throw new Error('No refresh token');
+  const { data } = await api.post('/auth/refresh', { refreshToken });
+  localStorage.setItem('accessToken', data.data.accessToken);
+  localStorage.setItem('refreshToken', data.data.refreshToken);
+  refreshRetries = 0;
+  return data.data.accessToken;
+};
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+// Fire custom event on every API response to reset idle timer
+const fireActivity = () => window.dispatchEvent(new CustomEvent('api:activity'));
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    fireActivity();
+    return response;
+  },
   async (error: AxiosError) => {
     const url = error.config?.url || '';
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    // Don't intercept auth endpoints (login, register, refresh)
+    // Auth endpoints (login, register, refresh) — skip interceptor
     if (url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh')) {
       return Promise.reject(error);
     }
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
-        const { data } = await api.post('/auth/refresh', { refreshToken });
-        localStorage.setItem('accessToken', data.data.accessToken);
-        localStorage.setItem('refreshToken', data.data.refreshToken);
-        originalRequest.headers.Authorization = `Bearer ${data.data.accessToken}`;
-        return api(originalRequest);
-      } catch {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-        return Promise.reject(error);
-      }
+    // Non-401 errors — just reject
+    if (error.response?.status !== 401) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    // Already retried — give up
+    if (originalRequest._retry) {
+      return Promise.reject(error);
+    }
+    originalRequest._retry = true;
+
+    // If a refresh is already in-flight, queue behind it
+    if (isRefreshing) {
+      return new Promise<string>((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      }).then(newToken => {
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return api(originalRequest);
+      }).catch(err => Promise.reject(err));
+    }
+
+    isRefreshing = true;
+
+    try {
+      const newToken = await refreshAccessToken();
+      processQueue(null, newToken);
+      originalRequest.headers.Authorization = `Bearer ${newToken}`;
+      return api(originalRequest);
+    } catch (refreshError: any) {
+      const status = refreshError?.response?.status;
+
+      // Transient errors (429, 5xx, network) — retry up to 3 times with backoff
+      if (!status || status === 429 || status >= 500) {
+        refreshRetries++;
+        if (refreshRetries <= 3) {
+          const delay = Math.min(1000 * Math.pow(2, refreshRetries), 8000);
+          await sleep(delay);
+          isRefreshing = false;
+          // Recursively retry the whole flow for the original request
+          originalRequest._retry = false;
+          return api(originalRequest);
+        }
+      }
+
+      // Genuine auth failure — clear session and redirect
+      refreshRetries = 0;
+      processQueue(refreshError);
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
 

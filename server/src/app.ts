@@ -86,7 +86,17 @@ const writeLimiter = rateLimit({
 });
 app.use('/api', writeLimiter);
 
-// 4. Auth-specific limiter — tighter than general API limit
+// 4. Refresh token limiter — higher limit since it's a critical auth path
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isProd ? 500 : 5000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: tooMany,
+});
+app.use('/api/auth/refresh', refreshLimiter);
+
+// 5. Auth-specific limiter — tighter than general API limit
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: isProd ? 100 : 5000,
