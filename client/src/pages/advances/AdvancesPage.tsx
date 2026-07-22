@@ -99,7 +99,7 @@ export default function AdvancesPage({ embedded }: { embedded?: boolean }) {
 
       <Panel bordered>
         <Table data={advances} loading={loading} virtualized height={500} rowHeight={45}>
-          <Column width={80}><HeaderCell>#</HeaderCell><Cell>{(r: any, i: number) => (page - 1) * limit + i + 1}</Cell></Column>
+          <Column width={80}><HeaderCell>#</HeaderCell><Cell>{(r: any, i?: number) => (page - 1) * limit + (i ?? 0) + 1}</Cell></Column>
           <Column width={220}><HeaderCell>Employee</HeaderCell><Cell dataKey="employee_name" /></Column>
           <Column width={120}><HeaderCell>Date</HeaderCell><Cell>{(r: any) => new Date(r.advance_date).toLocaleDateString()}</Cell></Column>
           <Column width={130} align="right"><HeaderCell>Amount</HeaderCell><Cell>{(r: any) => formatCurrency(r.amount)}</Cell></Column>
