@@ -403,11 +403,11 @@ export class LoanService {
 
     // Close old active loans on renewal — the borrower's previous balance
     // was deducted from this loan's proceeds, so the old obligation is settled.
-    // Distribute the outstanding balance across the old loan's unpaid schedules
-    // and create a settlement payment so the amortization reflects the payoff.
+    // Distribute any advance_balance to unpaid schedules first,
+    // then create a settlement payment for whatever remains.
     if (app.application_type === 'Renewal' && prevBalance > 0) {
       const oldLoans = await loanRepo.query(
-        `SELECT id, total_amount FROM loans WHERE borrower_id = $1 AND status = 'active' AND id != $2`,
+        `SELECT id, total_amount, advance_balance FROM loans WHERE borrower_id = $1 AND status = 'active' AND id != $2`,
         [app.borrower_id, loan.id]
       );
       for (const oldLoan of oldLoans) {
@@ -418,8 +418,54 @@ export class LoanService {
           [oldLoan.id]
         );
         if (schedules.length === 0) continue;
+
+        // Auto-distribute advance_balance to unpaid schedules before settlement
+        const advBalance = parseFloat(oldLoan.advance_balance || '0');
+        if (advBalance > 0) {
+          let distAdv = advBalance;
+          for (const s of schedules) {
+            if (distAdv <= 0) break;
+            const due = Number(s.total_due);
+            const currPaid = Number(s.paid_amount);
+            const need = due - currPaid;
+            const alloc = Math.min(distAdv, need);
+            if (alloc > 0) {
+              const newPaid = currPaid + alloc;
+              const status = newPaid >= due - 0.01 ? 'paid' : 'partial';
+              await amortizationScheduleRepo.query(
+                `UPDATE amortization_schedules SET paid_amount = $1, status = $2 WHERE id = $3`,
+                [newPaid, status, s.id]
+              );
+              distAdv -= alloc;
+            }
+          }
+          await loanRepo.query(
+            `UPDATE loans SET advance_balance = 0, updated_at = NOW() WHERE id = $1`,
+            [oldLoan.id]
+          );
+        }
+
+        // Re-fetch schedules after advance distribution (some may now be fully paid)
+        const remainingSchedules = await amortizationScheduleRepo.query(
+          `SELECT id, installment_no, total_due, paid_amount
+           FROM amortization_schedules WHERE loan_id = $1
+           AND COALESCE(paid_amount,0) < total_due ORDER BY installment_no`,
+          [oldLoan.id]
+        );
+        if (remainingSchedules.length === 0) {
+          await loanRepo.query(
+            `UPDATE loans SET status = 'closed', outstanding_balance = 0,
+             next_payment_date = NULL, updated_at = NOW() WHERE id = $1`,
+            [oldLoan.id]
+          );
+          await loanRepo.query(
+            `UPDATE collections SET status = 'closed' WHERE loan_id = $1`,
+            [oldLoan.id]
+          );
+          continue;
+        }
         let remaining = 0;
-        for (const s of schedules) remaining += Number(s.total_due) - Number(s.paid_amount);
+        for (const s of remainingSchedules) remaining += Number(s.total_due) - Number(s.paid_amount);
         if (remaining <= 0) continue;
         const payment = await paymentRepo.create({
           loan_id: oldLoan.id,
@@ -438,7 +484,7 @@ export class LoanService {
         });
         const allocs: any[] = [];
         let distRemaining = remaining;
-        for (const s of schedules) {
+        for (const s of remainingSchedules) {
           const due = Number(s.total_due);
           const currPaid = Number(s.paid_amount);
           const need = due - currPaid;
