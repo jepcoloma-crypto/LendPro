@@ -282,6 +282,14 @@ export const expensesApi = {
   getCategories: () => api.get('/expenses/categories'),
 };
 
+// Employee Advances
+export const advancesApi = {
+  getAll: (params?: any) => api.get('/advances', { params }),
+  create: (data: any) => api.post('/advances', data),
+  repay: (id: string, amount: number) => api.put(`/advances/${id}/repay`, { amount }),
+  delete: (id: string) => api.delete(`/advances/${id}`),
+};
+
 // Other Income
 export const incomeApi = {
   getAll: (params?: any) => api.get('/income', { params }),

@@ -23,6 +23,7 @@ import { cancellationController } from '../controllers/cancellation.controller';
 import { cashierController } from '../controllers/cashier.controller';
 import { pickupController } from '../controllers/pickup.controller';
 import { adminController } from '../controllers/admin.controller';
+import { advanceController } from '../controllers/advance.controller';
 import { auditLogRepo } from '../repositories';
 
 
@@ -248,6 +249,10 @@ router.post('/expenses', authenticate, cashflowController.createExpense.bind(cas
 router.put('/expenses/:id', authenticate, cashflowController.updateExpense.bind(cashflowController));
 router.delete('/expenses/:id', authenticate, cashflowController.deleteExpense.bind(cashflowController));
 router.get('/expenses/categories', authenticate, cashflowController.getExpenseCategories.bind(cashflowController));
+router.get('/advances', authenticate, advanceController.getAll.bind(advanceController));
+router.post('/advances', authenticate, advanceController.create.bind(advanceController));
+router.put('/advances/:id/repay', authenticate, advanceController.repay.bind(advanceController));
+router.delete('/advances/:id', authenticate, advanceController.delete.bind(advanceController));
 router.get('/income', authenticate, cashflowController.getIncome.bind(cashflowController));
 router.post('/income', authenticate, cashflowController.createIncome.bind(cashflowController));
 router.put('/income/:id', authenticate, cashflowController.updateIncome.bind(cashflowController));

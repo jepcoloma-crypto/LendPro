@@ -5,6 +5,7 @@ import { formatCurrency } from '../../utils/format';
 import { DollarSign, Plus, Check, X, Eye, Printer, Search, RotateCcw, TrendingUp, TrendingDown, Wallet, Clock, ShieldCheck, ArrowDownCircle, ArrowUpCircle, BarChart3, Download, Handshake } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { ExpensesPage } from '../expenses/ExpensesPage';
+import AdvancesPage from '../advances/AdvancesPage';
 import { printStyles, companyHeaderHtml, printWindow } from '../../utils/print';
 
 const { Column, HeaderCell, Cell } = Table;
@@ -33,6 +34,7 @@ const TABS = [
   { key: 'approvals', label: 'Variance Approval', icon: ShieldCheck },
   { key: 'close', label: 'Shift Closing', icon: Clock },
   { key: 'expenses', label: 'Expenses & Income', icon: ArrowDownCircle },
+  { key: 'advances', label: 'Advances', icon: DollarSign },
   { key: 'pickup', label: 'Cash Pick-up', icon: Handshake },
   { key: 'reports', label: 'Reports', icon: BarChart3 },
   { key: 'audit', label: 'Audit Trail', icon: Eye },
@@ -885,6 +887,9 @@ ${transactions.map((t: any, i: number) => `<tr>
 
       {/* ===== TAB: Expenses & Income ===== */}
       {activeTab === 'expenses' && <ExpensesPage embedded />}
+
+      {/* ===== TAB: Advances ===== */}
+      {activeTab === 'advances' && <AdvancesPage embedded />}
 
       {/* ===== TAB: Cash Pick-up ===== */}
       {activeTab === 'pickup' && (

@@ -623,9 +623,9 @@ export class LoanService {
         SELECT
           (SELECT COUNT(*) FROM loans WHERE status = 'active' AND collector_id = $1) as active_loans,
           (SELECT COUNT(*) FROM loans) as total_loans,
-          (SELECT COALESCE(SUM(outstanding_balance), 0) FROM loans WHERE status = 'active' AND collector_id = $1) as outstanding_balance,
+          (SELECT COALESCE(SUM(outstanding_balance), 0) FROM loans WHERE status IN ('active','delinquent','past_due') AND collector_id = $1) as outstanding_balance,
           (SELECT COALESCE(SUM(outstanding_balance), 0) FROM loans WHERE status IN ('active','delinquent') AND collector_id = $1) as total_portfolio,
-          (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE status = 'active' AND collector_id = $1) as total_principal,
+          (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE status IN ('active','delinquent','past_due') AND collector_id = $1) as total_principal,
           (SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed' AND l.collector_id = $1) as total_collections,
           (SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed' AND pay.payment_date >= DATE_TRUNC('month', NOW()) AND l.collector_id = $1) as monthly_collections,
           (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE release_date >= DATE_TRUNC('month', NOW()) AND collector_id = $1) as monthly_releases,
@@ -641,9 +641,9 @@ export class LoanService {
         SELECT
           (SELECT COUNT(*) FROM loans WHERE status = 'active') as active_loans,
           (SELECT COUNT(*) FROM loans) as total_loans,
-          (SELECT COALESCE(SUM(outstanding_balance), 0) FROM loans WHERE status = 'active') as outstanding_balance,
+          (SELECT COALESCE(SUM(outstanding_balance), 0) FROM loans WHERE status IN ('active','delinquent','past_due')) as outstanding_balance,
           (SELECT COALESCE(SUM(outstanding_balance), 0) FROM loans WHERE status IN ('active','delinquent')) as total_portfolio,
-          (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE status = 'active') as total_principal,
+          (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE status IN ('active','delinquent','past_due')) as total_principal,
           (SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed') as total_collections,
           (SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE pay.status = 'completed' AND pay.payment_date >= DATE_TRUNC('month', NOW())) as monthly_collections,
           (SELECT COALESCE(SUM(principal_amount), 0) FROM loans WHERE release_date >= DATE_TRUNC('month', NOW())) as monthly_releases,

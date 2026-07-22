@@ -9,7 +9,8 @@ const { Column, HeaderCell, Cell } = Table;
 const EXPENSE_CATEGORIES = [
   'Salaries & Wages', 'Rent', 'Transportation', 'Utilities', 'Office Supplies',
   'Marketing & Advertising', 'Professional Fees', 'Repairs & Maintenance',
-  'Gasoline Allowance', 'Cost of Funds', 'Loan Loss Provision', 'Other',
+  'Gasoline Allowance', 'Government Contributions', 'Employee Cash Advance',
+  'Cost of Funds', 'Loan Loss Provision', 'Other',
 ].map(c => ({ label: c, value: c }));
 
 const TAB_OPTIONS = [
