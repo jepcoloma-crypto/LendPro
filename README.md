@@ -1,6 +1,6 @@
 # LendPro — Enterprise Lending Management System
 
-A full-featured loan origination, servicing, and cash management platform built with **Node.js/Express + PostgreSQL** (backend) and **React 19 + TypeScript** (frontend).
+A full-featured loan origination, servicing, cash management, and field collection platform built with **Node.js/Express + PostgreSQL** (backend) and **React 19 + TypeScript + rsuite** (frontend).
 
 ---
 
@@ -20,7 +20,7 @@ A full-featured loan origination, servicing, and cash management platform built 
 │   Idempotency Key                │
 ├──────────────────────────────────┤
 │   PostgreSQL (Supabase)          │
-│   40+ tables, migrations         │
+│   42 tables, migrations          │
 └──────────────────────────────────┘
 ```
 
@@ -109,7 +109,9 @@ All seeded accounts use password `admin123`:
 - Rate-limited login (20 req/15min)
 - Password policies (min 8 chars, upper+lower+digit+special)
 - Login history with failure tracking
-- 15-minute idle session timeout
+- 60-minute idle session timeout (reset on API activity + touch events)
+- JWT expiry: 4h (access), refresh token rotation with retry queue (3 attempts, exponential backoff)
+- Dedicated `/auth/refresh` rate limiter (500/15min)
 
 ### Loan Products
 - Configurable interest types: Flat Rate, Diminishing Balance, Add-On, Daily, Monthly, Seasonal, Custom
@@ -130,28 +132,34 @@ Draft → Submit → Review → Investigate → Assess → Approve → Release
 ### Loan Servicing
 - Amortization schedules with daily installment tracking
 - Payment processing (Quick Payment or Per-Installment allocation)
-- **Advance balance** — excess payments credited as prepayment, reduces outstanding balance, never auto-consumed
-- Overdue and delinquent (5+ days) status computed on-the-fly
-- Loan restructuring and write-off
+- **Advance balance** — excess payments credited as prepayment, reduces outstanding balance, never auto-consumed, manually distributable to schedules
+- Overdue status computed on-the-fly; **Delinquent** (within term + missed schedules) and **Past Due** (matured + missed schedules) classification
+- Maturity-based classification: `maturity_date >= current_date` with missed schedules = delinquent; `maturity_date < current_date` with missed schedules = past due
+- Loan restructuring, write-off, and release date/amount correction (admin tools)
 - Automated penalty calculation (pre/post maturity)
+- Daily cron (2:30 AM) auto-updates loan statuses
 
 ### Payment Processing
-- **Quick Payment** — pays overdue schedules first, remainder cascades forward
-- **Per-Installment** — user picks which schedules to pay
+- **Quick Payment** — pays overdue schedules first, remainder cascades forward; searches across `active`/`delinquent`/`past_due` loans
+- **Per-Installment** — user picks which schedules to pay; includes delinquent/past-due loans
 - **Advance Distribution** — apply advance balance to specific schedules
-- Payment reversal via cancellation workflow (approval required)
+- Payment reversal via cancellation workflow (approval required); direct cancellation restricted to super-admin/admin
 - Idempotency key to prevent duplicate payments
 - Overpayment validation (rejects if amount exceeds outstanding balance)
+- **Collector payments** — attributed to loan's assigned active collector; auto-reassigns loan if current collector inactive
+- **Cash Pickup** — collector remittance with denomination breakdown; creates cash transactions at pickup time (not at payment)
+- **Payment Corrector** (admin tool) — reassign collector, adjust amounts, cancel
 
 ### Cash Management
 
 | Feature | Details |
 |---|---|
-| **Shift Management** | Open/close with opening float, date validation |
-| **Cash Transactions** | Auto-recorded for every payment, expense, income |
+| **Shift Management** | Open/close with opening float, date validation (Manila TZ) |
+| **Cash Transactions** | Auto-recorded for every payment, expense, income; all `::date` casts use Manila TZ |
 | **Cash Counts** | Denomination-level breakdown recording |
 | **Reconciliation** | Variance tracking with threshold-based auto-approval |
-| **Collector Pickups** | Cash remittance tracking with variance handling |
+| **Collector Pickups** | Cash remittance tracking with variance handling; inactive collectors hidden |
+| **Employee Advances** | Employee cash advance tracking (give/repay) with balance management |
 | **Approval Workflow** | Variance approval/rejection/recount requests |
 
 ### Collections
@@ -161,12 +169,12 @@ Draft → Submit → Review → Investigate → Assess → Approve → Release
 - Collector assignment and performance tracking
 
 ### Reports
-- **Loan Performance:** Aging, Delinquency, Amortization, Portfolio Summary, Past Due, Loans Granted
-- **Financial:** Interest Income, Processing Charges, Cash Flow, Branch P&L
-- **Collector:** Performance, Remittance, Visits, Payments
-- **Cash:** Collection Summary, Variance Summary, Method Summary, Daily Position
+- **Loan Performance:** Aging, Delinquency, Amortization, Portfolio Summary, Past Due & Delinquent, Loans Granted, Advance Summary, Penalty Detail
+- **Financial:** Interest Income, Processing Charges, Cash Flow, Branch P&L (restricted to admin/super-admin)
+- **Collector:** Performance, Remittance Audit (with grand total footer), Visits, Payments
+- **Cash:** Collection Summary (grouped tree view by Branch/Month), Variance Summary, Method Summary, Daily Position
 - **Borrower:** Performance, Master List
-- **Operational:** Daily Collections, Disbursements, Expected Collections
+- **Operational:** Daily Collections, Disbursements (excludes closed loans), Expected Collections
 
 ### Notifications
 - Email via Nodemailer
@@ -175,16 +183,17 @@ Draft → Submit → Review → Investigate → Assess → Approve → Release
 - Notification queue with delivery tracking
 
 ### Audit & Security
-- **Audit Trail** — every CRUD operation logged (old/new values, IP, user agent)
+- **Audit Trail** — every CRUD operation logged (old/new values, IP, user agent); admin tools (corrections) logged separately
 - **Idempotency** — payment deduplication via Idempotency-Key header (24h TTL)
-- **Rate Limiting** — auth endpoints (100/15min), sensitive operations (20/15min)
-- **Shift Validation** — payment date must match shift date
+- **Rate Limiting** — 6 tiers: global (1000/15min), API (300/15min keyed by userId), write (100/15min), auth (100/15min), refresh (500/15min), strict (20/15min), Twilio webhook (30/15min)
+- **Shift Validation** — payment/release date must match shift date (Manila TZ)
 - **Cancellation Workflow** — request → approve/reject (admin/super-admin only)
 - **Direct Cancellation** — restricted to super-admin/admin only
+- **Loan Corrector** (super-admin only) — adjust release date, loan amount with schedule regeneration + data integrity verification
 
 ---
 
-## Database Schema (40+ tables)
+## Database Schema (42 tables)
 
 ### Core Domain
 | Table | Purpose |
@@ -206,7 +215,7 @@ Draft → Submit → Review → Investigate → Assess → Approve → Release
 | `cash_transactions` | Per-transaction cash movement |
 | `cash_counts`, `cash_reconciliations` | Denomination counts and variance reconciliation |
 | `collector_pickups`, `pickup_denominations` | Collector remittance pickup |
-| `operating_expenses`, `other_income` | Branch-level P&L tracking |
+| `operating_expenses`, `other_income`, `employee_advances` | Branch-level P&L tracking and employee cash advances |
 
 ### System
 | Table | Purpose |
@@ -236,7 +245,9 @@ Draft → Submit → Review → Investigate → Assess → Approve → Release
 | Cashier | `/api/cashier-sessions` | open, close, details, dashboard |
 | Cash | `/api/cash-transactions`, `/api/cash-counts`, `/api/cash-reconciliations` | Full cash management |
 | Pickups | `/api/pickups` | Collector cash pickup with remittance tracking |
-| Reports | `/api/reports` | 20+ reporting endpoints |
+| Reports | `/api/reports` | 20+ reporting endpoints (Loans Granted, Disbursements, Collection Summary, etc.) |
+| Admin | `/api/admin` | Payment corrector, loan corrector (release date, loan amount), deactivate user |
+| Advances | `/api/advances` | CRUD, repay |
 | Utilities | `/api/utilities` | backup, restore, recalculate-balances, clear-data |
 
 ---
@@ -302,8 +313,14 @@ psql -h <staging-host> -U postgres -f dump.sql
 ## Key Design Decisions
 
 - **Advance Balance** — excess payments go to advance balance (not partial on next schedule), reduces outstanding balance, shown as separate credit in UI, manually distributable to schedules
-- **Overdue vs Delinquent** — overdue = 1+ day past due, delinquent = 5+ days past due (both computed on-the-fly, no explicit DB status)
-- **Shift Date Validation** — payment date must match open shift date (not today's date), allowing recording of prior-day payments on an open shift
+- **Delinquent vs Past Due** — delinquent = `maturity_date >= CURRENT_DATE` with missed schedules (within term); past due = `maturity_date < CURRENT_DATE` with missed schedules (matured). Both computed on-the-fly, no explicit DB columns
+- **Shift Date Validation** — payment/release date must match open shift date (not today's date), allowing recording of prior-day payments on an open shift; Manila TZ throughout
+- **Collector Payments** — cash transaction created at pickup time (not payment time), avoiding expected_cash inflation; payments always attributed to loan's assigned collector
 - **Idempotency** — Idempotency-Key header with 24h TTL prevents duplicate payment processing from network retries
-- **Audit Trail** — middleware-based; automatically captures old/new values on every mutation endpoint
-- **Penalty Calculation** — proportional distribution across overdue schedules; matured loans use higher penalty rate
+- **Audit Trail** — middleware-based; automatically captures old/new values on every mutation endpoint; admin tools have dedicated audit logging
+- **Penalty Calculation** — proportional distribution across overdue schedules; matured loans use higher penalty rate; `penalty_waived` column tracks waivers for P&L accuracy
+- **Rate Limiting** — 6 tiers keyed by userId for authenticated requests (branch users sharing public IPs get individual buckets)
+- **Employee Advances** — separate table (`employee_advances`) with balance tracking; cash out = decrease balance, repay = increase balance; treated as receivable, not expense
+- **Renewal Handling** — skips delinquent check when `previous_balance > 0`; `releaseLoan` auto-settles old loan, distributes previous balance across schedules, closes old loan + collection
+- **Data Integrity** — check formula: `outstanding_balance + advance_balance = sum_remaining` (sum of unpaid schedule balances)
+- **Cron Jobs** — daily 2:30 AM auto-updates loan statuses (active/delinquent/past_due/closed) based on maturity_date and overdue schedule check
