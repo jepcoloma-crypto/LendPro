@@ -645,16 +645,15 @@ export class ReportController {
          LEFT JOIN loan_products lp ON lp.id = l.product_id
          LEFT JOIN branches b ON b.id = br.branch_id
          LEFT JOIN users du ON du.id = ld.disbursed_by
-           WHERE l.release_date IS NOT NULL
-              AND l.status != 'closed'
-              AND ($1::date IS NULL OR (l.release_date AT TIME ZONE 'Asia/Manila')::date >= $1::date)
-              AND ($2::date IS NULL OR (l.release_date AT TIME ZONE 'Asia/Manila')::date <= $2::date)
-              AND ($3::uuid IS NULL OR b.id = $3::uuid)
-          ORDER BY l.release_date DESC`,
-        [startDate || null, endDate || null, branchId || null]
-      );
+            WHERE l.release_date IS NOT NULL
+               AND ($1::date IS NULL OR (l.release_date AT TIME ZONE 'Asia/Manila')::date >= $1::date)
+               AND ($2::date IS NULL OR (l.release_date AT TIME ZONE 'Asia/Manila')::date <= $2::date)
+               AND ($3::uuid IS NULL OR b.id = $3::uuid)
+           ORDER BY l.release_date DESC`,
+         [startDate || null, endDate || null, branchId || null]
+       );
 
-      const totalPrincipal = rows.reduce((s: number, r: any) => s + Number(r.principal_amount || 0), 0);
+       const totalPrincipal = rows.reduce((s: number, r: any) => s + Number(r.principal_amount || 0), 0);
       const totalDisbursed = rows.reduce((s: number, r: any) => s + Number(r.disbursed_amount || 0), 0);
       const netTotal = rows.reduce((s: number, r: any) => s + Number(r.net_proceeds || 0), 0);
 
