@@ -1748,12 +1748,12 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
                   ${companyHeaderHtml(companyInfo)}
                   <div class="report-title">Loans Granted</div>
                   <div class="report-subtitle">Generated: ${new Date().toLocaleString()} &middot; ${loansGrantedData.length} records</div>
-                  <table><thead><tr><th>Loan #</th><th>Branch</th><th>Date Granted</th><th>Borrower</th><th>Type</th><th>Address</th><th class="text-right">Loan Amount</th><th class="text-right">Interest Income</th><th class="text-right">Prev Bal</th><th class="text-right">Total Charges</th><th class="text-right">Net Proceeds</th><th>Term</th><th>Freq</th><th>Status</th></tr></thead><tbody>`;
+                  <table><thead><tr><th>Loan #</th><th>Branch</th><th>Date Granted</th><th>Borrower</th><th class="text-right">Loan Amount</th><th class="text-right">Interest Income</th><th class="text-right">Total Charges</th><th class="text-right">Net Proceeds</th><th class="text-center">Term</th><th class="text-center">Type</th><th class="text-center">Status</th></tr></thead><tbody>`;
                 for (const r of loansGrantedData) {
-                  html += `<tr><td>${r.loan_number}</td><td>${r.branch_name}</td><td>${r.release_date ? new Date(r.release_date).toLocaleDateString() : '-'}</td><td>${r.borrower_name}</td><td>${r.application_type || 'New'}</td><td>${r.present_address || ''}, ${r.present_city || ''}</td><td class="text-right">${formatCurrency(r.principal_amount)}</td><td class="text-right">${formatCurrency(r.paid_interest || 0)}</td><td class="text-right">${Number(r.previous_balance) > 0 ? formatCurrency(r.previous_balance) : '-'}</td><td class="text-right">${formatCurrency(r.total_charges)}</td><td class="text-right">${formatCurrency(r.net_proceeds)}</td><td>${r.term_months}mo</td><td>${r.payment_frequency || ''}</td><td>${r.status}</td></tr>`;
+                  html += `<tr><td>${r.loan_number}</td><td>${r.branch_name}</td><td>${r.release_date ? new Date(r.release_date).toLocaleDateString() : '-'}</td><td>${r.borrower_name}</td><td class="text-right">${formatCurrency(r.principal_amount)}</td><td class="text-right">${formatCurrency(r.paid_interest || 0)}</td><td class="text-right">${formatCurrency(r.total_charges)}</td><td class="text-right">${formatCurrency(r.net_proceeds)}</td><td class="text-center">${r.term_months}mo</td><td class="text-center">${r.application_type || 'New'}</td><td class="text-center">${r.status}</td></tr>`;
                 }
-                html += `</tbody><tfoot><tr class="grand-total"><td colspan="6">Total (${loansGrantedData.length} loans)</td>
-                  <td class="text-right">${formatCurrency(grandPrincipal)}</td><td class="text-right">${formatCurrency(grandInterest)}</td><td class="text-right"></td><td class="text-right">${formatCurrency(grandCharges)}</td><td class="text-right">${formatCurrency(grandNet)}</td><td colspan="3"></td></tr></tfoot></table>
+                html += `</tbody><tfoot><tr class="grand-total"><td colspan="4">Total (${loansGrantedData.length} loans)</td>
+                  <td class="text-right">${formatCurrency(grandPrincipal)}</td><td class="text-right">${formatCurrency(grandInterest)}</td><td class="text-right">${formatCurrency(grandCharges)}</td><td class="text-right">${formatCurrency(grandNet)}</td><td colspan="3"></td></tr></tfoot></table>
                   <div class="signatures">
                     <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
                     <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
@@ -1769,16 +1769,12 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
                 { key: 'branch_name', label: 'Branch' },
                 { key: 'release_date', label: 'Date Granted', format: (v) => v ? new Date(v).toLocaleDateString() : '' },
                 { key: 'borrower_name', label: 'Borrower' },
-                { key: 'application_type', label: 'Type' },
-                { key: 'present_address', label: 'Address' },
                 { key: 'principal_amount', label: 'Loan Amount', format: (v) => formatCurrency(v) },
-                { key: 'previous_balance', label: 'Prev Balance', format: (v) => v > 0 ? formatCurrency(v) : '-' },
-                { key: 'interest_amount', label: 'Interest', format: (v) => formatCurrency(v) },
                 { key: 'paid_interest', label: 'Interest Income', format: (v) => formatCurrency(v) },
                 { key: 'total_charges', label: 'Total Charges', format: (v) => formatCurrency(v) },
                 { key: 'net_proceeds', label: 'Net Proceeds', format: (v) => formatCurrency(v) },
                 { key: 'term_months', label: 'Term (mos)' },
-                { key: 'payment_frequency', label: 'Frequency' },
+                { key: 'application_type', label: 'Type' },
                 { key: 'status', label: 'Status' },
               ]);
             }}>Export CSV</Button>
@@ -1812,56 +1808,49 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
               <div className="text-center py-8"><Loader /></div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm whitespace-nowrap">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Loan #</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Date Granted</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Borrower</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Type</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Address</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Loan Amount</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Interest Income</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Prev Bal</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Total Charges</th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Net Proceeds</th>
-                      <th className="text-center py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Term</th>
-                      <th className="text-center py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Freq</th>
-                      <th className="text-center py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Status</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Loan #</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Branch</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Date Granted</th>
+                      <th className="text-left py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Borrower</th>
+                      <th className="text-right py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Loan Amount</th>
+                      <th className="text-right py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Interest Income</th>
+                      <th className="text-right py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Total Charges</th>
+                      <th className="text-right py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Net Proceeds</th>
+                      <th className="text-center py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Term</th>
+                      <th className="text-center py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Type</th>
+                      <th className="text-center py-3 px-3 font-semibold text-gray-600 dark:text-gray-400">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loansGrantedData.length === 0 ? (
-                      <tr><td colSpan={14} className="text-center py-8 text-gray-400">No loans granted for this period</td></tr>
+                      <tr><td colSpan={11} className="text-center py-8 text-gray-400">No loans granted for this period</td></tr>
                     ) : loansGrantedData.map((r: any, i: number) => (
                       <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/20">
-                        <td className="py-2 px-4">{r.loan_number}</td>
-                        <td className="py-2 px-4 text-gray-600 dark:text-gray-400">{r.branch_name}</td>
-                        <td className="py-2 px-4">{r.release_date ? new Date(r.release_date).toLocaleDateString() : '-'}</td>
-                        <td className="py-2 px-4">{r.borrower_name}</td>
-                        <td className="py-2 px-4"><Tag color={r.application_type === 'New' ? 'green' : 'blue'}>{r.application_type || 'New'}</Tag></td>
-                        <td className="py-2 px-4 text-sm text-gray-500">{`${r.present_address || ''}, ${r.present_city || ''}`}</td>
-                        <td className="py-2 px-4 text-right">{formatCurrency(r.principal_amount)}</td>
-                        <td className="py-2 px-4 text-right">{formatCurrency(r.paid_interest || 0)}</td>
-                        <td className="py-2 px-4 text-right">{Number(r.previous_balance) > 0 ? <span className="text-red-500">{formatCurrency(r.previous_balance)}</span> : '-'}</td>
-                        <td className="py-2 px-4 text-right">{formatCurrency(r.total_charges)}</td>
-                        <td className="py-2 px-4 text-right font-semibold text-green-600">{formatCurrency(r.net_proceeds)}</td>
-                        <td className="py-2 px-4 text-center text-gray-600">{r.term_months}mo</td>
-                        <td className="py-2 px-4 text-center text-gray-600">{r.payment_frequency}</td>
-                        <td className="py-2 px-4 text-center"><Tag color={r.status === 'active' ? 'green' : r.status === 'paid' ? 'blue' : 'orange'}>{r.status}</Tag></td>
+                        <td className="py-2.5 px-3">{r.loan_number}</td>
+                        <td className="py-2.5 px-3 text-gray-600 dark:text-gray-400">{r.branch_name}</td>
+                        <td className="py-2.5 px-3">{r.release_date ? new Date(r.release_date).toLocaleDateString() : '-'}</td>
+                        <td className="py-2.5 px-3">{r.borrower_name}</td>
+                        <td className="py-2.5 px-3 text-right">{formatCurrency(r.principal_amount)}</td>
+                        <td className="py-2.5 px-3 text-right">{formatCurrency(r.paid_interest || 0)}</td>
+                        <td className="py-2.5 px-3 text-right">{formatCurrency(r.total_charges)}</td>
+                        <td className="py-2.5 px-3 text-right font-semibold text-green-600">{formatCurrency(r.net_proceeds)}</td>
+                        <td className="py-2.5 px-3 text-center text-gray-600 dark:text-gray-400">{r.term_months}mo</td>
+                        <td className="py-2.5 px-3 text-center"><Tag color={r.application_type === 'New' ? 'green' : 'blue'}>{r.application_type || 'New'}</Tag></td>
+                        <td className="py-2.5 px-3 text-center"><Tag color={r.status === 'active' ? 'green' : r.status === 'paid' ? 'blue' : 'orange'}>{r.status}</Tag></td>
                       </tr>
                     ))}
                   </tbody>
                   {loansGrantedData.length > 0 && (
                     <tfoot>
-                      <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
-                        <td colSpan={6} className="py-3 px-4 font-bold text-gray-900 dark:text-white">Total ({loansGrantedData.length} loans)</td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(loansGrantedData.reduce((s: number, r: any) => s + Number(r.principal_amount || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(loansGrantedData.reduce((s: number, r: any) => s + Number(r.paid_interest || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right"></td>
-                        <td className="py-3 px-4 text-right">{formatCurrency(loansGrantedData.reduce((s: number, r: any) => s + Number(r.total_charges || 0), 0))}</td>
-                        <td className="py-3 px-4 text-right text-green-600">{formatCurrency(loansGrantedData.reduce((s: number, r: any) => s + Number(r.net_proceeds || 0), 0))}</td>
+                      <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold text-sm">
+                        <td colSpan={4} className="py-3 px-3 font-bold text-gray-900 dark:text-white">Total ({loansGrantedData.length} loans)</td>
+                        <td className="py-3 px-3 text-right">{formatCurrency(loansGrantedData.reduce((s: number, r: any) => s + Number(r.principal_amount || 0), 0))}</td>
+                        <td className="py-3 px-3 text-right">{formatCurrency(loansGrantedData.reduce((s: number, r: any) => s + Number(r.paid_interest || 0), 0))}</td>
+                        <td className="py-3 px-3 text-right">{formatCurrency(loansGrantedData.reduce((s: number, r: any) => s + Number(r.total_charges || 0), 0))}</td>
+                        <td className="py-3 px-3 text-right text-green-600">{formatCurrency(loansGrantedData.reduce((s: number, r: any) => s + Number(r.net_proceeds || 0), 0))}</td>
                         <td colSpan={3}></td>
                       </tr>
                     </tfoot>
