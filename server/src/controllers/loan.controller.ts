@@ -664,7 +664,16 @@ export class LoanController {
       let idx = 1;
       if (status) { where += `${where ? ' AND ' : 'WHERE '} l.status = $${idx++}`; values.push(status); }
       if (borrowerId) { where += `${where ? ' AND ' : 'WHERE '} l.borrower_id = $${idx++}`; values.push(borrowerId); }
-      if (search) { where += `${where ? ' AND ' : 'WHERE '} (b.first_name ILIKE $${idx} OR b.last_name ILIKE $${idx} OR b.borrower_code ILIKE $${idx} OR l.loan_number ILIKE $${idx})`; values.push(`%${search}%`); idx++; }
+      if (search) {
+  const words = search.trim().split(/\s+/).filter(Boolean);
+  const wordClauses = words.map(word => {
+    const colClause = `(b.first_name ILIKE $${idx} OR b.last_name ILIKE $${idx} OR b.middle_name ILIKE $${idx} OR b.borrower_code ILIKE $${idx} OR l.loan_number ILIKE $${idx} OR (b.first_name || ' ' || COALESCE(b.middle_name || ' ', '') || b.last_name) ILIKE $${idx})`;
+    values.push(`%${word}%`);
+    idx++;
+    return colClause;
+  });
+  where += `${where ? ' AND ' : 'WHERE '} ${wordClauses.join(' AND ')}`;
+}
 
       const countResult = await loanRepo.query(
         `SELECT COUNT(*) FROM loans l JOIN borrowers b ON l.borrower_id = b.id ${where}`, values

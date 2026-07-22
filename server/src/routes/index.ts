@@ -306,6 +306,8 @@ router.post('/admin/shifts/:id/move-transactions', authenticate, authorize('supe
 router.get('/admin/data-integrity', authenticate, authorize('super-admin'), adminController.dataIntegrityScan.bind(adminController));
 router.get('/admin/connections', authenticate, authorize('super-admin'), adminController.getConnections.bind(adminController));
 router.delete('/admin/connections/:pid', authenticate, authorize('super-admin'), auditLog('kill-connection', 'database'), adminController.killConnection.bind(adminController));
+router.post('/admin/loans/:id/correct-release-date', authenticate, authorize('super-admin'), auditLog('correct-release-date', 'loan'), adminController.correctReleaseDate.bind(adminController));
+router.post('/admin/loans/:id/correct-loan-amount', authenticate, authorize('super-admin'), auditLog('correct-loan-amount', 'loan'), adminController.correctLoanAmount.bind(adminController));
 
 // Notifications
 router.get('/notifications', authenticate, notificationController.getAll.bind(notificationController));

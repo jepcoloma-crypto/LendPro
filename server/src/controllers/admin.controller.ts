@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { paymentRepo, loanRepo, amortizationScheduleRepo, paymentAllocationRepo, cashTransactionRepo, cashierSessionRepo } from '../repositories';
 import { AppError } from '../middleware/errorHandler';
-import { paramStr, parsePagination } from '../utils/helpers';
+import { paramStr, parsePagination, calculateAmortization } from '../utils/helpers';
 import { pool } from '../database/connection';
 
 export class AdminController {
@@ -896,6 +896,228 @@ export class AdminController {
       const terminated = result.rows[0]?.terminated;
       if (!terminated) throw new AppError(403, 'Permission denied. This database user may not have privileges to terminate connections, or the connection may be managed by PgBouncer (port 6543). Try direct PostgreSQL (port 5432) or contact your database admin.');
       res.json({ success: true, message: `Connection ${pid} terminated` });
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
+    }
+  }
+
+  // ==================== LOAN CORRECTOR ====================
+
+  async correctReleaseDate(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const { release_date } = req.body;
+      if (!release_date) throw new AppError(400, 'New release date is required');
+
+      const loan = await loanRepo.findById(id);
+      if (!loan) throw new AppError(404, 'Loan not found');
+
+      const oldRelease = loan.release_date;
+      const oldMaturity = loan.maturity_date;
+      const newRelease = new Date(release_date);
+      const termMonths = Number(loan.term_months) || 0;
+      const newMaturity = new Date(newRelease);
+      newMaturity.setMonth(newMaturity.getMonth() + termMonths);
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Update loan dates
+        await client.query(
+          `UPDATE loans SET release_date = $1, maturity_date = $2, updated_at = NOW() WHERE id = $3`,
+          [newRelease.toISOString().split('T')[0], newMaturity.toISOString().split('T')[0], id]
+        );
+
+        // Get existing paid_amounts and advance
+        const { rows: oldScheds } = await client.query(
+          'SELECT SUM(COALESCE(paid_amount,0)) as total_paid FROM amortization_schedules WHERE loan_id = $1',
+          [id]
+        );
+        const totalPaid = parseFloat(oldScheds[0]?.total_paid || '0');
+        const advanceBalance = parseFloat(loan.advance_balance || '0');
+
+        // Delete old schedules and allocations
+        await client.query(
+          'DELETE FROM payment_allocations WHERE schedule_id IN (SELECT id FROM amortization_schedules WHERE loan_id = $1)',
+          [id]
+        );
+        await client.query('DELETE FROM amortization_schedules WHERE loan_id = $1', [id]);
+
+        // Regenerate schedules
+        const interestRate = parseFloat(loan.interest_rate) || 0;
+        const principal = parseFloat(loan.principal_amount) || 0;
+        const interestType = loan.interest_type || 'flat-rate';
+        const paymentFrequency = loan.payment_frequency || 'monthly';
+        const termType = loan.term_type || 'months';
+        const installmentCount = Number(loan.installment_count) || undefined;
+
+        const { schedule } = calculateAmortization(
+          principal, interestRate, termMonths, interestType, paymentFrequency,
+          newRelease, termType, installmentCount
+        );
+
+        let remainingPaid = totalPaid;
+        for (const s of schedule) {
+          let paidAmount = 0;
+          let status = 'pending';
+          if (remainingPaid > 0) {
+            paidAmount = Math.min(remainingPaid, s.totalDue);
+            remainingPaid -= paidAmount;
+            status = paidAmount >= s.totalDue ? 'paid' : 'partial';
+          }
+          await client.query(
+            `INSERT INTO amortization_schedules (loan_id, installment_no, due_date, total_due, principal, interest, balance, paid_amount, status, paid_at, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+            [id, s.installmentNo, s.dueDate, s.totalDue, s.principal, s.interest, s.balance,
+             paidAmount, status, paidAmount > 0 ? new Date() : null]
+          );
+        }
+
+        // Recalculate outstanding_balance
+        const { rows: sumRow } = await client.query(
+          'SELECT SUM(total_due - COALESCE(paid_amount,0)) as sum_remaining FROM amortization_schedules WHERE loan_id = $1',
+          [id]
+        );
+        const sumRemaining = parseFloat(sumRow[0]?.sum_remaining || '0');
+        const newOutstanding = Math.max(0, sumRemaining - advanceBalance);
+
+        await client.query(
+          'UPDATE loans SET outstanding_balance = $1, updated_at = NOW() WHERE id = $2',
+          [newOutstanding, id]
+        );
+
+        await client.query('COMMIT');
+
+        const updated = await loanRepo.findById(id);
+        res.json({
+          success: true,
+          message: 'Release date corrected',
+          data: {
+            before: { release_date: oldRelease, maturity_date: oldMaturity, outstanding_balance: loan.outstanding_balance },
+            after: { release_date: updated.release_date, maturity_date: updated.maturity_date, outstanding_balance: updated.outstanding_balance },
+            advance_balance: advanceBalance,
+            sum_remaining: sumRemaining,
+            schedules_generated: schedule.length,
+          },
+        });
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (error: any) {
+      next(error instanceof AppError ? error : new AppError(400, error.message));
+    }
+  }
+
+  async correctLoanAmount(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = paramStr(req.params.id);
+      const { principal_amount } = req.body;
+      if (principal_amount === undefined || principal_amount === null || principal_amount === '') {
+        throw new AppError(400, 'New principal amount is required');
+      }
+
+      const loan = await loanRepo.findById(id);
+      if (!loan) throw new AppError(404, 'Loan not found');
+
+      const oldPrincipal = loan.principal_amount;
+      const oldInterest = loan.interest_amount;
+      const oldTotal = loan.total_amount;
+      const oldOutstanding = loan.outstanding_balance;
+
+      const newPrincipal = parseFloat(principal_amount);
+      const interestRate = parseFloat(loan.interest_rate) || 0;
+      const termMonths = Number(loan.term_months) || 0;
+      const interestType = loan.interest_type || 'flat-rate';
+      const interestAmount = Math.round((loan.total_amount - loan.principal_amount) / loan.principal_amount * newPrincipal * 100) / 100;
+      const totalAmount = Math.round((newPrincipal + interestAmount) * 100) / 100;
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        await client.query(
+          `UPDATE loans SET principal_amount = $1, interest_amount = $2, total_amount = $3, updated_at = NOW() WHERE id = $4`,
+          [newPrincipal, interestAmount, totalAmount, id]
+        );
+
+        // Get existing paid and advance
+        const { rows: oldScheds } = await client.query(
+          'SELECT SUM(COALESCE(paid_amount,0)) as total_paid FROM amortization_schedules WHERE loan_id = $1',
+          [id]
+        );
+        const totalPaid = parseFloat(oldScheds[0]?.total_paid || '0');
+        const advanceBalance = parseFloat(loan.advance_balance || '0');
+
+        // Delete old schedules and allocations
+        await client.query(
+          'DELETE FROM payment_allocations WHERE schedule_id IN (SELECT id FROM amortization_schedules WHERE loan_id = $1)',
+          [id]
+        );
+        await client.query('DELETE FROM amortization_schedules WHERE loan_id = $1', [id]);
+
+        // Regenerate schedules
+        const paymentFrequency = loan.payment_frequency || 'monthly';
+        const termType = loan.term_type || 'months';
+        const installmentCount = Number(loan.installment_count) || undefined;
+        const releaseDate = loan.release_date || new Date();
+
+        const { schedule } = calculateAmortization(
+          newPrincipal, interestRate, termMonths, interestType, paymentFrequency,
+          new Date(releaseDate), termType, installmentCount
+        );
+
+        let remainingPaid = totalPaid;
+        for (const s of schedule) {
+          let paidAmount = 0;
+          let status = 'pending';
+          if (remainingPaid > 0) {
+            paidAmount = Math.min(remainingPaid, s.totalDue);
+            remainingPaid -= paidAmount;
+            status = paidAmount >= s.totalDue ? 'paid' : 'partial';
+          }
+          await client.query(
+            `INSERT INTO amortization_schedules (loan_id, installment_no, due_date, total_due, principal, interest, balance, paid_amount, status, paid_at, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+            [id, s.installmentNo, s.dueDate, s.totalDue, s.principal, s.interest, s.balance,
+             paidAmount, status, paidAmount > 0 ? new Date() : null]
+          );
+        }
+
+        const { rows: sumRow } = await client.query(
+          'SELECT SUM(total_due - COALESCE(paid_amount,0)) as sum_remaining FROM amortization_schedules WHERE loan_id = $1',
+          [id]
+        );
+        const sumRemaining = parseFloat(sumRow[0]?.sum_remaining || '0');
+        const newOutstanding = Math.max(0, sumRemaining - advanceBalance);
+
+        await client.query(
+          'UPDATE loans SET outstanding_balance = $1, updated_at = NOW() WHERE id = $2',
+          [newOutstanding, id]
+        );
+
+        await client.query('COMMIT');
+
+        const updated = await loanRepo.findById(id);
+        res.json({
+          success: true,
+          message: 'Loan amount corrected',
+          data: {
+            before: { principal_amount: oldPrincipal, interest_amount: oldInterest, total_amount: oldTotal, outstanding_balance: oldOutstanding },
+            after: { principal_amount: updated.principal_amount, interest_amount: updated.interest_amount, total_amount: updated.total_amount, outstanding_balance: updated.outstanding_balance },
+            advance_balance: advanceBalance,
+            sum_remaining: sumRemaining,
+          },
+        });
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
     } catch (error: any) {
       next(error instanceof AppError ? error : new AppError(400, error.message));
     }

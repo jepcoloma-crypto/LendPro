@@ -490,7 +490,7 @@ export const PaymentsPage = () => {
           <Form fluid formValue={formValue} onChange={setFormValue}>
             <Form.Group>
               <Form.ControlLabel>Loan *</Form.ControlLabel>
-              <SelectPicker data={loans.filter(l => l.status === 'active').map(l => ({
+              <SelectPicker data={loans.filter(l => ['active', 'delinquent', 'past_due'].includes(l.status)).map(l => ({
                 label: `${l.loan_number} - ${l.borrower_name} (${formatCurrency(l.outstanding_balance)})`,
                 value: l.id,
               }))} value={formValue.loanId} onChange={(v) => { const sl = loans.find(l => l.id === v); setFormValue({ ...formValue, loanId: v, collectorId: isCollector ? sl?.collector_id || null : null }); }} onSearch={(v) => fetchLoans(v || undefined)} style={{ width: '100%' }} />
@@ -572,10 +572,10 @@ export const PaymentsPage = () => {
             {!payLoan && (
               <div className="mb-4">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">Select a Loan</label>
-                <SelectPicker data={loans.filter(l => l.status === 'active').map(l => ({
+                <SelectPicker data={loans.filter(l => ['active', 'delinquent', 'past_due'].includes(l.status)).map(l => ({
                   label: `${l.loan_number} - ${l.borrower_name} (${formatCurrency(l.outstanding_balance)})`,
                   value: l.id,
-                }))} onChange={(v) => { if (v) openInstallmentModal(v); }} onSearch={(v) => fetchLoans(v || undefined)} style={{ width: '100%' }} placeholder="Choose an active loan..." />
+                }))} onChange={(v) => { if (v) openInstallmentModal(v); }} onSearch={(v) => fetchLoans(v || undefined)} style={{ width: '100%' }} placeholder="Choose a loan..." />
               </div>
             )}
             {payLoan && Number(payLoan.advance_balance) > 0 && (

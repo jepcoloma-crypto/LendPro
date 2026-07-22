@@ -848,6 +848,158 @@ const AuditLogAdmin = () => {
   );
 };
 
+// ==================== LOAN CORRECTOR ====================
+const LoanCorrector = () => {
+  const [loanNumber, setLoanNumber] = useState('');
+  const [loan, setLoan] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newReleaseDate, setNewReleaseDate] = useState('');
+  const [newPrincipal, setNewPrincipal] = useState('');
+  const [result, setResult] = useState<any>(null);
+
+  const searchLoan = async () => {
+    if (!loanNumber.trim()) return;
+    setLoading(true);
+    setLoan(null);
+    setResult(null);
+    try {
+      const { data } = await api.get('/loans', { params: { search: loanNumber.trim(), limit: 1 } });
+      const found = data.data?.[0];
+      if (!found) { toaster.push(<Message type="error">Loan not found</Message>, { placement: 'topEnd' }); return; }
+      setLoan(found);
+      setNewReleaseDate(found.release_date ? new Date(found.release_date).toISOString().split('T')[0] : '');
+      setNewPrincipal(found.principal_amount?.toString() || '');
+    } catch (err: any) {
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Search failed'}</Message>, { placement: 'topEnd' });
+    } finally { setLoading(false); }
+  };
+
+  const correctReleaseDate = async () => {
+    if (!loan || !newReleaseDate) return;
+    setSaving(true);
+    setResult(null);
+    try {
+      const { data } = await api.post(`/admin/loans/${loan.id}/correct-release-date`, { release_date: newReleaseDate });
+      setResult(data.data);
+      toaster.push(<Message type="success">{data.message}</Message>, { placement: 'topEnd' });
+      setLoan(data.data.after);
+    } catch (err: any) {
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Correction failed'}</Message>, { placement: 'topEnd' });
+    } finally { setSaving(false); }
+  };
+
+  const correctLoanAmount = async () => {
+    if (!loan || !newPrincipal) return;
+    setSaving(true);
+    setResult(null);
+    try {
+      const { data } = await api.post(`/admin/loans/${loan.id}/correct-loan-amount`, { principal_amount: newPrincipal });
+      setResult(data.data);
+      toaster.push(<Message type="success">{data.message}</Message>, { placement: 'topEnd' });
+      setLoan(data.data.after);
+    } catch (err: any) {
+      toaster.push(<Message type="error">{err?.response?.data?.error || 'Correction failed'}</Message>, { placement: 'topEnd' });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Search */}
+      <div className="flex gap-3 items-end">
+        <div>
+          <label className="rs-form-control-label">Loan Number</label>
+          <input type="text" value={loanNumber} onChange={(e) => setLoanNumber(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && searchLoan()}
+            placeholder="Search by loan #..." className="rs-input" style={{ width: 280 }} />
+        </div>
+        <Button appearance="primary" onClick={searchLoan} loading={loading}><Search className="w-4 h-4 mr-1" />Search</Button>
+      </div>
+
+      {loan && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Release Date Editor */}
+          <Panel bordered className="bg-white dark:bg-gray-800">
+            <h4 className="font-semibold mb-3 flex items-center gap-2"><Calendar className="w-4 h-4" />Release Date Editor</h4>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <span className="text-gray-500">Current release:</span>
+                <span className="font-medium">{loan.release_date ? new Date(loan.release_date).toLocaleDateString() : 'N/A'}</span>
+                <span className="text-gray-500">Current maturity:</span>
+                <span className="font-medium">{loan.maturity_date ? new Date(loan.maturity_date).toLocaleDateString() : 'N/A'}</span>
+                <span className="text-gray-500">Term:</span>
+                <span className="font-medium">{loan.term_months} months</span>
+              </div>
+              <div>
+                <label className="rs-form-control-label">New Release Date</label>
+                <input type="date" value={newReleaseDate} onChange={(e) => { setNewReleaseDate(e.target.value); setResult(null); }}
+                  className="rs-input" style={{ width: '100%' }} />
+              </div>
+              <Button appearance="primary" color="blue" onClick={correctReleaseDate} loading={saving}
+                disabled={!newReleaseDate}>
+                <RefreshCw className="w-4 h-4 mr-1" />Correct Release Date
+              </Button>
+            </div>
+          </Panel>
+
+          {/* Loan Amount Editor */}
+          <Panel bordered className="bg-white dark:bg-gray-800">
+            <h4 className="font-semibold mb-3 flex items-center gap-2"><Edit3 className="w-4 h-4" />Loan Amount Editor</h4>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <span className="text-gray-500">Current principal:</span>
+                <span className="font-medium">{formatCurrency(loan.principal_amount)}</span>
+                <span className="text-gray-500">Current interest:</span>
+                <span className="font-medium">{formatCurrency(loan.interest_amount)}</span>
+                <span className="text-gray-500">Current total:</span>
+                <span className="font-medium">{formatCurrency(loan.total_amount)}</span>
+                <span className="text-gray-500">Rate:</span>
+                <span className="font-medium">{loan.interest_rate}%</span>
+              </div>
+              <div>
+                <label className="rs-form-control-label">New Principal Amount</label>
+                <input type="number" value={newPrincipal} onChange={(e) => { setNewPrincipal(e.target.value); setResult(null); }}
+                  className="rs-input" style={{ width: '100%' }} step="0.01" />
+              </div>
+              <Button appearance="primary" color="blue" onClick={correctLoanAmount} loading={saving}
+                disabled={!newPrincipal}>
+                <Edit3 className="w-4 h-4 mr-1" />Correct Loan Amount
+              </Button>
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {/* Result / Verification */}
+      {result && (
+        <Panel bordered className="bg-green-50 dark:bg-green-900/20 border-green-200">
+          <h4 className="font-semibold mb-2 text-green-700 dark:text-green-400">✓ Correction Applied — Verification</h4>
+          <Table data={[
+            { field: 'Release Date', before: result.before?.release_date ? new Date(result.before.release_date).toLocaleDateString() : '-', after: result.after?.release_date ? new Date(result.after.release_date).toLocaleDateString() : '-' },
+            { field: 'Maturity Date', before: result.before?.maturity_date ? new Date(result.before.maturity_date).toLocaleDateString() : '-', after: result.after?.maturity_date ? new Date(result.after.maturity_date).toLocaleDateString() : '-' },
+            { field: 'Principal Amount', before: result.before?.principal_amount ? formatCurrency(result.before.principal_amount) : '-', after: result.after?.principal_amount ? formatCurrency(result.after.principal_amount) : '-' },
+            { field: 'Interest Amount', before: result.before?.interest_amount ? formatCurrency(result.before.interest_amount) : '-', after: result.after?.interest_amount ? formatCurrency(result.after.interest_amount) : '-' },
+            { field: 'Total Amount', before: result.before?.total_amount ? formatCurrency(result.before.total_amount) : '-', after: result.after?.total_amount ? formatCurrency(result.after.total_amount) : '-' },
+            { field: 'Outstanding Balance', before: result.before?.outstanding_balance ? formatCurrency(result.before.outstanding_balance) : '-', after: result.after?.outstanding_balance ? formatCurrency(result.after.outstanding_balance) : '-' },
+            { field: 'Advance Balance', before: '-', after: result.advance_balance ? formatCurrency(result.advance_balance) : '0.00' },
+            { field: 'Sum Remaining', before: '-', after: result.sum_remaining ? formatCurrency(result.sum_remaining) : '0.00' },
+            { field: 'Schedules', before: '-', after: result.schedules_generated ? `${result.schedules_generated} schedules` : '-' },
+          ]} virtualized height={350} rowHeight={45}>
+            <Column width={180}><HeaderCell>Field</HeaderCell><Cell dataKey="field" /></Column>
+            <Column width={200}><HeaderCell>Before</HeaderCell><Cell>{(r: any) => <span className="text-red-600">{r.before}</span>}</Cell></Column>
+            <Column width={200}><HeaderCell>After</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-semibold">{r.after}</span>}</Cell></Column>
+          </Table>
+          {result.sum_remaining !== undefined && result.advance_balance !== undefined && result.after?.outstanding_balance !== undefined && (
+            <div className="mt-3 text-sm">
+              {`Integrity: ${Number(result.after.outstanding_balance) + Number(result.advance_balance) === Number(result.sum_remaining) ? '✓ PASS' : '✗ FAIL'}`}
+            </div>
+          )}
+        </Panel>
+      )}
+    </div>
+  );
+};
+
 // ==================== MAIN TAB EXPORT ====================
 export const AdminToolsTab = () => {
   const [subTab, setSubTab] = useState('payments');
@@ -859,6 +1011,7 @@ export const AdminToolsTab = () => {
           { key: 'payments', label: 'Payment Corrector' },
           { key: 'cash', label: 'Cash Transactions' },
           { key: 'loans', label: 'Loan Quick Fix' },
+          { key: 'corrector', label: 'Loan Corrector' },
           { key: 'shifts', label: 'Shift Manager' },
           { key: 'audit', label: 'Audit Log' },
         ].map(t => (
@@ -884,6 +1037,12 @@ export const AdminToolsTab = () => {
         <Panel bordered header={<span><AlertTriangle className="w-4 h-4 mr-1 inline" />Loan Quick Fix</span>}>
           <p className="text-sm text-gray-500 mb-4">Edit loan details (maturity date, status, amounts) or adjust amortization schedules.</p>
           <LoanQuickFix />
+        </Panel>
+      )}
+      {subTab === 'corrector' && (
+        <Panel bordered header={<span><Edit3 className="w-4 h-4 mr-1 inline" />Loan Corrector</span>}>
+          <p className="text-sm text-gray-500 mb-4">Correct release date or loan amount — regenerates schedules and verifies data integrity.</p>
+          <LoanCorrector />
         </Panel>
       )}
       {subTab === 'shifts' && (
