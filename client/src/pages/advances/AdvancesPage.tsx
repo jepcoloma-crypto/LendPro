@@ -137,7 +137,7 @@ export default function AdvancesPage({ embedded }: { embedded?: boolean }) {
             </Form.Group>
             <Form.Group>
               <Form.ControlLabel>Notes</Form.ControlLabel>
-              <Form.Control name="notes" accepter={Input} as="textarea" rows={2} />
+              <Input as="textarea" rows={2} value={formValue.notes || ''} onChange={(v: string) => setFormValue((prev: any) => ({ ...prev, notes: v }))} />
             </Form.Group>
           </Form>
         </Modal.Body>
