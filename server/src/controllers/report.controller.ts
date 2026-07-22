@@ -493,11 +493,11 @@ export class ReportController {
          LEFT JOIN loan_applications la ON la.id = l.application_id
          LEFT JOIN (SELECT loan_id, SUM(amount) as total_charges FROM loan_charges GROUP BY loan_id) lc ON lc.loan_id = l.id
          LEFT JOIN (SELECT loan_id, SUM(interest_amount) as total_paid_interest FROM payments WHERE status = 'completed' GROUP BY loan_id) pi ON pi.loan_id = l.id
-         WHERE l.release_date IS NOT NULL
-           AND ($1::date IS NULL OR l.release_date >= $1::date)
-           AND ($2::date IS NULL OR l.release_date <= $2::date)
-           AND ($3::uuid IS NULL OR b.id = $3::uuid)
-         ORDER BY l.release_date DESC`,
+          WHERE l.release_date IS NOT NULL
+            AND ($1::date IS NULL OR (l.release_date AT TIME ZONE 'Asia/Manila')::date >= $1::date)
+            AND ($2::date IS NULL OR (l.release_date AT TIME ZONE 'Asia/Manila')::date <= $2::date)
+            AND ($3::uuid IS NULL OR b.id = $3::uuid)
+          ORDER BY l.release_date DESC`,
         [startDate || null, endDate || null, branchId || null]
       );
       res.json({ success: true, data: rows });
@@ -645,12 +645,12 @@ export class ReportController {
          LEFT JOIN loan_products lp ON lp.id = l.product_id
          LEFT JOIN branches b ON b.id = br.branch_id
          LEFT JOIN users du ON du.id = ld.disbursed_by
-          WHERE l.release_date IS NOT NULL
-             AND l.status != 'closed'
-             AND ($1::date IS NULL OR l.release_date::date >= $1::date)
-             AND ($2::date IS NULL OR l.release_date::date <= $2::date)
-             AND ($3::uuid IS NULL OR b.id = $3::uuid)
-         ORDER BY l.release_date DESC`,
+           WHERE l.release_date IS NOT NULL
+              AND l.status != 'closed'
+              AND ($1::date IS NULL OR (l.release_date AT TIME ZONE 'Asia/Manila')::date >= $1::date)
+              AND ($2::date IS NULL OR (l.release_date AT TIME ZONE 'Asia/Manila')::date <= $2::date)
+              AND ($3::uuid IS NULL OR b.id = $3::uuid)
+          ORDER BY l.release_date DESC`,
         [startDate || null, endDate || null, branchId || null]
       );
 
