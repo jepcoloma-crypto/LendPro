@@ -735,15 +735,15 @@ export const DashboardPage = () => {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Avg Loan Size</p>
-                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{formatCurrency(stats.averageLoanSize)}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Loans This Month</p>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats.monthlyLoanCount}</h3>
                   </div>
                   <div className="w-12 h-12 bg-teal-100 dark:bg-teal-900 rounded-lg flex items-center justify-center">
                     <DollarSign className="w-6 h-6 text-teal-600" />
                   </div>
                 </div>
                 <div className="mt-3 flex items-center text-sm text-gray-400">
-                  <span>Principal ÷ active loans</span>
+                  <span>New loans released this month</span>
                 </div>
               </div>
             </Col>
