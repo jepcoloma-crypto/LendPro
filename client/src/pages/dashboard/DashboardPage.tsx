@@ -709,7 +709,7 @@ export const DashboardPage = () => {
                   </div>
                 </div>
                 <div className="mt-3 flex items-center text-sm text-gray-400">
-                  <span>Collected (30d): <strong className="text-green-500">{formatCurrency(stats.pastDueCollections30d)}</strong></span>
+                  <span>Collected (15d): <strong className="text-green-500">{formatCurrency(stats.pastDueCollections15d)}</strong></span>
                 </div>
               </div>
             </Col>

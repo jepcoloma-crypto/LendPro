@@ -257,7 +257,7 @@ export interface CollectionVisit {
 
 export interface DashboardStats {
   pastDueAmount: number;
-  pastDueCollections30d: number;
+  pastDueCollections15d: number;
   borrowerCount: number;
   averageLoanSize: number;
   activeLoans: number;
