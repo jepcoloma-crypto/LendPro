@@ -839,6 +839,7 @@ export class LoanService {
       monthlyCollections: parseFloat(r.monthly_collections),
       monthlyReleases: parseFloat(r.monthly_releases),
       totalReleases: parseFloat(r.total_releases),
+      collectionRate,
       delinquencyRate,
       delinquentLoans,
       overdueCount: parseInt(r.overdue_count),

@@ -263,6 +263,7 @@ export interface DashboardStats {
   pastDue61_90: number;
   pastDue90Plus: number;
   totalDueThisMonth: number;
+  collectionRate: number;
   collectionEfficiency: number;
   monthlyLoanCount: number;
   borrowerCount: number;
