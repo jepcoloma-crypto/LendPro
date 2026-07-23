@@ -666,16 +666,17 @@ export const DashboardPage = () => {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Collection Rate</p>
-                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats.collectionRate}%</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Collection Efficiency</p>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats.collectionEfficiency}%</h3>
                   </div>
                   <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
                     <TrendingUp className="w-6 h-6 text-purple-600" />
                   </div>
                 </div>
                 <div className="mt-3 flex items-center text-sm">
-                  {stats.collectionRate >= 75 ? <ArrowUpRight className="w-4 h-4 text-green-500 mr-1" /> : <ArrowDownRight className="w-4 h-4 text-red-500 mr-1" />}
-                  <span className={stats.collectionRate >= 75 ? 'text-green-500 font-medium' : 'text-red-500 font-medium'}>{stats.collectionRate >= 75 ? 'Good' : 'Needs improvement'}</span>
+                  {stats.collectionEfficiency >= 75 ? <ArrowUpRight className="w-4 h-4 text-green-500 mr-1" /> : <ArrowDownRight className="w-4 h-4 text-red-500 mr-1" />}
+                  <span className={stats.collectionEfficiency >= 75 ? 'text-green-500 font-medium' : 'text-red-500 font-medium'}>{stats.collectionEfficiency >= 75 ? 'Good' : 'Needs improvement'}</span>
+                  <span className="text-gray-400 ml-1">of {formatCurrency(stats.totalDueThisMonth)} due</span>
                 </div>
               </div>
             </Col>
@@ -699,17 +700,31 @@ export const DashboardPage = () => {
 
             <Col xs={24} sm={12} lg={6}>
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Past Due Portfolio</p>
-                    <h3 className="text-2xl font-bold text-orange-500 mt-1">{formatCurrency(stats.pastDueAmount)}</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Aging of Past Due</p>
+                  <AlertCircle className="w-5 h-5 text-orange-500" />
+                </div>
+                <h3 className="text-2xl font-bold text-orange-500 mb-2">{formatCurrency(stats.pastDueAmount)}</h3>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">1 - 30 days</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(stats.pastDue1_30)}</span>
                   </div>
-                  <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
-                    <AlertCircle className="w-6 h-6 text-orange-600" />
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">31 - 60 days</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(stats.pastDue31_60)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">61 - 90 days</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(stats.pastDue61_90)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">90+ days</span>
+                    <span className="font-medium text-red-500">{formatCurrency(stats.pastDue90Plus)}</span>
                   </div>
                 </div>
-                <div className="mt-3 flex items-center text-sm text-gray-400">
-                  <span>Collected (15d): <strong className="text-green-500">{formatCurrency(stats.pastDueCollections15d)}</strong></span>
+                <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-400">
+                  Collected (15d): <strong className="text-green-500">{formatCurrency(stats.pastDueCollections15d)}</strong>
                 </div>
               </div>
             </Col>

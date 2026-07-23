@@ -258,6 +258,12 @@ export interface CollectionVisit {
 export interface DashboardStats {
   pastDueAmount: number;
   pastDueCollections15d: number;
+  pastDue1_30: number;
+  pastDue31_60: number;
+  pastDue61_90: number;
+  pastDue90Plus: number;
+  totalDueThisMonth: number;
+  collectionEfficiency: number;
   monthlyLoanCount: number;
   borrowerCount: number;
   averageLoanSize: number;
@@ -270,7 +276,6 @@ export interface DashboardStats {
   monthlyCollections: number;
   monthlyReleases: number;
   totalReleases: number;
-  collectionRate: number;
   delinquencyRate: number;
   delinquentLoans: number;
   overdueCount: number;

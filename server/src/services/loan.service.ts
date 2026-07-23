@@ -682,6 +682,11 @@ export class LoanService {
           (SELECT COALESCE(SUM(pay.penalty_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE l.collector_id = $1) as total_penalties,
           (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND l2.collector_id = $1 AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due)) as past_due_amount,
           (SELECT COALESCE(SUM(p.amount), 0) FROM payments p JOIN loans l2 ON l2.id = p.loan_id WHERE l2.maturity_date < CURRENT_DATE AND l2.status != 'closed' AND l2.collector_id = $1 AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) AND p.status = 'completed' AND p.payment_date >= NOW() - INTERVAL '15 days') as past_due_collections_15d,
+          (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND l2.collector_id = $1 AND (SELECT MIN(a.due_date) FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) >= CURRENT_DATE - 30) as past_due_1_30,
+          (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND l2.collector_id = $1 AND (SELECT MIN(a.due_date) FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) BETWEEN CURRENT_DATE - 60 AND CURRENT_DATE - 31) as past_due_31_60,
+          (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND l2.collector_id = $1 AND (SELECT MIN(a.due_date) FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) BETWEEN CURRENT_DATE - 90 AND CURRENT_DATE - 61) as past_due_61_90,
+          (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND l2.collector_id = $1 AND (SELECT MIN(a.due_date) FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) < CURRENT_DATE - 90) as past_due_90_plus,
+          (SELECT COALESCE(SUM(a.total_due), 0) FROM amortization_schedules a JOIN loans l2 ON l2.id = a.loan_id WHERE a.due_date >= DATE_TRUNC('month', NOW()) AND a.due_date < DATE_TRUNC('month', NOW()) + INTERVAL '1 month' AND l2.status != 'closed' AND l2.collector_id = $1) as total_due_this_month,
           (SELECT COUNT(*) FROM loans WHERE release_date >= DATE_TRUNC('month', NOW()) AND collector_id = $1) as monthly_loan_count,
           (SELECT COUNT(DISTINCT br.id) FROM borrowers br JOIN loans l ON l.borrower_id = br.id WHERE l.collector_id = $1) as borrower_count
       `
@@ -701,7 +706,12 @@ export class LoanService {
           (SELECT COALESCE(SUM(pay.interest_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id) as total_interest,
           (SELECT COALESCE(SUM(pay.penalty_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id) as total_penalties,
            (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due)) as past_due_amount,
-            (SELECT COALESCE(SUM(p.amount), 0) FROM payments p JOIN loans l2 ON l2.id = p.loan_id WHERE l2.maturity_date < CURRENT_DATE AND l2.status != 'closed' AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) AND p.status = 'completed' AND p.payment_date >= NOW() - INTERVAL '15 days') as past_due_collections_15d,
+             (SELECT COALESCE(SUM(p.amount), 0) FROM payments p JOIN loans l2 ON l2.id = p.loan_id WHERE l2.maturity_date < CURRENT_DATE AND l2.status != 'closed' AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) AND p.status = 'completed' AND p.payment_date >= NOW() - INTERVAL '15 days') as past_due_collections_15d,
+            (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND (SELECT MIN(a.due_date) FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) >= CURRENT_DATE - 30) as past_due_1_30,
+            (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND (SELECT MIN(a.due_date) FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) BETWEEN CURRENT_DATE - 60 AND CURRENT_DATE - 31) as past_due_31_60,
+            (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND (SELECT MIN(a.due_date) FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) BETWEEN CURRENT_DATE - 90 AND CURRENT_DATE - 61) as past_due_61_90,
+            (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND (SELECT MIN(a.due_date) FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due) < CURRENT_DATE - 90) as past_due_90_plus,
+            (SELECT COALESCE(SUM(a.total_due), 0) FROM amortization_schedules a JOIN loans l2 ON l2.id = a.loan_id WHERE a.due_date >= DATE_TRUNC('month', NOW()) AND a.due_date < DATE_TRUNC('month', NOW()) + INTERVAL '1 month' AND l2.status != 'closed') as total_due_this_month,
            (SELECT COUNT(*) FROM loans WHERE release_date >= DATE_TRUNC('month', NOW())) as monthly_loan_count,
           (SELECT COUNT(*) FROM borrowers) as borrower_count
       `;
@@ -792,6 +802,15 @@ export class LoanService {
       : 0;
     const pastDueAmount = parseFloat(r.past_due_amount);
     const pastDueCollections15d = parseFloat(r.past_due_collections_15d);
+    const pastDue1_30 = parseFloat(r.past_due_1_30);
+    const pastDue31_60 = parseFloat(r.past_due_31_60);
+    const pastDue61_90 = parseFloat(r.past_due_61_90);
+    const pastDue90Plus = parseFloat(r.past_due_90_plus);
+    const totalDueThisMonth = parseFloat(r.total_due_this_month);
+    const monthlyCollected = parseFloat(r.monthly_collections);
+    const collectionEfficiency = totalDueThisMonth > 0
+      ? Math.round((monthlyCollected / totalDueThisMonth) * 100)
+      : monthlyCollected > 0 ? 100 : 0;
     const borrowerCount = parseInt(r.borrower_count);
     const monthlyLoanCount = parseInt(r.monthly_loan_count);
     const activePrincipal = parseFloat(r.total_principal);
@@ -802,6 +821,12 @@ export class LoanService {
     return {
       pastDueAmount,
       pastDueCollections15d,
+      pastDue1_30,
+      pastDue31_60,
+      pastDue61_90,
+      pastDue90Plus,
+      totalDueThisMonth,
+      collectionEfficiency,
       monthlyLoanCount,
       borrowerCount,
       averageLoanSize,
@@ -814,7 +839,6 @@ export class LoanService {
       monthlyCollections: parseFloat(r.monthly_collections),
       monthlyReleases: parseFloat(r.monthly_releases),
       totalReleases: parseFloat(r.total_releases),
-      collectionRate,
       delinquencyRate,
       delinquentLoans,
       overdueCount: parseInt(r.overdue_count),
