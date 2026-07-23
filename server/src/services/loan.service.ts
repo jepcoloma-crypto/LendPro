@@ -680,7 +680,8 @@ export class LoanService {
            (SELECT COUNT(DISTINCT l2.id) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND l2.collector_id = $1 AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due)) as overdue_count,
           (SELECT COALESCE(SUM(pay.interest_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE l.collector_id = $1) as total_interest,
           (SELECT COALESCE(SUM(pay.penalty_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id WHERE l.collector_id = $1) as total_penalties,
-          (SELECT COALESCE(SUM(l.outstanding_balance), 0) FROM loans l WHERE l.status IN ('active','delinquent') AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.status = 'overdue' AND a.due_date < CURRENT_DATE - INTERVAL '30 days') AND l.collector_id = $1) as par30_amount,
+          (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND l2.collector_id = $1 AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due)) as past_due_amount,
+          (SELECT COALESCE(SUM(p.amount), 0) FROM payments p JOIN loans l2 ON l2.id = p.loan_id WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND l2.collector_id = $1 AND p.status = 'completed' AND p.payment_date >= NOW() - INTERVAL '30 days') as past_due_collections_30d,
           (SELECT COUNT(DISTINCT br.id) FROM borrowers br JOIN loans l ON l.borrower_id = br.id WHERE l.collector_id = $1) as borrower_count
       `
       : `
@@ -698,7 +699,8 @@ export class LoanService {
            (SELECT COUNT(DISTINCT l2.id) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due)) as overdue_count,
           (SELECT COALESCE(SUM(pay.interest_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id) as total_interest,
           (SELECT COALESCE(SUM(pay.penalty_amount), 0) FROM payments pay JOIN loans l ON l.id = pay.loan_id) as total_penalties,
-          (SELECT COALESCE(SUM(l.outstanding_balance), 0) FROM loans l WHERE l.status IN ('active','delinquent') AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l.id AND a.status = 'overdue' AND a.due_date < CURRENT_DATE - INTERVAL '30 days')) as par30_amount,
+           (SELECT COALESCE(SUM(l2.outstanding_balance), 0) FROM loans l2 WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND EXISTS (SELECT 1 FROM amortization_schedules a WHERE a.loan_id = l2.id AND a.due_date < CURRENT_DATE AND COALESCE(a.paid_amount,0) < a.total_due)) as past_due_amount,
+           (SELECT COALESCE(SUM(p.amount), 0) FROM payments p JOIN loans l2 ON l2.id = p.loan_id WHERE l2.maturity_date < CURRENT_DATE AND l2.outstanding_balance > 0 AND l2.status != 'closed' AND p.status = 'completed' AND p.payment_date >= NOW() - INTERVAL '30 days') as past_due_collections_30d,
           (SELECT COUNT(*) FROM borrowers) as borrower_count
       `;
 
@@ -786,10 +788,8 @@ export class LoanService {
     const delinquencyRate = totalActiveAndDelinquent > 0
       ? Math.round((delinquentLoans / totalActiveAndDelinquent) * 100)
       : 0;
-    const par30Amount = parseFloat(r.par30_amount);
-    const par30 = portfolioTotal > 0
-      ? Math.round((par30Amount / portfolioTotal) * 100)
-      : 0;
+    const pastDueAmount = parseFloat(r.past_due_amount);
+    const pastDueCollections30d = parseFloat(r.past_due_collections_30d);
     const borrowerCount = parseInt(r.borrower_count);
     const activePrincipal = parseFloat(r.total_principal);
     const averageLoanSize = activeLoans > 0
@@ -797,8 +797,8 @@ export class LoanService {
       : 0;
 
     return {
-      par30,
-      par30Amount,
+      pastDueAmount,
+      pastDueCollections30d,
       borrowerCount,
       averageLoanSize,
       activeLoans,

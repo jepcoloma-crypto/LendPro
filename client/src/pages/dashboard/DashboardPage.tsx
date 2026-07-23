@@ -701,15 +701,15 @@ export const DashboardPage = () => {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">PAR 30</p>
-                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats.par30}%</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Past Due Portfolio</p>
+                    <h3 className="text-2xl font-bold text-orange-500 mt-1">{formatCurrency(stats.pastDueAmount)}</h3>
                   </div>
                   <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
                     <AlertCircle className="w-6 h-6 text-orange-600" />
                   </div>
                 </div>
                 <div className="mt-3 flex items-center text-sm text-gray-400">
-                  <span>At risk: <strong className="text-orange-500">{formatCurrency(stats.par30Amount)}</strong></span>
+                  <span>Collected (30d): <strong className="text-green-500">{formatCurrency(stats.pastDueCollections30d)}</strong></span>
                 </div>
               </div>
             </Col>
