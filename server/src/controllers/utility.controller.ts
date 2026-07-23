@@ -117,13 +117,32 @@ export class UtilityController {
         collections: ['collections', 'collection_visits'],
         reports: ['audit_logs', 'notifications', 'email_logs', 'sms_logs'],
       };
+      // Auto-include dependency modules when selected
+      const MODULE_DEPS: Record<string, string[]> = {
+        loans: ['borrowers', 'applications'],
+        payments: ['loans'],
+      };
       const SYSTEM_TABLES = ['settings', 'users', 'roles', 'branches', 'loan_products', 'charges', 'login_history'];
 
       let tables: string[];
       let backupModules: string[] = [];
       if (modulesParam && modulesParam.length > 0) {
+        // Expand to include dependency modules
+        const expanded = new Set<string>(modulesParam);
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const mod of [...expanded]) {
+            const deps = MODULE_DEPS[mod];
+            if (deps) {
+              for (const d of deps) {
+                if (!expanded.has(d)) { expanded.add(d); changed = true; }
+              }
+            }
+          }
+        }
         const tableSet = new Set<string>();
-        for (const mod of modulesParam) {
+        for (const mod of expanded) {
           const tbls = MODULE_TABLES[mod];
           if (tbls) {
             tbls.forEach(t => tableSet.add(t));
@@ -254,40 +273,59 @@ export class UtilityController {
       const sql = req.file.buffer.toString('utf-8');
       if (!sql.includes('-- LendPro Database Backup')) throw new Error('Invalid backup file: missing LendPro header');
 
-      // Get all public table names for truncation
-      const allTables = (await pool.query(
-        `SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' ORDER BY tablename`
-      )).rows.map((r: any) => r.tablename as string);
-
       res.setHeader('Content-Type', 'application/x-ndjson');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
-      // Split SQL into individual statements by semicolon.
-      // The LEADING comments (-- LendPro Database Backup, etc.) are grouped
-      // with `SET session_replication_role = replica` in the first element,
-      // so we can't just filter by s.startsWith('--').
-      const rawParts = sql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+      // Parse SQL into individual statements, handling semicolons inside single-quoted strings
       const statements: string[] = [];
-      for (const part of rawParts) {
-        // Skip pure comment blocks
-        if (/^--/.test(part.replace(/\n/g, ' ').trim())) continue;
-        // Remove leading comment lines before the actual SQL
-        const cleaned = part.replace(/^-- .*\n?/gm, '').trim();
+      let current = '';
+      let inString = false;
+      let escaped = false;
+      for (const ch of sql) {
+        if (escaped) { current += ch; escaped = false; continue; }
+        if (ch === "'" && !inString) { inString = true; current += ch; continue; }
+        if (ch === "'" && inString) { inString = false; current += ch; continue; }
+        if (ch === '\\' && inString) { escaped = true; current += ch; continue; }
+        if (ch === ';' && !inString) {
+          const trimmed = current.trim();
+          if (trimmed.length > 0 && !/^--/.test(trimmed.replace(/\n/g, ' '))) {
+            const cleaned = trimmed.replace(/^-- .*\n?/gm, '').trim();
+            if (cleaned.length > 0) statements.push(cleaned);
+          }
+          current = '';
+          continue;
+        }
+        current += ch;
+      }
+      const trimmed = current.trim();
+      if (trimmed.length > 0 && !/^--/.test(trimmed.replace(/\n/g, ' '))) {
+        const cleaned = trimmed.replace(/^-- .*\n?/gm, '').trim();
         if (cleaned.length > 0) statements.push(cleaned);
       }
       const totalStmts = statements.length;
 
+      // Find which tables this backup actually has INSERTs for
+      const restoredTables = new Set<string>();
+      for (const s of statements) {
+        const m = s.match(/^INSERT\s+INTO\s+"?(\w+)"?\s/i);
+        if (m) restoredTables.add(m[1]);
+      }
+
       res.write(JSON.stringify({ type: 'start', total: totalStmts }) + '\n');
 
-      // Disable triggers on all tables (DDL — persists across connections)
-      for (const tn of allTables) {
+      // Get all public tables — disable triggers on ALL to prevent FK cascade
+      const allPublicTables = (await pool.query(
+        `SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' ORDER BY tablename`
+      )).rows.map((r: any) => r.tablename as string);
+
+      for (const tn of allPublicTables) {
         try { await pool.query(`ALTER TABLE "${tn}" DISABLE TRIGGER ALL`); } catch {}
       }
 
-      // Truncate all tables in reverse order with CASCADE
-      for (const tn of [...allTables].reverse()) {
-        try { await pool.query(`TRUNCATE TABLE "${tn}" CASCADE`); } catch {}
+      // Truncate only restored tables WITHOUT CASCADE (triggers are disabled so FK checks are off)
+      for (const tn of [...restoredTables].reverse()) {
+        try { await pool.query(`TRUNCATE TABLE "${tn}"`); } catch {}
       }
 
       // Execute ALL statements on ONE dedicated connection so that
@@ -309,8 +347,8 @@ export class UtilityController {
         res.write(JSON.stringify({ type: 'progress', current: executed + skipped, total: totalStmts }) + '\n');
       }
 
-      // Re-enable triggers
-      for (const tn of allTables) {
+      // Re-enable triggers on all public tables
+      for (const tn of allPublicTables) {
         try { await pool.query(`ALTER TABLE "${tn}" ENABLE TRIGGER ALL`); } catch {}
       }
 

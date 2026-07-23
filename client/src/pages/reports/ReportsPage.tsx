@@ -83,6 +83,11 @@ export const ReportsPage = () => {
   const [branchPLMonthly, setBranchPLMonthly] = useState<any[]>([]);
   const [branchPLView, setBranchPLView] = useState<'branch' | 'monthly'>('branch');
 
+  const [revenueOverviewData, setRevenueOverviewData] = useState<any>(null);
+  const [revenueOverviewLoading, setRevenueOverviewLoading] = useState(false);
+  const [revenueOverviewStartDate, setRevenueOverviewStartDate] = useState<Date | null>(null);
+  const [revenueOverviewEndDate, setRevenueOverviewEndDate] = useState<Date | null>(null);
+
   const [pastDueData, setPastDueData] = useState<any[]>([]);
   const [pastDueLoading, setPastDueLoading] = useState(false);
   const [pastDueBranchFilter, setPastDueBranchFilter] = useState<string | null>(null);
@@ -358,6 +363,22 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
     };
     fetchBranchPL();
   }, [activeTab, branchPLStartDate, branchPLEndDate]);
+
+  useEffect(() => {
+    const fetchRevenueOverview = async () => {
+      if (activeTab !== 'revenue-overview') return;
+      setRevenueOverviewLoading(true);
+      try {
+        const params: any = {};
+        if (revenueOverviewStartDate) params.startDate = revenueOverviewStartDate.toISOString().split('T')[0];
+        if (revenueOverviewEndDate) params.endDate = revenueOverviewEndDate.toISOString().split('T')[0];
+        const { data } = await reportsApi.getRevenueOverview(params);
+        setRevenueOverviewData(data.data || { rows: [], totals: null });
+      } catch { setRevenueOverviewData(null); }
+      finally { setRevenueOverviewLoading(false); }
+    };
+    fetchRevenueOverview();
+  }, [activeTab, revenueOverviewStartDate, revenueOverviewEndDate]);
 
   useEffect(() => {
     const fetchAmort = async () => {
@@ -851,6 +872,7 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
       { key: 'interest', label: 'Interest Income' },
       { key: 'expense-report', label: 'Expense Report' },
       { key: 'income-report', label: 'Income Report' },
+      { key: 'revenue-overview', label: 'Revenue Overview' },
       { key: 'processing-charges', label: 'Processing Charges' },
       { key: 'cash-flow', label: 'Cash Flow' },
       { key: 'branch-pl', label: 'Profit & Loss' },
@@ -1344,6 +1366,70 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
               <Column width={120}><HeaderCell>Entered By</HeaderCell><Cell dataKey="created_by_name" /></Column>
             </Table>
           </Panel>
+        </div>
+      )}
+
+      {activeTab === 'revenue-overview' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-3">
+              <DatePicker placeholder="Start date" value={revenueOverviewStartDate} onChange={(v) => setRevenueOverviewStartDate(v)} oneTap />
+              <DatePicker placeholder="End date" value={revenueOverviewEndDate} onChange={(v) => setRevenueOverviewEndDate(v)} oneTap />
+            </div>
+            <div className="flex gap-3">
+              <Button appearance="primary" startIcon={<Download className="w-4 h-4" />} onClick={() => {
+                if (!revenueOverviewData) return;
+                const rows = [...(revenueOverviewData.rows || [])];
+                if (revenueOverviewData.totals) {
+                  rows.push({ month: 'TOTAL', ...revenueOverviewData.totals });
+                }
+                exportCSV(rows, 'revenue-overview', [
+                  { key: 'month', label: 'Month' },
+                  { key: 'interestIncome', label: 'Interest Income', format: (v) => String(v) },
+                  { key: 'penaltyIncome', label: 'Penalty Income', format: (v) => String(v) },
+                  { key: 'otherIncome', label: 'Other Income', format: (v) => String(v) },
+                  { key: 'processingCharges', label: 'Processing Charges', format: (v) => String(v) },
+                  { key: 'expenses', label: 'Expenses', format: (v) => String(v) },
+                  { key: 'totalIncome', label: 'Total Income', format: (v) => String(v) },
+                  { key: 'netRevenue', label: 'Net Revenue', format: (v) => String(v) },
+                ]);
+              }}>Export CSV</Button>
+            </div>
+          </div>
+
+          <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6" bordered header={<span className="font-semibold">Monthly Revenue Breakdown</span>}>
+            <Table data={revenueOverviewData?.rows || []} loading={revenueOverviewLoading} height={500} rowHeight={50} virtualized>
+              <Column width={120}><HeaderCell>Month</HeaderCell><Cell dataKey="month" /></Column>
+              <Column width={150} align="right"><HeaderCell>Interest Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.interestIncome)}</span>}</Cell></Column>
+              <Column width={140} align="right"><HeaderCell>Penalty Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.penaltyIncome)}</span>}</Cell></Column>
+              <Column width={140} align="right"><HeaderCell>Other Income</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.otherIncome)}</span>}</Cell></Column>
+              <Column width={160} align="right"><HeaderCell>Processing Charges</HeaderCell><Cell>{(r: any) => <span className="text-green-600 font-medium">{formatCurrency(r.processingCharges)}</span>}</Cell></Column>
+              <Column width={140} align="right"><HeaderCell>Expenses</HeaderCell><Cell>{(r: any) => <span className="text-red-600 font-medium">{formatCurrency(r.expenses)}</span>}</Cell></Column>
+              <Column width={140} align="right"><HeaderCell>Total Income</HeaderCell><Cell>{(r: any) => <span className="text-green-700 font-bold">{formatCurrency(r.totalIncome)}</span>}</Cell></Column>
+              <Column width={140} align="right"><HeaderCell>Net Revenue</HeaderCell><Cell>{(r: any) => <span className={`font-bold ${r.netRevenue >= 0 ? 'text-green-700' : 'text-red-700'}`}>{formatCurrency(r.netRevenue)}</span>}</Cell></Column>
+            </Table>
+          </Panel>
+
+          {revenueOverviewData?.totals && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+                <p className="text-sm text-green-600 dark:text-green-400 font-medium">Total Interest Income</p>
+                <p className="text-2xl font-bold text-green-700 dark:text-green-300">{formatCurrency(revenueOverviewData.totals.interestIncome)}</p>
+              </div>
+              <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+                <p className="text-sm text-green-600 dark:text-green-400 font-medium">Total Penalty Income</p>
+                <p className="text-2xl font-bold text-green-700 dark:text-green-300">{formatCurrency(revenueOverviewData.totals.penaltyIncome)}</p>
+              </div>
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800">
+                <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">Total Expenses</p>
+                <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{formatCurrency(revenueOverviewData.totals.expenses)}</p>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+                <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Net Revenue</p>
+                <p className={`text-2xl font-bold ${revenueOverviewData.totals.netRevenue >= 0 ? 'text-green-700' : 'text-red-700'}`}>{formatCurrency(revenueOverviewData.totals.netRevenue)}</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

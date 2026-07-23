@@ -717,7 +717,7 @@ export class LoanService {
       `;
 
     const [aggResult, monthlyTrendResult, releaseTrendResult, topCollectorsResult,
-      recentLoans, recentPayments] = await Promise.all([
+      recentLoans, recentPayments, revenueResult] = await Promise.all([
 
       loanRepo.query(aggQuery, cid),
 
@@ -785,6 +785,17 @@ export class LoanService {
          LIMIT 5`,
         cid
       ),
+
+      // Monthly revenue data
+      loanRepo.query(
+        `SELECT
+          (SELECT COALESCE(SUM(p.interest_amount), 0) FROM payments p JOIN loans l ON l.id = p.loan_id WHERE p.status = 'completed' AND p.payment_date >= DATE_TRUNC('month', NOW())${cfl}) as monthly_interest,
+          (SELECT COALESCE(SUM(p.penalty_amount), 0) FROM payments p JOIN loans l ON l.id = p.loan_id WHERE p.status = 'completed' AND p.payment_date >= DATE_TRUNC('month', NOW())${cfl}) as monthly_penalty,
+          (SELECT COALESCE(SUM(amount), 0) FROM other_income WHERE date >= DATE_TRUNC('month', NOW())) as monthly_other_income,
+          (SELECT COALESCE(SUM(lc.amount), 0) FROM loan_charges lc JOIN loans l ON l.id = lc.loan_id WHERE l.release_date >= DATE_TRUNC('month', NOW())${cf}) as monthly_processing_charges,
+          (SELECT COALESCE(SUM(amount), 0) FROM operating_expenses WHERE date >= DATE_TRUNC('month', NOW())) as monthly_expenses`,
+        cid
+      ),
     ]);
 
     const r = aggResult[0];
@@ -818,6 +829,14 @@ export class LoanService {
       ? Math.round(activePrincipal / activeLoans)
       : 0;
 
+    // Revenue data
+    const rev = revenueResult?.[0] || {};
+    const monthlyInterest = parseFloat(rev.monthly_interest) || 0;
+    const monthlyPenalty = parseFloat(rev.monthly_penalty) || 0;
+    const monthlyOtherIncome = parseFloat(rev.monthly_other_income) || 0;
+    const monthlyProcessingCharges = parseFloat(rev.monthly_processing_charges) || 0;
+    const monthlyExpenses = parseFloat(rev.monthly_expenses) || 0;
+
     return {
       pastDueAmount,
       pastDueCollections15d,
@@ -845,6 +864,11 @@ export class LoanService {
       overdueCount: parseInt(r.overdue_count),
       interestEarned: parseFloat(r.total_interest),
       penaltyIncome: parseFloat(r.total_penalties),
+      monthlyInterest,
+      monthlyPenalty,
+      monthlyOtherIncome,
+      monthlyProcessingCharges,
+      monthlyExpenses,
       monthlyTrend: (monthlyTrendResult || []).map((r: any) => ({
         month: r.month,
         collected: parseFloat(r.collected),

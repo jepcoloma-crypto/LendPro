@@ -100,14 +100,14 @@ export const DashboardPage = () => {
   ];
 
   const allMonths = [...new Set([
-    ...(stats.monthlyTrend || []).map((m: any) => fmtMonth(m.month)),
-    ...(stats.releaseTrend || []).map((r: any) => fmtMonth(r.month)),
+    ...(stats.monthlyTrend || []).map((m: any) => m.month),
+    ...(stats.releaseTrend || []).map((r: any) => r.month),
   ])].sort();
   const trendData = allMonths.map((month) => {
-    const payments = (stats.monthlyTrend || []).find((m: any) => fmtMonth(m.month) === month);
-    const releases = (stats.releaseTrend || []).find((r: any) => fmtMonth(r.month) === month);
+    const payments = (stats.monthlyTrend || []).find((m: any) => m.month === month);
+    const releases = (stats.releaseTrend || []).find((r: any) => r.month === month);
     return {
-      month, collections: payments?.collected || 0, releases: releases?.released || 0,
+      month: fmtMonth(month), collections: payments?.collected || 0, releases: releases?.released || 0,
       net: (releases?.released || 0) - (payments?.collected || 0),
       interest: payments?.interest || 0, penalty: payments?.penalty || 0,
     };
@@ -816,19 +816,35 @@ export const DashboardPage = () => {
           {/* Bottom Row */}
           <Row gutter={16}>
             <Col xs={24} md={8}>
-              <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="flex items-center gap-2"><DollarSign className="w-4 h-4" /> Revenue Overview</div>}>
-                <div className="space-y-4">
+              <Panel className="bg-white dark:bg-gray-800 rounded-xl shadow-sm" bordered header={<div className="flex items-center gap-2"><DollarSign className="w-4 h-4" /> Revenue Overview (This Month)</div>}>
+                <div className="space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-500 dark:text-gray-400">Interest Earned</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(stats.interestEarned)}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Interest Income</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(stats.monthlyInterest)}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500 dark:text-gray-400">Penalty Income</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(stats.penaltyIncome)}</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(stats.monthlyPenalty)}</span>
                   </div>
-                  <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700">
-                    <span className="font-medium text-gray-700 dark:text-gray-200">Total Revenue</span>
-                    <span className="font-bold text-lg text-green-600">{formatCurrency((stats.interestEarned || 0) + (stats.penaltyIncome || 0))}</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 dark:text-gray-400">Processing Charges</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(stats.monthlyProcessingCharges)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 dark:text-gray-400">Other Income</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(stats.monthlyOtherIncome)}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <span className="font-medium text-gray-700 dark:text-gray-200">Total Income</span>
+                    <span className="font-bold text-green-600">{formatCurrency(stats.monthlyInterest + stats.monthlyPenalty + stats.monthlyProcessingCharges + stats.monthlyOtherIncome)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 dark:text-gray-400">Expenses</span>
+                    <span className="font-semibold text-red-500">({formatCurrency(stats.monthlyExpenses)})</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <span className="font-medium text-gray-700 dark:text-gray-200">Net Revenue</span>
+                    <span className="font-bold text-lg text-green-600">{formatCurrency(stats.monthlyInterest + stats.monthlyPenalty + stats.monthlyProcessingCharges + stats.monthlyOtherIncome - stats.monthlyExpenses)}</span>
                   </div>
                 </div>
               </Panel>

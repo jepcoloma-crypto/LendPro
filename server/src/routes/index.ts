@@ -261,6 +261,7 @@ router.get('/reports/cash-flow', authenticate, cashflowController.getCashFlow.bi
 router.get('/reports/expense-report', authenticate, cashflowController.getExpenseReport.bind(cashflowController));
 router.get('/reports/income-report', authenticate, cashflowController.getIncomeReport.bind(cashflowController));
 router.get('/reports/branch-pl', authenticate, authorize('super-admin', 'admin'), cashflowController.getBranchPL.bind(cashflowController));
+router.get('/reports/revenue-overview', authenticate, reportController.getRevenueOverview.bind(reportController));
 router.get('/reports/collection-summary', authenticate, reportController.getCollectionSummary.bind(reportController));
 router.get('/reports/advance-summary', authenticate, reportController.getAdvanceSummary.bind(reportController));
 router.get('/reports/penalty-detail', authenticate, reportController.getPenaltyDetail.bind(reportController));

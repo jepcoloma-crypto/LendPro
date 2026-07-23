@@ -282,6 +282,11 @@ export interface DashboardStats {
   overdueCount: number;
   interestEarned: number;
   penaltyIncome: number;
+  monthlyInterest: number;
+  monthlyPenalty: number;
+  monthlyOtherIncome: number;
+  monthlyProcessingCharges: number;
+  monthlyExpenses: number;
   monthlyTrend: { month: string; collected: number; interest: number; penalty: number }[];
   releaseTrend: { month: string; released: number }[];
   topCollectors: { id: string; name: string; totalCollected: number; paymentCount: number }[];

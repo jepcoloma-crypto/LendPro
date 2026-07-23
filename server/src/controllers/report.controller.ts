@@ -74,6 +74,101 @@ export class ReportController {
     }
   }
 
+  async getRevenueOverview(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { startDate, endDate } = req.query as Record<string, string | undefined>;
+      const start = startDate || (await paymentRepo.query(`SELECT TO_CHAR(MIN(payment_date), 'YYYY-MM-01') as d FROM payments WHERE status = 'completed'`))[0]?.d || '2024-01-01';
+      const rawEnd = endDate || (await paymentRepo.query(`SELECT TO_CHAR(MAX(payment_date), 'YYYY-MM-01') as d FROM payments WHERE status = 'completed'`))[0]?.d || '2026-12-01';
+      const monthEnd = endDate
+        ? endDate.substring(0, 7) + '-01'
+        : rawEnd;
+      // inclusive upper bound: exact endDate if provided, otherwise end of rawEnd's month
+      const inclusiveEnd = endDate || (() => {
+        const d = new Date(rawEnd + 'T00:00:00');
+        d.setMonth(d.getMonth() + 1);
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().split('T')[0];
+      })();
+
+      const sql = `
+        WITH months AS (
+          SELECT TO_CHAR(generate_series($1::date, $2::date, INTERVAL '1 month'), 'YYYY-MM') as month
+        ),
+        interest AS (
+          SELECT TO_CHAR(p.payment_date, 'YYYY-MM') as month,
+                 COALESCE(SUM(p.interest_amount), 0) as interest,
+                 COALESCE(SUM(p.penalty_amount), 0) as penalty
+          FROM payments p
+          JOIN loans l ON l.id = p.loan_id
+          WHERE p.status = 'completed'
+            AND p.payment_date >= $1::date
+            AND p.payment_date <= $3::date
+          GROUP BY TO_CHAR(p.payment_date, 'YYYY-MM')
+        ),
+        other AS (
+          SELECT TO_CHAR(date, 'YYYY-MM') as month,
+                 COALESCE(SUM(amount), 0) as other_income
+          FROM other_income
+          WHERE date >= $1::date AND date <= $3::date
+          GROUP BY TO_CHAR(date, 'YYYY-MM')
+        ),
+        charges AS (
+          SELECT TO_CHAR(l.release_date, 'YYYY-MM') as month,
+                 COALESCE(SUM(lc.amount), 0) as processing_charges
+          FROM loan_charges lc
+          JOIN loans l ON l.id = lc.loan_id
+          WHERE l.release_date IS NOT NULL
+            AND l.release_date >= $1::date AND l.release_date <= $3::date
+          GROUP BY TO_CHAR(l.release_date, 'YYYY-MM')
+        ),
+        expenses AS (
+          SELECT TO_CHAR(date, 'YYYY-MM') as month,
+                 COALESCE(SUM(amount), 0) as expenses
+          FROM operating_expenses
+          WHERE date >= $1::date AND date <= $3::date
+          GROUP BY TO_CHAR(date, 'YYYY-MM')
+        )
+        SELECT m.month,
+               COALESCE(i.interest, 0) as interest_income,
+               COALESCE(i.penalty, 0) as penalty_income,
+               COALESCE(o.other_income, 0) as other_income,
+               COALESCE(c.processing_charges, 0) as processing_charges,
+               COALESCE(e.expenses, 0) as expenses
+        FROM months m
+        LEFT JOIN interest i ON i.month = m.month
+        LEFT JOIN other o ON o.month = m.month
+        LEFT JOIN charges c ON c.month = m.month
+        LEFT JOIN expenses e ON e.month = m.month
+        ORDER BY m.month
+      `;
+      const rows = await paymentRepo.query(sql, [start, monthEnd, inclusiveEnd]);
+      const monthlyRows = rows.map((r: any) => {
+        const interestIncome = parseFloat(r.interest_income) || 0;
+        const penaltyIncome = parseFloat(r.penalty_income) || 0;
+        const otherIncome = parseFloat(r.other_income) || 0;
+        const processingCharges = parseFloat(r.processing_charges) || 0;
+        const expenses = parseFloat(r.expenses) || 0;
+        const totalIncome = interestIncome + penaltyIncome + otherIncome + processingCharges;
+        const netRevenue = totalIncome - expenses;
+        return { month: r.month, interestIncome, penaltyIncome, otherIncome, processingCharges, expenses, totalIncome, netRevenue };
+      });
+
+      const totals = monthlyRows.reduce((acc: any, r: any) => ({
+        interestIncome: acc.interestIncome + r.interestIncome,
+        penaltyIncome: acc.penaltyIncome + r.penaltyIncome,
+        otherIncome: acc.otherIncome + r.otherIncome,
+        processingCharges: acc.processingCharges + r.processingCharges,
+        expenses: acc.expenses + r.expenses,
+        totalIncome: acc.totalIncome + r.totalIncome,
+        netRevenue: acc.netRevenue + r.netRevenue,
+      }), { interestIncome: 0, penaltyIncome: 0, otherIncome: 0, processingCharges: 0, expenses: 0, totalIncome: 0, netRevenue: 0 });
+
+      res.json({ success: true, data: { rows: monthlyRows, totals } });
+    } catch (error: any) {
+      next(new AppError(500, error.message));
+    }
+  }
+
   async getInterestIncomeReport(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { branchId, startDate, endDate } = req.query;
