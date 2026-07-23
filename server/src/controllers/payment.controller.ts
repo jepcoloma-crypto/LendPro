@@ -397,7 +397,7 @@ export class PaymentController {
       if (payment.status === 'cancelled') throw new Error('Payment is already cancelled');
 
       const loanId = payment.loan_id;
-      const restoreAmount = (parseFloat(payment.amount) || 0) - (parseFloat(payment.penalty_amount) || 0);
+      const restoreAmount = (parseFloat(payment.principal_amount) || 0) + (parseFloat(payment.advance_amount) || 0);
       const penaltyAmt = parseFloat(payment.penalty_amount) || 0;
 
       const client = await pool.connect();
