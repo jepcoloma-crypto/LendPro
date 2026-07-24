@@ -3,7 +3,7 @@ import { generatePaymentNumber, generateReceiptNumber } from '../utils/helpers';
 import { pool } from '../database/connection';
 
 export class PaymentService {
-  async receivePayment(data: any, userId: string) {
+  async receivePayment(data: any, userId: string, userRole?: string) {
     const loan = await loanRepo.findById(data.loanId);
     if (!loan) throw new Error('Loan not found');
     if (loan.status === 'closed') throw new Error('Loan is already closed');
@@ -15,7 +15,7 @@ export class PaymentService {
     if (isNaN(amount) || amount <= 0) throw new Error('Invalid payment amount');
 
     if (data.allocations && Array.isArray(data.allocations) && data.allocations.length > 0) {
-      return this.receiveWithAllocations(data, loan, userId, paymentNumber, receiptNumber);
+      return this.receiveWithAllocations(data, loan, userId, paymentNumber, receiptNumber, userRole);
     }
 
     const paymentDate = data.paymentDate ? new Date(data.paymentDate) : new Date();
@@ -123,7 +123,7 @@ export class PaymentService {
           const flatValues = penaltyRows.flatMap(r => [r.id, r.applied]);
           const placeholders = penaltyRows.map((_, i) => `($${i * 2 + 1}::uuid, $${i * 2 + 2}::numeric)`).join(',');
           await writeClient.query(
-            `UPDATE amortization_schedules SET penalty_amount = penalty_amount + d.applied, updated_at = NOW() FROM (VALUES ${placeholders}) AS d(id, applied) WHERE id = d.id`,
+            `UPDATE amortization_schedules SET penalty_amount = penalty_amount + d.applied, updated_at = NOW() FROM (VALUES ${placeholders}) AS d(id, applied) WHERE amortization_schedules.id = d.id`,
             flatValues
           );
         }
@@ -134,7 +134,7 @@ export class PaymentService {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'completed',$16,$17) RETURNING *`,
         [paymentNumber, data.loanId, loan.borrower_id, netForSchedules + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount, penaltyWaived, advanceAmount,
          data.paymentMethod || 'cash', data.referenceNumber || null, data.paymentDate || new Date(), userId, receiptNumber,
-         data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
+         data.notes || null, data.collectorId || null, data.collectorId && userRole === 'collector' ? 'pending' : 'direct']
       );
 
       // Track updated statuses in-memory to avoid re-fetch later
@@ -206,7 +206,7 @@ export class PaymentService {
     }
   }
 
-  private async receiveWithAllocations(data: any, loan: any, userId: string, paymentNumber: string, receiptNumber: string) {
+  private async receiveWithAllocations(data: any, loan: any, userId: string, paymentNumber: string, receiptNumber: string, userRole?: string) {
     const paymentDate = data.paymentDate ? new Date(data.paymentDate) : new Date();
     const { rows: allSchedules } = await pool.query(
       `SELECT * FROM amortization_schedules WHERE loan_id = $1 ORDER BY installment_no ASC`,
@@ -281,7 +281,7 @@ export class PaymentService {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'completed',$16,$17) RETURNING *`,
         [paymentNumber, data.loanId, loan.borrower_id, totalAllocAmount + penaltyAmount, totalPrincipal, totalInterest, penaltyAmount, penaltyWaived, 0,
          data.paymentMethod || 'cash', data.referenceNumber || null, data.paymentDate || new Date(), userId, receiptNumber,
-         data.notes || null, data.collectorId || null, data.collectorId ? 'pending' : 'direct']
+         data.notes || null, data.collectorId || null, data.collectorId && userRole === 'collector' ? 'pending' : 'direct']
       );
 
       // Distribute penalty to all overdue schedules proportionally

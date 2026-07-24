@@ -176,7 +176,7 @@ export const PaymentsPage = () => {
       setVoidPaymentId(null);
       fetchPayments();
       toaster.push(<Message type="success">Payment received. {voidPaymentId ? 'Cancellation request submitted for old payment.' : ''}</Message>, { placement: 'topEnd' });
-      if (res?.data?.id) printReceipt(res.data.id);
+      if (res?.data?.id) printReceipt(res.data.id, true);
     } catch (err: any) {
       toaster.push(<Message type="error">{err?.response?.data?.error || 'Error processing payment'}</Message>, { placement: 'topEnd' });
     } finally {
@@ -275,7 +275,7 @@ export const PaymentsPage = () => {
       setInstModalOpen(false);
       fetchPayments();
       toaster.push(<Message type="success">Payment recorded</Message>, { placement: 'topEnd' });
-      if (res?.data?.id) printReceipt(res.data.id);
+      if (res?.data?.id) printReceipt(res.data.id, true);
     } catch (err: any) {
       toaster.push(<Message type="error">{err?.response?.data?.error || 'Payment failed'}</Message>, { placement: 'topEnd' });
     } finally { setPaySubmitting(false); }
@@ -355,7 +355,7 @@ export const PaymentsPage = () => {
     setModalOpen(true);
   };
 
-  const printReceipt = async (paymentId: string) => {
+  const printReceipt = async (paymentId: string, thermal?: boolean) => {
     try {
       const { data } = await paymentsApi.getReceipt(paymentId);
       const r = data.data;
@@ -367,8 +367,27 @@ export const PaymentsPage = () => {
       ).join('') : '';
       w.document.write(`<!DOCTYPE html><html><head><title>Official Receipt - ${r.receipt_number}</title>
         <style>
-          @page { margin: 8mm; }
+          @page { margin: ${thermal ? '0' : '8mm'}; size: ${thermal ? '80mm auto' : 'auto'}; }
           @media print { body { padding: 0; } .no-print { display: none; } }
+          ${thermal ? `
+          body { font-family: 'Courier New', monospace; margin: 0; padding: 6px 8px; font-size: 10px; color: #000; width: 280px; }
+          .header { text-align: center; margin-bottom: 6px; }
+          .header h1 { font-size: 14px; margin: 0; font-weight: bold; text-transform: uppercase; }
+          .header p { margin: 0; font-size: 9px; color: #000; }
+          .divider { border-top: 1px dashed #000; margin: 4px 0; }
+          .info-table { width: 100%; font-size: 10px; }
+          .info-table td { padding: 1px 0; border: none; }
+          .info-table td:first-child { width: 60px; }
+          .amount-line { text-align: center; font-size: 16px; font-weight: bold; padding: 4px 0; }
+          .amount-words { font-size: 8px; font-style: italic; text-align: center; margin: 2px 0; text-transform: uppercase; }
+          .alloc-table { width: 100%; border-collapse: collapse; font-size: 9px; margin: 4px 0; }
+          .alloc-table th, .alloc-table td { border: 1px solid #000; padding: 2px 4px; text-align: left; }
+          .alloc-table th { font-size: 8px; }
+          .breakdown { font-size: 10px; width: 100%; }
+          .breakdown td { padding: 1px 0; border: none; }
+          .breakdown td:last-child { text-align: right; }
+          .footer { text-align: center; font-size: 8px; margin-top: 6px; border-top: 1px dashed #000; padding-top: 4px; }
+          ` : `
           body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 16px; font-size: 12px; color: #1a1a1a; }
           .receipt { max-width: 380px; margin: 0 auto; }
           .header { text-align: center; border-bottom: 2px solid #1a1a1a; padding-bottom: 10px; margin-bottom: 10px; }
@@ -394,7 +413,42 @@ export const PaymentsPage = () => {
           .signature-area > div { text-align: center; width: 45%; }
           .sig-line { border-bottom: 1px solid #9ca3af; margin-bottom: 2px; height: 24px; }
           .sig-label { font-size: 9px; color: #6b7280; }
+          `}
         </style></head><body>
+        ${thermal ? `
+        <div class="header">
+          <h1>${companyInfo.company_name || 'LENDING APP'}</h1>
+          ${companyInfo.company_address ? `<p>${companyInfo.company_address}</p>` : ''}
+          ${companyInfo.company_phone || companyInfo.company_email ? `<p>${[companyInfo.company_phone, companyInfo.company_email].filter(Boolean).join(' | ')}</p>` : ''}
+        </div>
+        <div class="divider"></div>
+        <table class="info-table">
+          <tr><td>Receipt #</td><td>${r.receipt_number || r.payment_number}</td></tr>
+          <tr><td>Date</td><td>${new Date(r.payment_date).toLocaleDateString()}</td></tr>
+          <tr><td>Borrower</td><td>${r.borrower_name}</td></tr>
+          <tr><td>Loan #</td><td>${r.loan_number}</td></tr>
+          <tr><td>Method</td><td>${r.payment_method === 'historical' ? 'Historical' : r.payment_method}${r.reference_number ? ` (${r.reference_number})` : ''}</td></tr>
+        </table>
+        <div class="divider"></div>
+        <div class="amount-line">${formatCurrency(r.amount)}</div>
+        <div class="amount-words">${numberToWords(Number(r.amount))}</div>
+        <div class="divider"></div>
+        ${allocRows ? `<table class="alloc-table"><thead><tr><th>#</th><th>Due</th><th>Applied</th><th class="amount">Amount</th></tr></thead><tbody>${allocs.map((a: any) =>
+          `<tr><td>${a.installment_no}</td><td>${new Date(a.due_date).toLocaleDateString()}</td><td>${a.allocated_to}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`
+        ).join('')}</tbody></table><div class="divider"></div>` : ''}
+        <table class="breakdown">
+          <tr><td>Principal</td><td>${formatCurrency(r.principal_amount)}</td></tr>
+          <tr><td>Interest</td><td>${formatCurrency(r.interest_amount)}</td></tr>
+          <tr><td>Penalty</td><td>${formatCurrency(r.penalty_amount)}</td></tr>
+          ${r.notes ? `<tr><td colspan="2" style="font-style:italic">${r.notes}</td></tr>` : ''}
+        </table>
+        <div class="divider"></div>
+        <div class="footer">
+          <p>Thank you for your payment!</p>
+          <p>${new Date().toLocaleString()}</p>
+          <button class="no-print" onclick="window.print()" style="margin-top:4px;padding:4px 16px;cursor:pointer;border:1px solid #000;background:#fff;font-size:9px;font-family:monospace;">PRINT</button>
+        </div>
+        ` : `
         <div class="receipt">
           <div class="header">
             <h1>${companyInfo.company_name || 'LENDING APP'}</h1>
@@ -428,7 +482,8 @@ export const PaymentsPage = () => {
             <p>This is a computer-generated receipt. Thank you for your payment!</p>
             <button class="no-print" onclick="window.print()" style="margin-top:6px;padding:6px 20px;cursor:pointer;border:1px solid #d1d5db;background:#f9fafb;border-radius:4px;font-size:11px;">Print</button>
           </div>
-        </div></body></html>`);
+        </div>`}
+      </body></html>`);
       w.document.close();
     } catch { toaster.push(<Message type="error">Failed to load receipt data</Message>, { placement: 'topEnd' }); }
   };
@@ -748,7 +803,9 @@ export const PaymentsPage = () => {
           )}
         </Modal.Body>
         <Modal.Footer>
-          {viewPayment?.status !== 'cancelled' && <Button onClick={() => { setViewOpen(false); if (viewPayment) printReceipt(viewPayment.id); }} appearance="primary" color="green" startIcon={<Printer className="w-4 h-4" />}>Print Receipt</Button>}
+          {viewPayment?.status !== 'cancelled' && <>
+            <Button onClick={() => { setViewOpen(false); if (viewPayment) printReceipt(viewPayment.id); }} appearance="primary" color="green" startIcon={<Printer className="w-4 h-4" />}>Print Receipt</Button>
+          </>}
           <Button onClick={() => setViewOpen(false)} appearance="subtle">Close</Button>
         </Modal.Footer>
       </Modal>

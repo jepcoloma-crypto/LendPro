@@ -62,9 +62,14 @@ export class CashierController {
       if (shift.status !== 'open') throw new Error('Shift is not open');
       if (shift.user_id !== req.user?.userId) throw new Error('Not your shift');
 
-      // Check for pending unremitted payments
+      // Check for pending unremitted payments in this branch
       const pendingPickups = await pool.query(
-        `SELECT COUNT(*) as c FROM payments WHERE remittance_status = 'pending' AND status != 'cancelled'`
+        `SELECT COUNT(*) as c FROM payments p
+         JOIN borrowers b ON b.id = p.borrower_id
+         WHERE p.remittance_status = 'pending'
+         AND p.status != 'cancelled'
+         AND b.branch_id = (SELECT branch_id FROM cashier_sessions WHERE id = $1)`,
+        [id]
       );
       if (parseInt(pendingPickups.rows[0]?.c || '0') > 0) {
         throw new Error(`Cannot close shift — ${pendingPickups.rows[0].c} payment(s) are still pending in Cash Pick-up. Record all pick-ups first.`);

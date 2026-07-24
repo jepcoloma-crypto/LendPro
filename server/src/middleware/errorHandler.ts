@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { config } from '../config';
+import { logError } from '../utils/errorLogger';
 
 export class AppError extends Error {
   constructor(
@@ -34,10 +35,11 @@ const sanitizeMessage = (msg: string): string => {
 
 export const errorHandler = (
   err: Error,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
+  logError(`${req.method} ${req.path}`, err);
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       success: false,

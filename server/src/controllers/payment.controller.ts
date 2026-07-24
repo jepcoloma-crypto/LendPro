@@ -82,10 +82,14 @@ export class PaymentController {
         }
       }
 
-      const payment = await paymentService.receivePayment(req.body, req.user!.userId);
-      // Only record cash if paid directly at the office (no collector involved)
-      // Collector payments record cash when the pickup is processed
-      if (!req.body.collectorId) {
+      const userRole = (await pool.query(
+        `SELECT r.slug FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
+        [req.user!.userId]
+      )).rows[0]?.slug;
+      const payment = await paymentService.receivePayment(req.body, req.user!.userId, userRole);
+      // Record cash transaction unless a collector processed the payment
+      // (collector payments record cash at pickup time instead)
+      if (userRole !== 'collector') {
         await autoRecordTransaction({
           userId: req.user!.userId,
           loanId: payment.loan_id,
@@ -133,13 +137,14 @@ export class PaymentController {
       const total = parseInt(countResult[0].count, 10);
 
       const offset = paramIndex;
+      const safeSortBy = pagination.sortBy.includes('.') ? pagination.sortBy : `payments.${pagination.sortBy}`;
       const rows = await paymentRepo.query(
         `SELECT payments.*, l.loan_number, b.first_name || ' ' || b.last_name as borrower_name
          FROM payments
          JOIN loans l ON payments.loan_id = l.id
          JOIN borrowers b ON payments.borrower_id = b.id
          WHERE ${where}
-         ORDER BY ${pagination.sortBy} ${pagination.sortOrder}
+         ORDER BY ${safeSortBy} ${pagination.sortOrder}
          LIMIT $${offset} OFFSET $${offset + 1}`,
         [...values, pagination.limit, pagination.offset]
       );
@@ -257,6 +262,10 @@ export class PaymentController {
 
       const errors: { row: number | string; message: string }[] = [];
       const inserted: any[] = [];
+      const importRole = (await pool.query(
+        `SELECT r.slug FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
+        [req.user!.userId]
+      )).rows[0]?.slug;
 
       for (let i = 0; i < records.length; i++) {
         const raw = records[i];
@@ -302,7 +311,7 @@ export class PaymentController {
           if (mapped.reference_number) paymentData.referenceNumber = mapped.reference_number;
           if (mapped.notes) paymentData.notes = mapped.notes;
 
-          const payment = await paymentService.receivePayment(paymentData, req.user!.userId);
+          const payment = await paymentService.receivePayment(paymentData, req.user!.userId, importRole);
           inserted.push({ payment_number: payment.payment_number, loan_number: loan.loan_number, amount });
         } catch (err: any) {
           errors.push({ row, message: err.message });
