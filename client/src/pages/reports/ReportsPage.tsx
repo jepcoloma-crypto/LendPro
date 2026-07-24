@@ -146,6 +146,7 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
   const [expectedColEnd, setExpectedColEnd] = useState<string>(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); });
   const [expectedColBranch, setExpectedColBranch] = useState<string | null>(null);
   const [expectedColCollector, setExpectedColCollector] = useState<string | null>(null);
+  const [printLandscape, setPrintLandscape] = useState(false);
 
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
@@ -1971,22 +1972,70 @@ const [pastDueDelStatus, setPastDueDelStatus] = useState<string | null>(null);
               </div>
             </div>
             <div className="flex gap-2">
+              <Button appearance={printLandscape ? 'primary' : 'ghost'} size="sm" onClick={() => setPrintLandscape(!printLandscape)}>{printLandscape ? 'Landscape' : 'Portrait'}</Button>
               <Button appearance="primary" startIcon={<Printer className="w-4 h-4" />} onClick={() => {
                 const periodLabel = `${new Date(expectedColStart).toLocaleDateString()} — ${new Date(expectedColEnd).toLocaleDateString()}`;
+                const orientation = printLandscape ? 'landscape' : 'portrait';
                 let html = `<!DOCTYPE html><html><head><title>Collection Schedule</title>
-                  <style>${printStyles}</style></head><body>
+                  <style>${printStyles}
+                    @page { size: A4 ${orientation}; }
+                    .payment-col, .sig-col { min-width: 70px; }
+                    .denomination-box { margin-top: 30px; border: 1px solid #ccc; padding: 15px; page-break-inside: avoid; }
+                    .denomination-box h3 { margin: 0 0 10px 0; font-size: 12px; text-align: center; }
+                    .denom-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #ddd; font-size: 11px; }
+                    .denom-row .label { font-weight: 600; }
+                    .denom-row .blank { border-bottom: 1px solid #333; min-width: 140px; text-align: right; padding: 0 4px; }
+                    .denom-footer { margin-top: 20px; display: flex; justify-content: space-between; }
+                    .denom-footer .sig-box { text-align: center; }
+                    .denom-footer .sig-box .sig-line { width: 180px; margin: 0 auto; }
+                    .denom-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 11px; }
+                    .denom-table th, .denom-table td { border: 1px solid #ccc; padding: 4px 8px; text-align: center; }
+                    .denom-table th { background: #f0f0f0; font-weight: 600; }
+                    .denom-table td { height: 22px; }
+                    .denom-table tfoot td { font-weight: bold; }
+                    .denom-summary { margin-top: 10px; }
+                  </style></head><body>
                   ${companyHeaderHtml(companyInfo)}
                   <div class="report-title">Collection Schedule</div>
                   <div class="report-subtitle">${periodLabel}</div>
-                  <table><thead><tr><th>Loan #</th><th>Borrower</th><th>Mobile</th><th>Address</th><th class="text-center">Due Installments</th><th class="text-right">Amt/Due</th><th class="text-right">Total Amount Due</th><th class="text-right">Outstanding</th></tr></thead><tbody>`;
+                  <table><thead><tr><th>Loan #</th><th>Borrower</th><th>Mobile</th><th>Address</th><th class="text-center">Due Installments</th><th class="text-right">Amt/Due</th><th class="text-right">Total Amount Due</th><th class="text-right">Outstanding</th><th class="text-center payment-col">Payment</th><th class="text-center sig-col">Client's Signature</th></tr></thead><tbody>`;
                 for (const r of expectedColData) {
-                  html += `<tr><td>${r.loan_number}</td><td>${r.borrower_name}</td><td>${r.mobile || ''}</td><td>${r.address || ''}</td><td class="text-center">${r.due_installments}</td><td class="text-right">${formatCurrency(r.amount_per_due)}</td><td class="text-right">${formatCurrency(r.total_amount_due)}</td><td class="text-right">${formatCurrency(r.outstanding_balance)}</td></tr>`;
+                  html += `<tr><td>${r.loan_number}</td><td>${r.borrower_name}</td><td>${r.mobile || ''}</td><td>${r.address || ''}</td><td class="text-center">${r.due_installments}</td><td class="text-right">${formatCurrency(r.amount_per_due)}</td><td class="text-right">${formatCurrency(r.total_amount_due)}</td><td class="text-right">${formatCurrency(r.outstanding_balance)}</td><td class="text-center"></td><td class="text-center"></td></tr>`;
                 }
-                html += `</tbody><tfoot><tr class="grand-total"><td colspan="4">Total</td><td class="text-center"></td><td class="text-right"></td><td class="text-right">${formatCurrency(expectedColData.reduce((s: number, r: any) => s + Number(r.total_amount_due || 0), 0))}</td><td class="text-right">${formatCurrency(expectedColData.reduce((s: number, r: any) => s + Number(r.outstanding_balance || 0), 0))}</td></tr></tfoot></table>
+                html += `</tbody><tfoot><tr class="grand-total"><td colspan="4">Total</td><td class="text-center"></td><td class="text-right"></td><td class="text-right">${formatCurrency(expectedColData.reduce((s: number, r: any) => s + Number(r.total_amount_due || 0), 0))}</td><td class="text-right">${formatCurrency(expectedColData.reduce((s: number, r: any) => s + Number(r.outstanding_balance || 0), 0))}</td><td></td><td></td></tr></tfoot></table>
                   <div class="signatures">
                     <div><div class="sig-line"></div><p class="sig-name">Prepared By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
                     <div><div class="sig-line"></div><p class="sig-name">Checked By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
                     <div><div class="sig-line"></div><p class="sig-name">Approved By</p><p class="sig-role">Signature</p><p class="sig-date">Date: _______________</p></div>
+                  </div>
+                  <div class="denomination-box">
+                    <h3>CASH DENOMINATION</h3>
+                    <table class="denom-table">
+                      <thead><tr><th>Denomination</th><th>Qty</th><th>Amount</th></tr></thead>
+                      <tbody>
+                        <tr><td>1000</td><td></td><td></td></tr>
+                        <tr><td>500</td><td></td><td></td></tr>
+                        <tr><td>200</td><td></td><td></td></tr>
+                        <tr><td>100</td><td></td><td></td></tr>
+                        <tr><td>50</td><td></td><td></td></tr>
+                        <tr><td>20</td><td></td><td></td></tr>
+                        <tr><td>10</td><td></td><td></td></tr>
+                        <tr><td>5</td><td></td><td></td></tr>
+                        <tr><td>1</td><td></td><td></td></tr>
+                        <tr><td>Coins</td><td></td><td></td></tr>
+                      </tbody>
+                      <tfoot><tr class="grand-total"><td>Grand Total</td><td></td><td></td></tr></tfoot>
+                    </table>
+                    <div class="denom-summary">
+                      <div class="denom-row"><span class="label">Total Cash on Hand</span><span class="blank"></span></div>
+                      <div class="denom-row"><span class="label">GCash Payment</span><span class="blank"></span></div>
+                      <div class="denom-row"><span class="label">Gas Allowance</span><span class="blank"></span></div>
+                      <div class="denom-row" style="border-bottom: none; font-weight: bold;"><span class="label">Total Collection</span><span class="blank"></span></div>
+                    </div>
+                    <div class="denom-footer">
+                      <div class="sig-box"><div class="sig-line"></div><p class="sig-name">Collector</p></div>
+                      <div class="sig-box"><div class="sig-line"></div><p class="sig-name">Cashier</p></div>
+                    </div>
                   </div>
                   <div class="footer-note">This is a computer-generated report. Generated on ${new Date().toLocaleString()}.</div>
                 </body></html>`;

@@ -1035,7 +1035,7 @@ export class ReportController {
               AND ($3::uuid IS NULL OR br.branch_id = $3::uuid)
             GROUP BY br.branch_id
           ),
-          delinquent AS (
+           delinquent AS (
             SELECT br.branch_id, COUNT(DISTINCT l.id) as delinquent_count,
               COALESCE(SUM(a.total_due - COALESCE(a.paid_amount, 0)), 0) as delinquent_amount
             FROM loans l
