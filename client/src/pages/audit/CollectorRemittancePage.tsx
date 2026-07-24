@@ -102,17 +102,30 @@ export const CollectorRemittancePage = ({ embedded, forcedCollectorId }: { embed
           <DatePicker value={endDate} onChange={setEndDate} placeholder="End date" oneTap />
         </div>
         <Button appearance="ghost" onClick={handlePrint}><Printer className="w-4 h-4 mr-1" /> Print</Button>
-        <Button appearance="ghost" onClick={() => exportCSV(payments, `remittance-audit-${new Date().toISOString().split('T')[0]}`, [
-          { key: 'collector_name', label: 'Collector' },
-          { key: 'borrower_name', label: 'Borrower' },
-          { key: 'payment_date', label: 'Date', format: (v: any) => new Date(v).toLocaleDateString() },
-          { key: 'loan_number', label: 'Loan #' },
-          { key: 'amount', label: 'Amount', format: formatCurrency },
-          { key: 'principal_amount', label: 'Principal', format: formatCurrency },
-          { key: 'interest_amount', label: 'Interest', format: formatCurrency },
-          { key: 'penalty_amount', label: 'Penalty', format: formatCurrency },
-          { key: 'receipt_number', label: 'Receipt #' },
-        ])}><Download className="w-4 h-4 mr-1" /> CSV</Button>
+        <Button appearance="ghost" onClick={() => {
+          const grandTotalRow = {
+            collector_name: '',
+            borrower_name: 'GRAND TOTAL',
+            payment_date: '',
+            loan_number: '',
+            amount: payments.reduce((s: number, p: any) => s + (parseFloat(p.amount) || 0), 0),
+            principal_amount: payments.reduce((s: number, p: any) => s + (parseFloat(p.principal_amount) || 0), 0),
+            interest_amount: payments.reduce((s: number, p: any) => s + (parseFloat(p.interest_amount) || 0), 0),
+            penalty_amount: payments.reduce((s: number, p: any) => s + (parseFloat(p.penalty_amount) || 0), 0),
+            receipt_number: '',
+          };
+          exportCSV([...payments, grandTotalRow], `remittance-audit-${new Date().toISOString().split('T')[0]}`, [
+            { key: 'collector_name', label: 'Collector' },
+            { key: 'borrower_name', label: 'Borrower' },
+            { key: 'payment_date', label: 'Date', format: (v: any) => v ? new Date(v).toLocaleDateString() : '' },
+            { key: 'loan_number', label: 'Loan #' },
+            { key: 'amount', label: 'Amount', format: formatCurrency },
+            { key: 'principal_amount', label: 'Principal', format: formatCurrency },
+            { key: 'interest_amount', label: 'Interest', format: formatCurrency },
+            { key: 'penalty_amount', label: 'Penalty', format: formatCurrency },
+            { key: 'receipt_number', label: 'Receipt #' },
+          ]);
+        }}><Download className="w-4 h-4 mr-1" /> CSV</Button>
       </div>
 
       <Table data={paymentsWithIndex} loading={loading} virtualized height={500} rowHeight={50} bordered>
